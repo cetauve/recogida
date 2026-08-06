@@ -325,20 +325,45 @@ document.addEventListener('keydown', e=>{
 });
 
 // ------------------------------------------------------------- arranque
-(async () => {
+
+/* OJO CON ESTO, que costó un rato encontrarlo.
+ *
+ * Si la página YA está abierta y luego llega otro enlace con datos distintos,
+ * el navegador NO recarga: solo cambia lo de detrás de la almohadilla y lanza
+ * un evento 'hashchange'. El script ya se ejecutó, así que sin escuchar ese
+ * evento la app se queda con los datos viejos —o sin datos— y parece rota.
+ *
+ * Pasa todo el rato en la práctica: se abre el enlace de ayer, luego llega el
+ * de hoy por WhatsApp y se toca desde el mismo navegador. */
+let ultimoHash = null;
+
+async function arrancar(){
+  const hash = location.hash || '';
+  if (hash === ultimoHash) return;
+  ultimoHash = hash;
+
   const delEnlace = await desdeEnlace();
   if (delEnlace && delEnlace.tandas && delEnlace.tandas.length) DATOS = delEnlace;
+  else DATOS = EMBEBIDOS;
+
   if (!DATOS.tandas || !DATOS.tandas.length) {
     $('menu').classList.remove('on');
+    ['barra','pila','pie'].forEach(x => $(x).classList.remove('on'));
     $('fin').classList.add('on');
     $('finTitulo').textContent = 'No hay nada que recoger';
-    $('finTexto').textContent = 'Este enlace no trae datos. Vuelve a generarlo desde el panel.';
+    $('finTexto').textContent = hash.length > 8
+      ? 'El enlace trae algo que no consigo leer. Vuelve a generarlo desde el panel.'
+      : 'Este enlace no trae datos. Genera uno nuevo desde el panel.';
     $('alMenu').style.display = 'none'; $('reiniciar').style.display = 'none';
     return;
   }
+  $('alMenu').style.display = ''; $('reiniciar').style.display = '';
   document.title = 'Recogida · ' + DATOS.titulo;
   verMenu();
-})();
+}
+
+window.addEventListener('hashchange', arrancar);
+arrancar();
 </script>
 </body>
 </html>
