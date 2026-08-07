@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <!-- Esta etiqueta es la contraseña del puente. pantalla-web.js se inyecta en
+       todo *.github.io y se retira en cuanto no la encuentra, así que sin ella
+       ninguna página recibe nada. No la quites. -->
+  <meta name="billys-pantalla" content="1">
+  <title>Billy's — Pantalla</title>
+  <link rel="stylesheet" href="display.css">
+</head>
+<body>
+  <!-- Capas de fondo, de atrás hacia delante: foto -> velo -> rayos -->
+  <div id="foto"></div>
+  <div id="fondo"></div>
+  <div id="rayos"></div>
+  <div id="credito" hidden></div>
+
+  <div id="marco">
+    <h1 id="titulo"></h1>
+    <div id="stage"></div>
+    <div id="pie">
+      <div id="objetivo">
+        <span id="objetivoTexto">0 prendas vendidas</span>
+        <span id="barra"><i></i></span>
+      </div>
+      <div id="ticker"></div>
+    </div>
+  </div>
+
+  <div id="sinDatos" title="sin datos del panel"></div>
+
+  <script src="display.js"></script>
+</body>
+</html>

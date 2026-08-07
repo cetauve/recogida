@@ -1,0 +1,391 @@
+/* Billy's — pantalla del monitor.
+ * Navy dominante a propósito: el monitor se filma, y una pantalla clara
+ * se quema en cámara. Bone para el texto, Racing Red solo para acentos.
+ */
+
+:root {
+  --navy: #1B2A3D;
+  --navy-deep: #111C2A;
+  --bone: #EDE7DB;
+  --red: #C8321F;
+  --bone-dim: rgba(237, 231, 219, 0.55);
+  --bone-faint: rgba(237, 231, 219, 0.14);
+
+  --titular: 'Poppins', 'Poppins Black', 'Arial Black', system-ui, sans-serif;
+  --texto: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Todo escala con el ancho, así el mismo archivo sirve para cualquier monitor. */
+  --u: 1vw;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--navy-deep);
+  color: var(--bone);
+  font-family: var(--texto);
+  overflow: hidden;
+  cursor: none;
+}
+
+/* ---------------------------------------------------------------- fondo */
+
+/* Capa 1: la foto del evento. */
+#foto {
+  position: fixed; inset: 0;
+  background-color: var(--navy-deep);
+  background-size: cover;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 900ms ease;
+  /* Apenas un punto de desenfoque: lo justo para que la textura no compita
+     con el texto, pero sin convertir la foto en una mancha. */
+  filter: saturate(0.95) blur(1px);
+  transform: scale(1.03); /* tapa el borde que deja el desenfoque */
+}
+#foto.puesta { opacity: 1; }
+
+/* El encuadre vertical lo pone display.js como estilo en línea, porque
+   depende de la orientación de cada foto y admite excepciones por foto.
+   Los valores viven en CONFIG.encuadreVertical / encuadreHorizontal. */
+
+/* Capa 2: el velo. Es lo que hace legible el texto encima de cualquier foto.
+   Más denso por el centro, donde va el contenido, y por abajo, donde está el
+   pie. Si subes fotos y no se lee, este es el número a tocar, no el tamaño de
+   la letra. Lo que permite que sea tan ligero es la sombra del texto de abajo. */
+#fondo {
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(200, 50, 31, 0.10), transparent 65%),
+    radial-gradient(ellipse 65% 50% at 50% 45%,
+      rgba(17, 28, 42, 0.62), rgba(17, 28, 42, 0.34) 70%, rgba(17, 28, 42, 0.22) 100%),
+    linear-gradient(to bottom,
+      rgba(17, 28, 42, 0.42), rgba(17, 28, 42, 0.12) 32%,
+      rgba(17, 28, 42, 0.18) 62%, rgba(17, 28, 42, 0.72));
+  z-index: 1;
+}
+/* Sin foto detrás, el velo tiene que tapar del todo. */
+body:not(.con-foto) #fondo {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(200, 50, 31, 0.20), transparent 55%),
+    radial-gradient(ellipse at 50% 45%, rgba(27, 42, 61, 0.95), var(--navy-deep) 70%);
+}
+
+/* Capa 3: los rayos.
+   Un elemento que rota tiene que ser CUADRADO y más grande que la diagonal de
+   la pantalla, o al girar deja las esquinas al aire. Con inset:-30% se veía el
+   borde girando. 250vmax de lado, centrado, no falla en ningún monitor. */
+#rayos {
+  position: fixed;
+  top: 50%; left: 50%;
+  width: 250vmax; height: 250vmax;
+  margin: -125vmax 0 0 -125vmax;
+  transform-origin: 50% 50%;
+  background: repeating-conic-gradient(
+    from 0deg at 50% 50%,
+    rgba(237, 231, 219, 0.030) 0deg 6deg,
+    transparent 6deg 12deg
+  );
+  animation: girar 90s linear infinite;
+  z-index: 2;
+  pointer-events: none;
+}
+/* Con foto detrás casi sobran: ensucian la imagen. */
+body.con-foto #rayos { opacity: 0.18; }
+@keyframes girar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Crédito de la foto. Es un pie de foto, no un titular: va translúcido y sin
+   caja, para que se lea como una capa por debajo del contenido. Si pesa más
+   que esto, el ojo lo lee antes que la pantalla y estorba en el directo. */
+#credito {
+  position: fixed;
+  left: calc(var(--u) * 3);
+  bottom: calc(var(--u) * 9.2);
+  z-index: 3;
+  display: flex; align-items: center; gap: calc(var(--u) * 0.6);
+  font-family: var(--texto); font-weight: 500;
+  font-size: calc(var(--u) * 1.15);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(237, 231, 219, 0.42);
+  text-shadow: 0 1px 10px rgba(17, 28, 42, 0.9);
+  animation: entrar 600ms ease both;
+}
+#credito .punto { color: rgba(200, 50, 31, 0.65); }
+#credito[hidden] { display: none; }
+
+/* ------------------------------------------------------------- estructura */
+
+/* Las sombras son lo que permite que el velo sea tan ligero. Sin ellas habría
+   que oscurecer la foto hasta taparla para que el texto se leyera de lejos. */
+body.con-foto #titulo,
+body.con-foto .vista,
+body.con-foto #pie {
+  text-shadow:
+    0 2px 14px rgba(17, 28, 42, 0.95),
+    0 0 46px rgba(17, 28, 42, 0.75);
+}
+
+#marco {
+  position: relative; z-index: 4;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: calc(var(--u) * 2.5) calc(var(--u) * 3) 0;
+}
+
+#titulo {
+  font-family: var(--titular);
+  font-weight: 900;
+  font-size: calc(var(--u) * 5.2);
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+#titulo .ac { color: var(--red); }
+
+#stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--u) * 1.6) 0;
+  min-height: 0;
+}
+
+.vista {
+  width: 100%;
+  animation: entrar 420ms cubic-bezier(.2,.8,.3,1) both;
+}
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(calc(var(--u) * 1.2)); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ------------------------------------------------------------- filas/lista */
+
+.filas { display: flex; flex-direction: column; gap: calc(var(--u) * 0.75); }
+
+.fila {
+  display: grid;
+  /* La primera columna era fija (5u) y "#117" no cabía: se salía del hueco y
+     se pegaba al nombre. Con auto, la rejilla mide el número más ancho de
+     todas las filas y las alinea a todas por igual. */
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: calc(var(--u) * 2.2);
+  background: rgba(17, 28, 42, 0.42);
+  border: 1px solid var(--bone-faint);
+  border-radius: calc(var(--u) * 1.1);
+  backdrop-filter: blur(6px);
+  padding: calc(var(--u) * 0.9) calc(var(--u) * 1.6);
+}
+.fila.destacada { border-color: var(--red); background: rgba(200, 50, 31, 0.30); }
+
+.fila .pos {
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 2.4);
+  color: var(--red);
+  text-align: right;
+  white-space: nowrap;
+}
+.fila .quien {
+  font-size: calc(var(--u) * 2.6);
+  font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fila .dato {
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 2.7);
+  white-space: nowrap;
+}
+.fila .hora {
+  font-size: calc(var(--u) * 1.5);
+  color: var(--bone-dim);
+  font-variant-numeric: tabular-nums;
+  min-width: calc(var(--u) * 5);
+  text-align: right;
+}
+
+/* ------------------------------------------------------------- pasos 1-2-3 */
+
+.pasos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(var(--u) * 2);
+  align-items: start;
+}
+.paso { text-align: center; }
+.paso .n {
+  width: calc(var(--u) * 6); height: calc(var(--u) * 6);
+  margin: 0 auto calc(var(--u) * 1.2);
+  border-radius: 50%;
+  background: var(--red);
+  color: var(--bone);
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 3.2);
+  display: grid; place-items: center;
+}
+.paso .qué {
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 2.6);
+  text-transform: uppercase;
+  line-height: 1.05;
+}
+.paso .detalle {
+  margin-top: calc(var(--u) * 0.5);
+  font-size: calc(var(--u) * 1.55);
+  color: var(--bone-dim);
+  line-height: 1.25;
+}
+
+.remate {
+  margin-top: calc(var(--u) * 2.2);
+  text-align: center;
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 2.4);
+  color: var(--bone);
+  border-top: 1px solid var(--bone-faint);
+  padding-top: calc(var(--u) * 1.4);
+}
+.remate small {
+  display: block;
+  font-family: var(--texto); font-weight: 400;
+  font-size: calc(var(--u) * 1.5);
+  color: var(--bone-dim);
+  margin-top: calc(var(--u) * 0.4);
+}
+
+/* --------------------------------------------------------------- niveles */
+
+.niveles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: calc(var(--u) * 1.6) calc(var(--u) * 2);
+}
+.nivel { text-align: center; }
+.nivel .ico {
+  width: calc(var(--u) * 5.4); height: calc(var(--u) * 5.4);
+  margin: 0 auto calc(var(--u) * 0.6);
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: calc(var(--u) * 2.6);
+  background: rgba(17, 28, 42, 0.42);
+  border: 2px solid var(--bone-faint);
+  backdrop-filter: blur(6px);
+}
+.nivel.alto .ico { border-color: var(--red); background: rgba(200, 50, 31, 0.28); }
+.nivel .nom {
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 1.5);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------ lote / regalo */
+
+.lote { text-align: center; }
+.lote .num {
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 18);
+  line-height: 0.85;
+  letter-spacing: -0.03em;
+}
+.lote .precio {
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 6);
+  color: var(--red);
+  margin-top: calc(var(--u) * 0.8);
+}
+.lote .lider {
+  font-size: calc(var(--u) * 2.6);
+  color: var(--bone-dim);
+  margin-top: calc(var(--u) * 0.6);
+}
+
+.regalo-grande { text-align: center; }
+.regalo-grande .cartel {
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 5.6);
+  line-height: 1.02;
+  text-transform: uppercase;
+}
+.regalo-grande .tier {
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 12);
+  line-height: 1;
+  margin: calc(var(--u) * 1.2) 0;
+  letter-spacing: -0.02em;
+}
+.tier-plata    { color: #C9D2DA; }
+.tier-oro      { color: #E8B84B; }
+.tier-diamante { color: #7FD8E8; }
+.regalo-grande .sub {
+  font-size: calc(var(--u) * 2.2);
+  color: var(--bone-dim);
+}
+.girando { animation: latir 420ms ease-in-out infinite alternate; }
+@keyframes latir { from { transform: scale(0.97); opacity: .75; } to { transform: scale(1.03); opacity: 1; } }
+
+/* ----------------------------------------------------------------- vacío */
+
+.vacio {
+  text-align: center;
+  color: var(--bone-dim);
+  font-size: calc(var(--u) * 2.2);
+  padding: calc(var(--u) * 4) 0;
+}
+
+/* ------------------------------------------------------------------ pie */
+
+#pie {
+  border-top: 1px solid var(--bone-faint);
+  padding: calc(var(--u) * 0.9) 0 calc(var(--u) * 1.1);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+}
+
+#objetivo {
+  display: flex; align-items: center; gap: calc(var(--u) * 0.9);
+  font-family: var(--titular); font-weight: 900;
+  font-size: calc(var(--u) * 1.7);
+  white-space: nowrap;
+}
+#barra {
+  width: calc(var(--u) * 12); height: calc(var(--u) * 0.7);
+  background: var(--bone-faint);
+  border-radius: 999px; overflow: hidden;
+}
+#barra i { display: block; height: 100%; background: var(--red); width: 0; transition: width 600ms ease; }
+
+#ticker {
+  overflow: hidden;
+  font-size: calc(var(--u) * 1.6);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+  text-align: right;
+  white-space: nowrap;
+}
+#ticker b { color: var(--red); font-weight: 700; }
+
+/* El reloj se quitó del pie. Si queda un display.html antiguo que aún lo trae,
+   sin esto el div se cae a una fila nueva y salen unos "--:--" sueltos. */
+#reloj { display: none; }
+
+/* Aviso de que el lector no está recibiendo nada. Discreto: si el monitor
+   está en cámara no queremos un error gigante, pero sí saber que pasa algo. */
+#sinDatos {
+  position: fixed; right: calc(var(--u) * 1); bottom: calc(var(--u) * 1);
+  z-index: 6;
+  width: calc(var(--u) * 0.8); height: calc(var(--u) * 0.8);
+  border-radius: 50%;
+  background: var(--red);
+  opacity: 0;
+  transition: opacity 400ms;
+}
+#sinDatos.on { opacity: 0.8; }
