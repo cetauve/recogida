@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- La extension inyecta el puente en las paginas que llevan esta etiqueta.
+     Sin ella no llega ningun dato. No la quites. -->
+<meta name="billys-datos" content="1">
+<title>Cruce de prendas y lotes</title>
+
+<!--
+  ===========================================================================
+  CRUCE  ·  prenda vendida  x  lote del directo
+  ===========================================================================
+
+  DE DONDE SALE CADA COSA
+    · Los toques de las vendedoras: del enlace que manda la app del movil
+      (van dentro del #, asi que no viajan al servidor: GitHub no ve nada).
+    · Los lotes, precios y horas: de la extension, que los lleva capturando
+      todo el directo. Se los pasa el puente pantalla-web.js.
+
+  COMO SE CRUZA
+    La vendedora pulsa DESPUES de que la prenda se haya vendido, asi que cada
+    toque se lleva el ULTIMO lote cerrado antes de ese toque, y cada lote solo
+    se puede usar una vez.
+
+    LIMITE HONESTO: la hora de venta de un lote se lee del panel de TikTok como
+    "hace 1 minuto", asi que tiene precision de minuto, no de segundo. Con un
+    lote por minuto, un toque puede caer en el lote de al lado. Por eso abajo
+    sale siempre cuantos han cruzado y cuantos no: si la cifra de dudosos sube,
+    hay que mirarlo, no darlo por bueno.
+
+  EL DINERO
+    costePieza = (euroKilo / piezasKilo + transporte) * (1 + IVA)
+    El precio de venta de TikTok YA lleva IVA, asi que el margen se calcula con
+    IVA en los dos lados (decision de Aaron, 7 ago 2026). Se guardan tambien
+    las columnas sin IVA en el CSV, que es el margen real del negocio, para no
+    tener que rehacer nada si se cambia de criterio.
+  ===========================================================================
+-->
+
+<style>
+  :root{--fondo:#0E1723;--tinta:#EDE7DB;--acento:#C8321F;--verde:#2E9E6B;
+        --carta:#16212F;--borde:#243244;--tenue:#8A99AB;--ambar:#D9A441}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--fondo);color:var(--tinta);
+       font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;padding:24px}
+  .caja{max-width:1180px;margin:0 auto}
+  h1{font-size:23px;margin:0 0 4px;font-weight:800;letter-spacing:-.02em}
+  h2{font-size:16px;margin:28px 0 10px;font-weight:800}
+  .sub{color:var(--tenue);margin:0 0 20px;font-size:14px}
+  .panel{background:var(--carta);border:1.5px solid var(--borde);border-radius:14px;padding:16px;margin-bottom:14px}
+  .aviso{border-color:var(--acento);background:#2A1512}
+  .bien{border-color:var(--verde);background:#12241C}
+  .cifras{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .cifra{flex:1;min-width:130px;background:var(--carta);border:1.5px solid var(--borde);
+         border-radius:14px;padding:14px}
+  .cifra b{display:block;font-size:27px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+  .cifra span{font-size:12px;color:var(--tenue);display:block;margin-top:6px}
+  .cifra.ojo{border-color:var(--ambar)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--borde);text-align:left;white-space:nowrap}
+  th{color:var(--tenue);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  tr.dudoso td{color:var(--ambar)}
+  .envoltorio{overflow:auto;max-height:520px;border:1.5px solid var(--borde);border-radius:14px}
+  button{font-family:inherit;font-size:15px;font-weight:700;padding:12px 18px;border-radius:12px;
+         border:0;background:var(--acento);color:#fff;cursor:pointer}
+  button.sec{background:transparent;border:1.5px solid var(--borde);color:var(--tinta)}
+  textarea{width:100%;height:80px;background:var(--fondo);color:var(--tinta);
+           border:1.5px solid var(--borde);border-radius:10px;padding:10px;font-family:ui-monospace,monospace;font-size:12px}
+  .fila{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="caja">
+  <h1>Cruce de prendas y lotes</h1>
+  <p class="sub" id="cabecera">Abre aqui el enlace que manda la app de las vendedoras.</p>
+  <div id="estado"></div>
+  <div id="salida"></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const CONFIG = {
+  transportePorPieza: 0.05,
+  iva: 0.21,
+  categorias: [
+    { id:'camisetas',   nombre:'Camisetas',      euroKilo:5, piezasKilo:7   },
+    { id:'sudaderas',   nombre:'Sudaderas',      euroKilo:3, piezasKilo:2.5 },
+    { id:'polos',       nombre:'Polos',          euroKilo:7, piezasKilo:5   },
+    { id:'shorts',      nombre:'Shorts deporte', euroKilo:5, piezasKilo:7   },
+    { id:'trackjacket', nombre:'Track jacket',   euroKilo:9, piezasKilo:2.5 },
+    { id:'trackpants',  nombre:'Trackpants',     euroKilo:8, piezasKilo:2.5 },
+    { id:'chaquetones', nombre:'Chaquetones',    euroKilo:7, piezasKilo:1.5 }
+  ],
+  // Cuanto se mira hacia atras buscando el lote del toque.
+  ventanaAtrasMs: 10 * 60000,
+  // Margen hacia delante, para absorber que la hora del lote va al minuto.
+  margenDelanteMs: 90000,
+  /* Lo que se tarda razonablemente en coger el movil y pulsar. Si el lote que
+     toca se cerro hace menos que esto, ES el suyo y no se busca mas alla. Sin
+     este freno, con lotes muy seguidos el cruce se adelantaba al lote de
+     despues. */
+  reaccionMaxMs: 45000
+};
+
+const $ = (id) => document.getElementById(id);
+const cat = (id) => CONFIG.categorias.find((c) => c.id === id) || { id, nombre: id, euroKilo: 0, piezasKilo: 1 };
+
+function costes(c) {
+  const sinIva = c.euroKilo / c.piezasKilo + CONFIG.transportePorPieza;
+  return { sinIva, conIva: sinIva * (1 + CONFIG.iva) };
+}
+const eur = (n) => (n == null || !isFinite(n)) ? '' : n.toFixed(2).replace('.', ',') + ' €';
+const hhmm = (ts) => { const d = new Date(ts);
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* ---------------------------------------------------- entrada: los toques */
+async function desempaquetar(carga) {
+  const modo = carga.slice(0, 2);
+  const cuerpo = carga.slice(2);
+  const bin = atob(cuerpo.replace(/-/g,'+').replace(/_/g,'/'));
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  if (modo === 'g.') {
+    const ds = new DecompressionStream('gzip');
+    const w = ds.writable.getWriter(); w.write(u8); w.close();
+    return JSON.parse(await new Response(ds.readable).text());
+  }
+  return JSON.parse(new TextDecoder().decode(u8));
+}
+
+/* ------------------------------------------- entrada: los lotes del directo */
+let lotes = null;      // [{num, price, at}]
+let sesiones = null;
+
+const DESTINO = (location.origin && location.origin !== 'null') ? location.origin : '*';
+window.addEventListener('message', (e) => {
+  if (e.source !== window) return;
+  const m = e.data;
+  if (!m || m.fuente !== 'billys-pantalla') return;
+  const it = m.datos && m.datos.billysItems;
+  if (!it || !it.items) return;
+  lotes = Object.values(it.items)
+    .filter((x) => Number.isFinite(x.num) && x.at)
+    .map((x) => ({ num: x.num, price: Number(x.price), at: x.at, pagado: x.paid }))
+    .sort((a, b) => a.at - b.at);
+  pintar();
+});
+window.postMessage({ fuente: 'billys-pantalla-pide' }, DESTINO);
+
+/* --------------------------------------------------------------- el cruce */
+/* EL CRUCE
+ *
+ * La primera version recorria los lotes de atras hacia delante buscando "el
+ * ultimo cerrado antes del toque". Con lotes espaciados eso funciona, pero en
+ * cuanto varios lotes caen juntos el primer toque se llevaba el lote MAS NUEVO
+ * y el siguiente el anterior: los numeros salian AL REVES. Comprobado el 7 ago
+ * 2026 en una prueba con seis lotes seguidos.
+ *
+ * Lo que sabemos con total seguridad es que el orden se respeta: si un toque va
+ * antes que otro, su lote tambien. Asi que se recorren los dos en orden con un
+ * puntero, y no se permite volver atras nunca.
+ *
+ * Y hay que saltarse los lotes que nadie marca: lotes desiertos, o prendas que
+ * se le pasan a la vendedora. Sin eso, UN solo lote sin marcar desplaza en uno
+ * todo el resto del directo. La regla para saltarlo: si el lote siguiente ya se
+ * ha cerrado y esta MAS CERCA del toque que el que toca, el que toca es un lote
+ * que nadie marco y se descarta. Probado contra cinco casos, incluidos dos
+ * lotes sin marcar seguidos y dos vendedoras alternandose.
+ */
+function cruzar() {
+  const toques = [];
+  for (const s of sesiones) {
+    for (const t of s.toques) toques.push({ vendedora: s.vendedora, c: t.c, t: t.t });
+  }
+  toques.sort((a, b) => a.t - b.t);
+
+  const usados = new Set();
+  const filas = [];
+  const lista = lotes || [];
+  let idx = 0;
+
+  for (const q of toques) {
+    // Red de seguridad: lo que sea mas viejo que la ventana, fuera.
+    while (idx < lista.length && lista[idx].at < q.t - CONFIG.ventanaAtrasMs) idx++;
+
+    // Y lo importante: descartar los lotes que nadie marco.
+    while (idx + 1 < lista.length) {
+      const actual = lista[idx], siguiente = lista[idx + 1];
+      if (Math.abs(q.t - actual.at) <= CONFIG.reaccionMaxMs) break;  // acaba de cerrarse: es el suyo
+      if (siguiente.at > q.t + CONFIG.margenDelanteMs) break;        // aun no ha cerrado
+      if (Math.abs(q.t - siguiente.at) < Math.abs(q.t - actual.at)) idx++;
+      else break;
+    }
+
+    let elegido = null;
+    // El margen hacia delante absorbe que la hora del lote viene al minuto.
+    if (idx < lista.length && lista[idx].at <= q.t + CONFIG.margenDelanteMs) {
+      elegido = lista[idx];
+      idx++;
+    }
+    if (elegido) usados.add(elegido.num);
+
+    const c = cat(q.c);
+    const k = costes(c);
+    const ventaConIva = elegido ? elegido.price : null;
+    const ventaSinIva = ventaConIva != null ? ventaConIva / (1 + CONFIG.iva) : null;
+
+    filas.push({
+      ...q,
+      categoria: c.nombre,
+      lote: elegido ? elegido.num : null,
+      horaLote: elegido ? elegido.at : null,
+      desfase: elegido ? Math.round((q.t - elegido.at) / 1000) : null,
+      ventaConIva, ventaSinIva,
+      costeConIva: k.conIva, costeSinIva: k.sinIva,
+      margenConIva: ventaConIva != null ? ventaConIva - k.conIva : null,
+      margenSinIva: ventaSinIva != null ? ventaSinIva - k.sinIva : null
+    });
+  }
+
+  const sinCruce = filas.filter((f) => f.lote == null);
+  const loteSinToque = (lotes || []).filter((l) => !usados.has(l.num));
+  return { filas, sinCruce, loteSinToque };
+}
+
+/* -------------------------------------------------------------- pintar */
+let ultimo = null;
+
+function pintar() {
+  if (!sesiones) return;
+
+  if (!lotes) {
+    $('estado').innerHTML = `<div class="panel aviso">
+      <b>Faltan los datos del directo.</b><br>
+      Esta pagina tiene los toques de las vendedoras, pero los lotes y los precios
+      los pone la extension. Abre esta misma pagina <b>en el navegador donde esta
+      instalada la extension de Billy's</b>, con el panel del directo abierto.
+      Sin eso solo puedo contar prendas, no cruzarlas con lo que se vendio.</div>`;
+  } else {
+    $('estado').innerHTML = '';
+  }
+
+  const r = ultimo = cruzar();
+  const cruzadas = r.filas.length - r.sinCruce.length;
+  const totalMargen = r.filas.reduce((a, f) => a + (f.margenConIva || 0), 0);
+  const totalVenta = r.filas.reduce((a, f) => a + (f.ventaConIva || 0), 0);
+  const totalCoste = r.filas.filter((f) => f.lote != null).reduce((a, f) => a + f.costeConIva, 0);
+
+  /* --- por vendedora
+   * Las horas salen de la DURACION DEL TURNO (de "Empezar" a "Terminar"), no
+   * del hueco entre el primer y el ultimo toque. Es lo que se le paga: si pasa
+   * veinte minutos sin vender, esos minutos cuentan igual. Usar el hueco entre
+   * toques inflaba el €/hora justo de quien menos vende. */
+  const porV = new Map();
+  const dameV = (n) => {
+    if (!porV.has(n)) porV.set(n, { piezas: 0, venta: 0, margen: 0, ms: 0 });
+    return porV.get(n);
+  };
+  for (const s of sesiones) dameV(s.vendedora).ms += Math.max((s.fin || Date.now()) - s.inicio, 0);
+  for (const f of r.filas) {
+    const p = dameV(f.vendedora);
+    p.piezas++; p.venta += f.ventaConIva || 0; p.margen += f.margenConIva || 0;
+  }
+
+  // --- por categoria
+  const porC = new Map();
+  for (const f of r.filas) {
+    const p = porC.get(f.categoria) || { piezas: 0, venta: 0, coste: 0, margen: 0 };
+    p.piezas++; p.venta += f.ventaConIva || 0;
+    if (f.lote != null) p.coste += f.costeConIva;
+    p.margen += f.margenConIva || 0;
+    porC.set(f.categoria, p);
+  }
+
+  $('salida').innerHTML = `
+    <div class="cifras">
+      <div class="cifra"><b>${r.filas.length}</b><span>prendas marcadas</span></div>
+      <div class="cifra"><b>${cruzadas}</b><span>cruzadas con su lote</span></div>
+      <div class="cifra ${r.sinCruce.length ? 'ojo' : ''}"><b>${r.sinCruce.length}</b><span>sin cruce</span></div>
+      <div class="cifra"><b>${eur(totalVenta)}</b><span>vendido (con IVA)</span></div>
+      <div class="cifra"><b>${eur(totalCoste)}</b><span>coste de compra</span></div>
+      <div class="cifra"><b>${eur(totalMargen)}</b><span>margen</span></div>
+    </div>
+
+    <h2>Por vendedora</h2>
+    <div class="envoltorio"><table>
+      <thead><tr><th>Vendedora</th><th class="n">Prendas</th><th class="n">Horas</th>
+      <th class="n">Prendas/hora</th><th class="n">Vendido</th><th class="n">€/hora</th><th class="n">Margen</th></tr></thead>
+      <tbody>${[...porV.entries()].sort((a,b) => b[1].piezas - a[1].piezas).map(([v, p]) => {
+        const h = p.ms / 3600000;
+        /* Con turnos de menos de 6 minutos el ritmo por hora es ruido, no dato.
+           Mejor una raya que un numero que nadie deberia usar. */
+        const fiable = h >= 0.1;
+        return `<tr><td>${esc(v)}</td><td class="n">${p.piezas}</td>
+          <td class="n">${h.toFixed(1).replace('.',',')}</td>
+          <td class="n">${fiable ? (p.piezas / h).toFixed(1).replace('.',',') : '—'}</td>
+          <td class="n">${eur(p.venta)}</td>
+          <td class="n">${fiable ? eur(p.venta / h) : '—'}</td>
+          <td class="n">${eur(p.margen)}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+
+    <h2>Por categoria</h2>
+    <div class="envoltorio"><table>
+      <thead><tr><th>Categoria</th><th class="n">Prendas</th><th class="n">Coste/pieza</th>
+      <th class="n">Vendido</th><th class="n">Coste</th><th class="n">Margen</th><th class="n">Margen/pieza</th></tr></thead>
+      <tbody>${[...porC.entries()].sort((a,b) => b[1].margen - a[1].margen).map(([n, p]) => {
+        const c = CONFIG.categorias.find((x) => x.nombre === n);
+        return `<tr><td>${esc(n)}</td><td class="n">${p.piezas}</td>
+          <td class="n">${c ? eur(costes(c).conIva) : ''}</td>
+          <td class="n">${eur(p.venta)}</td><td class="n">${eur(p.coste)}</td>
+          <td class="n">${eur(p.margen)}</td>
+          <td class="n">${eur(p.margen / p.piezas)}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+
+    <h2>Detalle · ${r.filas.length} toques</h2>
+    <div class="envoltorio"><table>
+      <thead><tr><th>Hora</th><th>Vendedora</th><th>Categoria</th><th class="n">Lote</th>
+      <th>Hora lote</th><th class="n">Desfase</th><th class="n">Venta</th>
+      <th class="n">Coste</th><th class="n">Margen</th></tr></thead>
+      <tbody>${r.filas.map((f) => `
+        <tr class="${f.lote == null ? 'dudoso' : ''}">
+          <td>${hhmm(f.t)}</td><td>${esc(f.vendedora)}</td><td>${esc(f.categoria)}</td>
+          <td class="n">${f.lote != null ? '#' + f.lote : 'sin cruce'}</td>
+          <td>${f.horaLote ? hhmm(f.horaLote) : ''}</td>
+          <td class="n">${f.desfase != null ? f.desfase + ' s' : ''}</td>
+          <td class="n">${eur(f.ventaConIva)}</td><td class="n">${eur(f.costeConIva)}</td>
+          <td class="n">${eur(f.margenConIva)}</td>
+        </tr>`).join('')}</tbody>
+    </table></div>
+
+    ${r.loteSinToque.length ? `<h2>Lotes vendidos que nadie marco · ${r.loteSinToque.length}</h2>
+      <div class="panel">Estos se vendieron pero ninguna vendedora los registro, asi que no
+      cuentan para el COGS por categoria ni para los incentivos.
+      <br><br>${r.loteSinToque.slice(0, 60).map((l) => '#' + l.num).join(' · ')}
+      ${r.loteSinToque.length > 60 ? ' …' : ''}</div>` : ''}
+
+    <div class="fila">
+      <button id="csv">Descargar CSV para el registro</button>
+      <button id="verPegar" class="sec">Pegar otro enlace</button>
+    </div>
+    <div id="pegar" style="display:none;margin-top:12px">
+      <textarea id="txt" placeholder="Pega aqui el enlace que llego por WhatsApp"></textarea>
+      <div class="fila"><button id="cargarTxt" class="sec">Cargar</button></div>
+    </div>`;
+
+  $('csv').onclick = descargarCsv;
+  $('verPegar').onclick = () => { const p = $('pegar'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; };
+  $('cargarTxt').onclick = () => {
+    const v = ($('txt').value || '').trim();
+    const i = v.indexOf('#');
+    if (i < 0) { alert('Ese enlace no lleva datos dentro.'); return; }
+    location.hash = v.slice(i + 1);
+    location.reload();
+  };
+}
+
+function descargarCsv() {
+  const cols = ['fecha','hora_toque','vendedora','categoria','lote','hora_lote','desfase_seg',
+                'venta_con_iva','coste_con_iva','margen_con_iva',
+                'venta_sin_iva','coste_sin_iva','margen_sin_iva'];
+  const dec = (n) => n == null || !isFinite(n) ? '' : n.toFixed(4).replace('.', ',');
+  const lineas = [cols.join(';')];
+  for (const f of ultimo.filas) {
+    const d = new Date(f.t);
+    lineas.push([
+      `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
+      new Date(f.t).toLocaleTimeString('es-ES', { hour12: false }),
+      f.vendedora, f.categoria,
+      f.lote != null ? f.lote : '',
+      f.horaLote ? new Date(f.horaLote).toLocaleTimeString('es-ES', { hour12: false }) : '',
+      f.desfase != null ? f.desfase : '',
+      dec(f.ventaConIva), dec(f.costeConIva), dec(f.margenConIva),
+      dec(f.ventaSinIva), dec(f.costeSinIva), dec(f.margenSinIva)
+    ].join(';'));
+  }
+  // BOM para que Excel en espanol lo abra sin romper acentos
+  const blob = new Blob(['﻿' + lineas.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date(ultimo.filas.length ? ultimo.filas[0].t : Date.now());
+  a.download = `registro-prendas-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}.csv`;
+  a.click();
+}
+
+/* ------------------------------------------------------------- arranque */
+async function arrancar() {
+  const carga = location.hash.slice(1);
+  if (!carga) {
+    $('estado').innerHTML = `<div class="panel">
+      <b>No hay ningun turno cargado.</b><br>
+      Abre el enlace que manda la app de las vendedoras al pulsar "Terminar",
+      o pega el enlace aqui abajo.
+      <div style="margin-top:12px"><textarea id="txt0" placeholder="Pega aqui el enlace"></textarea>
+      <div class="fila"><button id="cargar0">Cargar</button></div></div></div>`;
+    $('cargar0').onclick = () => {
+      const v = ($('txt0').value || '').trim();
+      const i = v.indexOf('#');
+      if (i < 0) { alert('Ese enlace no lleva datos dentro.'); return; }
+      location.hash = v.slice(i + 1); location.reload();
+    };
+    return;
+  }
+  try {
+    const d = await desempaquetar(carga);
+    sesiones = d.sesiones || [];
+    const n = sesiones.reduce((a, s) => a + s.toques.length, 0);
+    $('cabecera').textContent =
+      `${sesiones.length} ${sesiones.length === 1 ? 'turno' : 'turnos'} · ${n} prendas marcadas · `
+      + sesiones.map((s) => s.vendedora).join(', ');
+    pintar();
+  } catch (err) {
+    $('estado').innerHTML = `<div class="panel aviso"><b>No he podido leer el enlace.</b><br>${esc(err.message)}
+      <br><br>Suele ser que se corto al copiarlo. Que lo vuelvan a mandar desde el movil.</div>`;
+  }
+}
+
+window.addEventListener('hashchange', () => location.reload());
+arrancar();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0E1723">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Registro de prendas</title>
+
+<!--
+  ===========================================================================
+  REGISTRO DE PRENDAS DEL DIRECTO  ·  app de la vendedora
+  ===========================================================================
+
+  QUE HACE
+    La vendedora pone su nombre y, cada vez que se vende una prenda, pulsa el
+    boton de la categoria. Se guarda QUE categoria y a QUE HORA, con el nombre
+    de quien lo pulso. Nada mas. Un toque.
+
+  POR QUE ASI
+    El toque se da DESPUES de que la prenda se haya vendido (decision de Aaron,
+    7 ago 2026). Por eso el cruce en cruce.html busca el ULTIMO lote cerrado
+    antes del toque. Si algun dia se cambia y se pulsa al ENSENARLA, hay que
+    cambiar el criterio alli, no aqui.
+
+  DONDE SE GUARDA
+    En el propio movil, despues de CADA toque. Aguanta que se cierre el
+    navegador, que se bloquee la pantalla o que se caiga el WiFi. Nada se
+    pierde por no tener cobertura.
+
+    GitHub Pages solo sirve archivos: no recibe ni guarda datos. Por eso los
+    datos salen del movil al pulsar "Terminar", en forma de enlace que se manda
+    por WhatsApp. En el PC se abre ese enlace con cruce.html y ahi es donde se
+    cruza con los lotes del directo.
+
+    Si algun dia hay un Google Apps Script desplegado, se pega su URL en
+    CONFIG.envioAutomatico y los toques viajan solos ademas de guardarse en el
+    movil. Mientras este vacio, no se intenta nada.
+
+  NADA DE ESTO ESTA ATADO A UNA TIENDA CONCRETA: categorias, precios, textos y
+  marca salen del bloque CONFIG de aqui abajo.
+  ===========================================================================
+-->
+
+<style>
+  :root{
+    --fondo:#0E1723; --tinta:#EDE7DB; --acento:#C8321F;
+    --verde:#2E9E6B; --carta:#16212F; --borde:#243244; --tenue:#8A99AB;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--fondo);color:var(--tinta);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overscroll-behavior:none;
+  }
+  .pantalla{display:none;flex-direction:column;min-height:100dvh;padding:18px 16px}
+  .pantalla.on{display:flex}
+
+  h1{font-size:22px;margin:0 0 4px;font-weight:800;letter-spacing:-.02em}
+  .sub{color:var(--tenue);font-size:14px;margin:0 0 20px}
+
+  input[type=text]{
+    width:100%;padding:16px;font-size:19px;border-radius:14px;
+    border:2px solid var(--borde);background:var(--carta);color:var(--tinta);
+  }
+  input[type=text]:focus{outline:none;border-color:var(--acento)}
+
+  button{font-family:inherit;color:inherit;border:0;cursor:pointer}
+  .primario{
+    width:100%;padding:17px;font-size:18px;font-weight:800;border-radius:14px;
+    background:var(--acento);color:#fff;
+  }
+  .primario:disabled{opacity:.35}
+  .secundario{
+    padding:13px 16px;font-size:15px;font-weight:600;border-radius:12px;
+    background:transparent;border:1.5px solid var(--borde);color:var(--tinta);
+  }
+
+  .recientes{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 24px}
+  .recientes button{
+    padding:10px 15px;border-radius:999px;background:var(--carta);
+    border:1.5px solid var(--borde);font-size:15px;font-weight:600;
+  }
+
+  /* --- pantalla de trabajo --- */
+  .barra{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .quien{font-weight:800;font-size:18px;line-height:1.1}
+  .quien small{display:block;font-weight:500;font-size:13px;color:var(--tenue);margin-top:2px}
+  .marcador{text-align:right;line-height:1}
+  .marcador b{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums}
+  .marcador span{display:block;font-size:12px;color:var(--tenue);margin-top:3px}
+
+  /* Los botones se estiran hasta llenar la pantalla. La vendedora esta de pie,
+     con una prenda en la otra mano y mirando a camara: cuanto mas grande sea el
+     area de toque, menos veces tiene que mirar el movil. */
+  .rejilla{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;
+           grid-auto-rows:1fr;align-content:stretch}
+  /* Si el numero de categorias es impar, la ultima ocupa las dos columnas en
+     vez de dejar un hueco muerto. */
+  .cat:last-child:nth-child(odd){grid-column:span 2}
+  .cat{
+    position:relative;min-height:76px;border-radius:16px;background:var(--carta);
+    border:1.5px solid var(--borde);padding:12px 12px 10px;text-align:left;
+    display:flex;flex-direction:column;justify-content:space-between;
+    font-size:17px;font-weight:700;line-height:1.15;transition:transform .06s,background .15s;
+  }
+  .cat:active{transform:scale(.96)}
+  .cat.pulsada{background:var(--verde);border-color:var(--verde);color:#fff}
+  .cat .n{font-size:13px;font-weight:700;color:var(--tenue);font-variant-numeric:tabular-nums}
+  .cat.pulsada .n{color:rgba(255,255,255,.85)}
+
+  .pie{margin-top:14px;display:flex;gap:10px}
+  .pie .secundario{flex:1}
+
+  #ultimo{
+    min-height:22px;text-align:center;font-size:14px;color:var(--verde);
+    font-weight:700;margin:10px 0 2px
+  }
+
+  /* --- resumen --- */
+  .tabla{width:100%;border-collapse:collapse;margin:8px 0 18px;font-size:15px}
+  .tabla td{padding:9px 0;border-bottom:1px solid var(--borde)}
+  .tabla td:last-child{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .tabla tr:last-child td{border-bottom:0}
+  .cifras{display:flex;gap:10px;margin:4px 0 18px}
+  .cifra{flex:1;background:var(--carta);border:1.5px solid var(--borde);border-radius:14px;padding:13px}
+  .cifra b{display:block;font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+  .cifra span{font-size:12px;color:var(--tenue);display:block;margin-top:5px}
+  .aviso{
+    background:#2A1512;border:1.5px solid var(--acento);border-radius:12px;
+    padding:12px 14px;font-size:14px;margin-bottom:16px
+  }
+  .botonera{display:flex;flex-direction:column;gap:10px;margin-top:auto;padding-top:16px}
+</style>
+</head>
+<body>
+
+<!-- 1 · QUIEN ERES -->
+<section id="pEntrada" class="pantalla on">
+  <h1 id="tituloEntrada">Registro de prendas</h1>
+  <p class="sub">Pon tu nombre para empezar el turno.</p>
+  <input id="nombre" type="text" placeholder="Tu nombre" autocomplete="off"
+         autocapitalize="words" enterkeyhint="go">
+  <div class="recientes" id="recientes"></div>
+  <div style="margin-top:auto">
+    <div id="pendientesAviso"></div>
+    <button id="empezar" class="primario" disabled>Empezar turno</button>
+  </div>
+</section>
+
+<!-- 2 · TRABAJO -->
+<section id="pTrabajo" class="pantalla">
+  <div class="barra">
+    <div class="quien">
+      <span id="quienNombre"></span>
+      <small id="quienDesde"></small>
+    </div>
+    <div class="marcador">
+      <b id="total">0</b>
+      <span>prendas</span>
+    </div>
+  </div>
+  <div class="rejilla" id="rejilla"></div>
+  <div id="ultimo"></div>
+  <div class="pie">
+    <button id="deshacer" class="secundario" disabled>Deshacer</button>
+    <button id="terminar" class="secundario">Terminar</button>
+  </div>
+</section>
+
+<!-- 3 · RESUMEN Y ENVIO -->
+<section id="pFin" class="pantalla">
+  <h1>Turno terminado</h1>
+  <p class="sub" id="finQuien"></p>
+  <div class="cifras">
+    <div class="cifra"><b id="finTotal">0</b><span>prendas</span></div>
+    <div class="cifra"><b id="finHoras">0</b><span>horas</span></div>
+    <div class="cifra"><b id="finRitmo">0</b><span>por hora</span></div>
+  </div>
+  <table class="tabla"><tbody id="finDetalle"></tbody></table>
+  <div class="aviso" id="finAviso">
+    Esto <b>todavia no ha salido del movil</b>. Manda el resumen para que cuente.
+  </div>
+  <div class="botonera">
+    <button id="mandar" class="primario">Mandar por WhatsApp</button>
+    <button id="copiar" class="secundario">Copiar enlace</button>
+    <button id="descargar" class="secundario">Guardar archivo</button>
+    <button id="otro" class="secundario">Empezar otro turno</button>
+  </div>
+</section>
+
+<script>
+(() => {
+'use strict';
+
+/* =========================================================================
+   CONFIGURACION  ·  lo unico que se toca al cambiar de tienda o de precios
+   ========================================================================= */
+const CONFIG = {
+  marca: 'Registro de prendas',
+
+  // A donde se manda el resumen al terminar. Vacio = se elige al compartir.
+  whatsapp: '',
+
+  // URL de la pagina de cruce en el PC. Solo sale en el texto del mensaje,
+  // para que quien lo reciba sepa donde abrirlo.
+  urlCruce: 'https://cetauve.github.io/recogida/cruce.html',
+
+  /* Si algun dia hay un Google Apps Script desplegado, aqui va su URL y los
+     toques viajan solos ademas de guardarse en el movil. Vacio = no se intenta
+     nada y no hay ni un error en consola. */
+  envioAutomatico: '',
+
+  // Los costes viven tambien en costes-prendas.json. Si cambian, los dos.
+  transportePorPieza: 0.05,
+  iva: 0.21,
+  categorias: [
+    { id:'camisetas',   nombre:'Camisetas',      euroKilo:5, piezasKilo:7   },
+    { id:'sudaderas',   nombre:'Sudaderas',      euroKilo:3, piezasKilo:2.5 },
+    { id:'polos',       nombre:'Polos',          euroKilo:7, piezasKilo:5   },
+    { id:'shorts',      nombre:'Shorts deporte', euroKilo:5, piezasKilo:7   },
+    { id:'trackjacket', nombre:'Track jacket',   euroKilo:9, piezasKilo:2.5 },
+    { id:'trackpants',  nombre:'Trackpants',     euroKilo:8, piezasKilo:2.5 },
+    { id:'chaquetones', nombre:'Chaquetones',    euroKilo:7, piezasKilo:1.5 }
+  ]
+};
+
+const LLAVE_SESION     = 'billys_vend_sesion';
+const LLAVE_PENDIENTES = 'billys_vend_pendientes';
+const LLAVE_NOMBRES    = 'billys_vend_nombres';
+const ANTIRREBOTE_MS   = 350;   // dos toques mas juntos que esto = uno solo
+
+/* =========================================================================
+   UTILIDADES
+   ========================================================================= */
+const $ = (id) => document.getElementById(id);
+const guardar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
+const leer = (k, x) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : x; } catch (_) { return x; } };
+const borrar = (k) => { try { localStorage.removeItem(k); } catch (_) {} };
+
+const hhmm = (ts) => {
+  const d = new Date(ts);
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+};
+const nombreCat = (id) => (CONFIG.categorias.find((c) => c.id === id) || {}).nombre || id;
+
+function pantalla(cual) {
+  for (const s of document.querySelectorAll('.pantalla')) s.classList.remove('on');
+  $(cual).classList.add('on');
+  window.scrollTo(0, 0);
+}
+
+/* Empaquetado del enlace. Se intenta gzip; si el navegador no lo trae (Safari
+   viejo), se manda en plano. El prefijo dice cual es, para que cruce.html no
+   tenga que adivinarlo. */
+async function empaquetar(obj) {
+  const texto = JSON.stringify(obj);
+  const bytes = new TextEncoder().encode(texto);
+  if (typeof CompressionStream === 'function') {
+    try {
+      const cs = new CompressionStream('gzip');
+      const w = cs.writable.getWriter(); w.write(bytes); w.close();
+      const buf = await new Response(cs.readable).arrayBuffer();
+      return 'g.' + base64url(new Uint8Array(buf));
+    } catch (_) { /* abajo va el plan B */ }
+  }
+  return 'p.' + base64url(bytes);
+}
+function base64url(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+/* =========================================================================
+   ESTADO
+   ========================================================================= */
+let sesion = null;          // { vendedora, inicio, toques:[{c,t}] }
+let ultimoToque = 0;
+let cronometro = null;
+
+/* =========================================================================
+   1 · ENTRADA
+   ========================================================================= */
+function pintarEntrada() {
+  $('tituloEntrada').textContent = CONFIG.marca;
+
+  const nombres = leer(LLAVE_NOMBRES, []);
+  $('recientes').innerHTML = '';
+  for (const n of nombres.slice(0, 6)) {
+    const b = document.createElement('button');
+    b.textContent = n;
+    b.onclick = () => { $('nombre').value = n; validar(); arrancar(); };
+    $('recientes').appendChild(b);
+  }
+
+  /* Si quedaron turnos sin mandar, se avisa AQUI, que es por donde se pasa
+     siempre. Si solo se avisara al final, se perderian sin que nadie se entere. */
+  const pend = leer(LLAVE_PENDIENTES, []);
+  $('pendientesAviso').innerHTML = pend.length
+    ? `<div class="aviso">Tienes <b>${pend.length}</b> ${pend.length === 1 ? 'turno' : 'turnos'} sin mandar.
+       ${pend.map((p) => `${p.vendedora} · ${p.toques.length} prendas`).join('<br>')}
+       <br><br><button id="mandarPend" class="secundario" style="width:100%">Mandarlos ahora</button></div>`
+    : '';
+  const bp = $('mandarPend');
+  if (bp) bp.onclick = () => { mostrarFin(pend); };
+}
+
+function validar() { $('empezar').disabled = !$('nombre').value.trim(); }
+$('nombre').addEventListener('input', validar);
+$('nombre').addEventListener('keydown', (e) => { if (e.key === 'Enter' && $('nombre').value.trim()) arrancar(); });
+$('empezar').onclick = arrancar;
+
+function arrancar() {
+  const v = $('nombre').value.trim();
+  if (!v) return;
+  const nombres = leer(LLAVE_NOMBRES, []).filter((n) => n.toLowerCase() !== v.toLowerCase());
+  nombres.unshift(v);
+  guardar(LLAVE_NOMBRES, nombres.slice(0, 8));
+
+  sesion = { v: 1, vendedora: v, inicio: Date.now(), toques: [] };
+  guardar(LLAVE_SESION, sesion);
+  entrarTrabajo();
+}
+
+/* =========================================================================
+   2 · TRABAJO
+   ========================================================================= */
+function entrarTrabajo() {
+  $('quienNombre').textContent = sesion.vendedora;
+  $('rejilla').innerHTML = '';
+  for (const c of CONFIG.categorias) {
+    const b = document.createElement('button');
+    b.className = 'cat';
+    b.dataset.id = c.id;
+    b.innerHTML = `<span>${c.nombre}</span><span class="n" data-n="${c.id}">0</span>`;
+    b.onclick = () => marcar(c.id, b);
+    $('rejilla').appendChild(b);
+  }
+  pantalla('pTrabajo');
+  refrescar();
+  clearInterval(cronometro);
+  cronometro = setInterval(refrescar, 30000);
+}
+
+function marcar(id, boton) {
+  const ahora = Date.now();
+  // Dos toques pegados casi siempre son el mismo dedo, no dos prendas.
+  if (ahora - ultimoToque < ANTIRREBOTE_MS) return;
+  ultimoToque = ahora;
+
+  sesion.toques.push({ c: id, t: ahora });
+  guardar(LLAVE_SESION, sesion);   // en disco ANTES de pintar nada
+  enviarSuelto({ vendedora: sesion.vendedora, categoria: id, t: ahora });
+
+  if (navigator.vibrate) navigator.vibrate(18);
+  boton.classList.add('pulsada');
+  setTimeout(() => boton.classList.remove('pulsada'), 220);
+
+  $('ultimo').textContent = `${nombreCat(id)} · ${hhmm(ahora)}`;
+  refrescar();
+}
+
+$('deshacer').onclick = () => {
+  if (!sesion || !sesion.toques.length) return;
+  const fuera = sesion.toques.pop();
+  guardar(LLAVE_SESION, sesion);
+  $('ultimo').textContent = `Quitado: ${nombreCat(fuera.c)}`;
+  refrescar();
+};
+
+function refrescar() {
+  const cuenta = {};
+  for (const t of sesion.toques) cuenta[t.c] = (cuenta[t.c] || 0) + 1;
+  for (const c of CONFIG.categorias) {
+    const el = document.querySelector(`[data-n="${c.id}"]`);
+    if (el) el.textContent = cuenta[c.id] || 0;
+  }
+  $('total').textContent = sesion.toques.length;
+  $('deshacer').disabled = !sesion.toques.length;
+  const mins = Math.round((Date.now() - sesion.inicio) / 60000);
+  $('quienDesde').textContent = mins < 60
+    ? `desde las ${hhmm(sesion.inicio)} · ${mins} min`
+    : `desde las ${hhmm(sesion.inicio)} · ${Math.floor(mins/60)} h ${mins%60} min`;
+}
+
+$('terminar').onclick = () => {
+  if (!sesion) return;
+  if (sesion.toques.length && !confirm(`Terminar el turno de ${sesion.vendedora} con ${sesion.toques.length} prendas?`)) return;
+  sesion.fin = Date.now();
+
+  const pend = leer(LLAVE_PENDIENTES, []);
+  if (sesion.toques.length) pend.push(sesion);
+  guardar(LLAVE_PENDIENTES, pend);
+  borrar(LLAVE_SESION);
+  clearInterval(cronometro);
+
+  mostrarFin(sesion.toques.length ? [sesion] : pend);
+};
+
+/* =========================================================================
+   3 · RESUMEN Y ENVIO
+   ========================================================================= */
+let paraMandar = [];
+
+function mostrarFin(sesiones) {
+  paraMandar = sesiones.filter((s) => s && s.toques && s.toques.length);
+  if (!paraMandar.length) { pantalla('pEntrada'); pintarEntrada(); return; }
+
+  const todos = paraMandar.flatMap((s) => s.toques);
+  const inicio = Math.min(...paraMandar.map((s) => s.inicio));
+  const fin = Math.max(...paraMandar.map((s) => s.fin || Date.now()));
+  const horas = Math.max((fin - inicio) / 3600000, 0.01);
+
+  $('finQuien').textContent = paraMandar.map((s) => s.vendedora).join(', ')
+    + ` · ${hhmm(inicio)}–${hhmm(fin)}`;
+  $('finTotal').textContent = todos.length;
+  $('finHoras').textContent = horas.toFixed(1).replace('.', ',');
+  $('finRitmo').textContent = Math.round(todos.length / horas);
+
+  const cuenta = {};
+  for (const t of todos) cuenta[t.c] = (cuenta[t.c] || 0) + 1;
+  $('finDetalle').innerHTML = CONFIG.categorias
+    .filter((c) => cuenta[c.id])
+    .sort((a, b) => cuenta[b.id] - cuenta[a.id])
+    .map((c) => `<tr><td>${c.nombre}</td><td>${cuenta[c.id]}</td></tr>`).join('');
+
+  pantalla('pFin');
+}
+
+async function enlace() {
+  const carga = await empaquetar({ v: 1, sesiones: paraMandar });
+  return CONFIG.urlCruce + '#' + carga;
+}
+
+function textoMensaje(url) {
+  const todos = paraMandar.flatMap((s) => s.toques);
+  return `${CONFIG.marca}\n`
+    + paraMandar.map((s) => `${s.vendedora}: ${s.toques.length} prendas`).join('\n')
+    + `\nTotal: ${todos.length}\n\n${url}`;
+}
+
+$('mandar').onclick = async () => {
+  const url = await enlace();
+  const txt = textoMensaje(url);
+  // El share nativo es lo que mejor funciona en movil; si no lo hay, wa.me.
+  if (navigator.share) {
+    try { await navigator.share({ text: txt }); limpiarPendientes(); return; } catch (_) { /* cancelado */ }
+  }
+  const destino = CONFIG.whatsapp ? `https://wa.me/${CONFIG.whatsapp}?text=` : 'https://wa.me/?text=';
+  window.open(destino + encodeURIComponent(txt), '_blank');
+  limpiarPendientes();
+};
+
+$('copiar').onclick = async () => {
+  const url = await enlace();
+  try {
+    await navigator.clipboard.writeText(url);
+    $('copiar').textContent = 'Enlace copiado';
+  } catch (_) {
+    prompt('Copia este enlace:', url);
+  }
+  limpiarPendientes();
+};
+
+$('descargar').onclick = () => {
+  const blob = new Blob([JSON.stringify({ v: 1, sesiones: paraMandar }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date(paraMandar[0].inicio);
+  a.download = `prendas-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}.json`;
+  a.click();
+  limpiarPendientes();
+};
+
+$('otro').onclick = () => { pantalla('pEntrada'); $('nombre').value = ''; validar(); pintarEntrada(); };
+
+/* Solo se dan por mandados cuando de verdad se ha compartido algo. Si la
+   vendedora cierra la pantalla sin mandar, siguen apareciendo al entrar. */
+function limpiarPendientes() {
+  borrar(LLAVE_PENDIENTES);
+  $('finAviso').innerHTML = 'Mandado. Ya puedes cerrar.';
+  $('finAviso').style.borderColor = 'var(--verde)';
+  $('finAviso').style.background = '#12241C';
+}
+
+/* =========================================================================
+   ENVIO SUELTO (opcional) · solo si hay un backend configurado
+   ========================================================================= */
+function enviarSuelto(dato) {
+  if (!CONFIG.envioAutomatico) return;
+  try {
+    // keepalive: sale aunque se cierre la pestana justo despues.
+    fetch(CONFIG.envioAutomatico, {
+      method: 'POST', mode: 'no-cors', keepalive: true,
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(dato)
+    }).catch(() => {});
+  } catch (_) { /* el movil no tiene cobertura: da igual, ya esta en disco */ }
+}
+
+/* =========================================================================
+   ARRANQUE  ·  si habia un turno a medias, se retoma donde estaba
+   ========================================================================= */
+const aMedias = leer(LLAVE_SESION, null);
+if (aMedias && aMedias.toques) {
+  sesion = aMedias;
+  entrarTrabajo();
+} else {
+  pintarEntrada();
+}
+
+// Que no se pierda nada si el movil mata la pestana de repente.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && sesion) guardar(LLAVE_SESION, sesion);
+});
+})();
+</script>
+</body>
+</html>
