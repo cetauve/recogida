@@ -208,22 +208,36 @@ const CONFIG = {
   // para que quien lo reciba sepa donde abrirlo.
   urlCruce: 'https://cetauve.github.io/recogida/cruce.html',
 
-  /* Si algun dia hay un Google Apps Script desplegado, aqui va su URL y los
-     toques viajan solos ademas de guardarse en el movil. Vacio = no se intenta
-     nada y no hay ni un error en consola. */
+  /* A DONDE VIAJA CADA TOQUE, ademas de guardarse en el movil.
+   *
+   * Lo normal es que venga en la direccion: abrir la app como
+   *     app-vendedoras.html?srv=http://192.168.1.50:8080
+   * y entonces cada toque se manda al momento al PC de la tienda, que lo pinta
+   * en la pantalla de vendedoras y lo ata a su lote EN VIVO.
+   *
+   * La direccion del PC la escribe servidor.bat en su ventana al arrancar. Va
+   * en el QR, asi que la vendedora no teclea nada.
+   *
+   * Si no hay ?srv= ni nada aqui, no se intenta nada: la app sigue funcionando
+   * igual y los toques salen al final por el enlace de siempre. */
   envioAutomatico: '',
 
   // Los costes viven tambien en costes-prendas.json. Si cambian, los dos.
   transportePorPieza: 0.05,
   iva: 0.21,
+  // Coste base de una hora de presentadora. SIN IVA: un salario no lo lleva.
+  horaPresentadora: 9,
   categorias: [
-    { id:'camisetas',   nombre:'Camisetas',      euroKilo:5, piezasKilo:7   },
-    { id:'sudaderas',   nombre:'Sudaderas',      euroKilo:3, piezasKilo:2.5 },
-    { id:'polos',       nombre:'Polos',          euroKilo:7, piezasKilo:5   },
-    { id:'shorts',      nombre:'Shorts deporte', euroKilo:5, piezasKilo:7   },
-    { id:'trackjacket', nombre:'Track jacket',   euroKilo:9, piezasKilo:2.5 },
-    { id:'trackpants',  nombre:'Trackpants',     euroKilo:8, piezasKilo:2.5 },
-    { id:'chaquetones', nombre:'Chaquetones',    euroKilo:7, piezasKilo:1.5 }
+    { id:'camisetas_a', nombre:'Camisetas A',    euroKilo:7,   piezasKilo:6   },
+    { id:'camisetas_b', nombre:'Camisetas B',    euroKilo:3,   piezasKilo:6   },
+    { id:'sudaderas_a', nombre:'Sudaderas A',    euroKilo:5,   piezasKilo:2   },
+    { id:'sudaderas_b', nombre:'Sudaderas B',    euroKilo:3.5, piezasKilo:2   },
+    { id:'polos_a',     nombre:'Polos A',        euroKilo:9,   piezasKilo:3   },
+    { id:'polos_b',     nombre:'Polos B',        euroKilo:4,   piezasKilo:3   },
+    { id:'shorts',      nombre:'Shorts deporte', euroKilo:7,   piezasKilo:6   },
+    { id:'trackjacket', nombre:'Track jacket',   euroKilo:9,   piezasKilo:2.5 },
+    { id:'trackpants',  nombre:'Trackpants',     euroKilo:8,   piezasKilo:2.5 },
+    { id:'chaquetas',   nombre:'Chaquetas',      euroKilo:7.5, piezasKilo:1.5 }
   ]
 };
 
@@ -322,6 +336,11 @@ function arrancar() {
 
   sesion = { v: 1, vendedora: v, inicio: Date.now(), toques: [] };
   guardar(LLAVE_SESION, sesion);
+  /* Se avisa al PC de que empieza el turno. La pantalla en vivo necesita la
+     HORA DE ENTRADA para calcular las horas trabajadas: si las sacara del hueco
+     entre el primer y el ultimo toque, estaria inflando el €/hora justo de
+     quien menos vende. */
+  enviarSuelto({ vendedora: v, tipo: 'inicio', t: sesion.inicio });
   entrarTrabajo();
 }
 
@@ -390,6 +409,7 @@ $('terminar').onclick = () => {
   if (!sesion) return;
   if (sesion.toques.length && !confirm(`Terminar el turno de ${sesion.vendedora} con ${sesion.toques.length} prendas?`)) return;
   sesion.fin = Date.now();
+  enviarSuelto({ vendedora: sesion.vendedora, tipo: 'fin', t: sesion.fin });
 
   const pend = leer(LLAVE_PENDIENTES, []);
   if (sesion.toques.length) pend.push(sesion);
@@ -489,16 +509,32 @@ function limpiarPendientes() {
 /* =========================================================================
    ENVIO SUELTO (opcional) · solo si hay un backend configurado
    ========================================================================= */
+/* La direccion del PC puede venir en la URL. Se limpia a conciencia: solo se
+   acepta http(s) y solo hacia una IP de red local. Este archivo esta en una
+   pagina publica y cualquiera podria pasarle un ?srv= apuntando a su servidor
+   para quedarse con los datos. Con esto, no. */
+const DESTINO_TOQUES = (() => {
+  const bruto = new URLSearchParams(location.search).get('srv') || CONFIG.envioAutomatico || '';
+  if (!bruto) return '';
+  let u;
+  try { u = new URL(bruto); } catch (_) { return ''; }
+  if (!/^https?:$/.test(u.protocol)) return '';
+  const red = /^(localhost$|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname);
+  if (!red) { console.warn("[Billy's] ?srv= no es una direccion de red local. Ignorado."); return ''; }
+  return u.origin + '/toque';
+})();
+
 function enviarSuelto(dato) {
-  if (!CONFIG.envioAutomatico) return;
+  if (!DESTINO_TOQUES) return;
   try {
-    // keepalive: sale aunque se cierre la pestana justo despues.
-    fetch(CONFIG.envioAutomatico, {
+    // keepalive: sale aunque se cierre la pestana justo despues del toque.
+    // no-cors: no necesitamos leer la respuesta, solo que llegue.
+    fetch(DESTINO_TOQUES, {
       method: 'POST', mode: 'no-cors', keepalive: true,
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(dato)
     }).catch(() => {});
-  } catch (_) { /* el movil no tiene cobertura: da igual, ya esta en disco */ }
+  } catch (_) { /* sin cobertura: da igual, el toque ya esta guardado en el movil */ }
 }
 
 /* =========================================================================

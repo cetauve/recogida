@@ -87,14 +87,19 @@
 const CONFIG = {
   transportePorPieza: 0.05,
   iva: 0.21,
+  // Coste base de una hora de presentadora. SIN IVA: un salario no lo lleva.
+  horaPresentadora: 9,
   categorias: [
-    { id:'camisetas',   nombre:'Camisetas',      euroKilo:5, piezasKilo:7   },
-    { id:'sudaderas',   nombre:'Sudaderas',      euroKilo:3, piezasKilo:2.5 },
-    { id:'polos',       nombre:'Polos',          euroKilo:7, piezasKilo:5   },
-    { id:'shorts',      nombre:'Shorts deporte', euroKilo:5, piezasKilo:7   },
-    { id:'trackjacket', nombre:'Track jacket',   euroKilo:9, piezasKilo:2.5 },
-    { id:'trackpants',  nombre:'Trackpants',     euroKilo:8, piezasKilo:2.5 },
-    { id:'chaquetones', nombre:'Chaquetones',    euroKilo:7, piezasKilo:1.5 }
+    { id:'camisetas_a', nombre:'Camisetas A',    euroKilo:7,   piezasKilo:6   },
+    { id:'camisetas_b', nombre:'Camisetas B',    euroKilo:3,   piezasKilo:6   },
+    { id:'sudaderas_a', nombre:'Sudaderas A',    euroKilo:5,   piezasKilo:2   },
+    { id:'sudaderas_b', nombre:'Sudaderas B',    euroKilo:3.5, piezasKilo:2   },
+    { id:'polos_a',     nombre:'Polos A',        euroKilo:9,   piezasKilo:3   },
+    { id:'polos_b',     nombre:'Polos B',        euroKilo:4,   piezasKilo:3   },
+    { id:'shorts',      nombre:'Shorts deporte', euroKilo:7,   piezasKilo:6   },
+    { id:'trackjacket', nombre:'Track jacket',   euroKilo:9,   piezasKilo:2.5 },
+    { id:'trackpants',  nombre:'Trackpants',     euroKilo:8,   piezasKilo:2.5 },
+    { id:'chaquetas',   nombre:'Chaquetas',      euroKilo:7.5, piezasKilo:1.5 }
   ],
   // Cuanto se mira hacia atras buscando el lote del toque.
   ventanaAtrasMs: 10 * 60000,
