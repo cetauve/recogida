@@ -312,9 +312,14 @@ const claseNum = (n) => n===1 ? 'solo' : (n<=6 ? 'pocos' : 'muchos');
  * dos prendas distintas, en racks distintos. Por eso los numeros van bajo el
  * nombre de su cuenta, que es el rack donde estan.
  *
- * Solo se pinta el rotulo si hay mas de una cuenta en ESA tarjeta. Poner
- * "billysvlc" encima de una sola fila de numeros no distingue nada y come
- * altura de pantalla, que es lo que mas escasea en el movil.
+ * EL ROTULO SE PONE SI ESE DIA HUBO DOS CUENTAS, no si esta tarjeta tiene
+ * dos. Una tarjeta con una sola prenda de billystourvlc lo necesita igual: un
+ * "90" suelto, con dos racks delante, no dice a cual ir, y adivinar es coger
+ * la prenda de otra persona. Lo que no se pinta nunca es una cuenta vacia.
+ *
+ * Si ese dia solo emitio una cuenta, `variasCuentas` va en false y la tarjeta
+ * es exactamente la de siempre: los numeros solos, sin rotulo que no
+ * distingue nada y que ademas come altura, que es lo que mas escasea aqui.
  *
  * `porCuenta` puede no venir: un enlace generado con la version anterior solo
  * trae `numeros`. En ese caso se pinta la fila de siempre. */
@@ -322,7 +327,7 @@ function bloqueNumeros(f){
   const c = claseNum(f.numeros.length);
   const chips = (nums) => `<div class="numeros">${nums.map(n=>`<span class="n ${c}">${n}</span>`).join('')}</div>`;
   const g = (f.porCuenta || []).filter(x => x.numeros && x.numeros.length);
-  if (g.length < 2) return chips(f.numeros);
+  if (!g.length || (!DATOS.variasCuentas && g.length < 2)) return chips(f.numeros);
   return `<div class="grupos">${g.map(x => `<div class="grupo">
       <div class="rack">${x.cuenta || 'sin cuenta'}</div>
       ${chips(x.numeros)}
@@ -364,7 +369,7 @@ function terminar(){
     ? '<b>' + incidencias.length + ' con incidencia:</b><br>' +
       incidencias.map(f => {
         const g = (f.porCuenta || []).filter(x => x.numeros && x.numeros.length);
-        return f.apodo + ' — ' + (g.length > 1
+        return f.apodo + ' — ' + (g.length && DATOS.variasCuentas
           ? g.map(x => (x.cuenta || 'sin cuenta') + ': ' + x.numeros.join(', ')).join(' · ')
           : f.numeros.join(', '));
       }).join('<br>')
