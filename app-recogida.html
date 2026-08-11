@@ -12,6 +12,18 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
  font:16px/1.4 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
  user-select:none;-webkit-user-select:none}
 
+/* ---------------- quien soy ---------------- */
+#quienSoy{margin:0 0 20px}
+#miNombre{width:100%;padding:14px;font-size:17px;border-radius:12px;border:2px solid var(--linea);
+  background:var(--navy);color:var(--bone);margin-bottom:10px}
+#miNombre:focus{outline:none;border-color:var(--rojo)}
+.modos{display:flex;gap:10px}
+.modoBtn{flex:1;padding:14px 10px;border-radius:12px;border:2px solid var(--linea);
+  background:var(--navy);color:var(--bone);font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.modoBtn.on{background:var(--rojo);border-color:var(--rojo);color:#fff}
+#quienSoy .sub{margin:10px 0 0;font-size:13px}
+#tandas.bloqueado{opacity:.25;pointer-events:none}
+
 /* ---------------- menú de tandas ---------------- */
 #menu{position:absolute;inset:0;overflow:auto;padding:calc(24px + env(safe-area-inset-top)) 18px
  calc(24px + env(safe-area-inset-bottom));display:none;flex-direction:column}
@@ -93,6 +105,19 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 <div id="menu" class="on">
   <h1 id="menuTitulo">Recogida</h1>
   <div class="sub" id="menuSub"></div>
+
+  <!-- QUIEN ERES Y QUE HACES. Sin esto no hay forma de medir a nadie, y si se
+       pide como un paso aparte no se rellena. Se pregunta una vez por movil y
+       se recuerda. -->
+  <div id="quienSoy">
+    <input id="miNombre" type="text" placeholder="Tu nombre" autocomplete="off" autocapitalize="words">
+    <div class="modos">
+      <button class="modoBtn" data-m="recoge">Cojo prendas</button>
+      <button class="modoBtn" data-m="empaqueta">Cierro paquetes</button>
+    </div>
+    <div class="sub" id="ayudaModo"></div>
+  </div>
+
   <div id="tandas"></div>
   <div class="pie" id="menuPie"></div>
 </div>
@@ -109,6 +134,7 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 <div id="fin">
   <h2 id="finTitulo">Tanda terminada</h2>
   <div class="inc" id="finTexto"></div>
+  <button id="mandarFin" style="background:var(--rojo);color:#fff;border:0">Mandar mis tiempos</button>
   <button id="alMenu">Elegir otra tanda</button>
   <button id="reiniciar" class="otro">Repetir esta tanda</button>
 </div>
@@ -146,6 +172,16 @@ let tandaActual = null;      // índice de la tanda elegida
 let FICHAS = [];             // compradores de esa tanda
 let i = 0, historial = [], incidencias = [];
 
+/* EL MODO ES LO QUE DA SENTIDO AL RELOJ.
+ *   recoge     -> su "Listo" es ABRIR el paquete: se lo pasa al de al lado.
+ *   empaqueta  -> su "Listo" es CERRARLO.
+ * Los dos recorren la MISMA lista en el MISMO orden, cada uno en su movil y a
+ * su ritmo. Al final se cruzan por comprador, que es una clave estable, y de
+ * ahi salen los minutos por paquete y el cuello de botella. */
+let MODO = localStorage.getItem('billys_modo') || '';
+let QUIEN = localStorage.getItem('billys_quien') || '';
+let MARCAS = [];   // [{pedido, apodo, t, estado}] de este movil, este dia
+
 // ------------------------------------------------------------------ datos
 function deBase64url(s){
   s = s.replace(/-/g,'+').replace(/_/g,'/');
@@ -173,6 +209,7 @@ const claveDe = (ti) => 'billys_rec_' + DATOS.titulo + '_t' + ti;
 function guardar(){
   if (tandaActual === null) return;
   try{ localStorage.setItem(claveDe(tandaActual), JSON.stringify({i,historial,incidencias})); }catch(e){}
+  try{ localStorage.setItem('billys_marcas_' + DATOS.titulo + '_' + MODO, JSON.stringify(MARCAS)); }catch(e){}
 }
 function leer(ti){
   try{ return JSON.parse(localStorage.getItem(claveDe(ti)) || 'null'); }catch(e){ return null; }
@@ -186,7 +223,13 @@ function verMenu(){
   $('menuTitulo').textContent = DATOS.titulo || 'Recogida';
   const total = DATOS.tandas.reduce((s,t) => s + t.compradores.length, 0);
   $('menuSub').textContent = total + ' paquetes · elige tu tanda';
-  $('menuPie').textContent = DATOS.generado ? 'Generado ' + DATOS.generado : '';
+  $('menuPie').innerHTML = (DATOS.generado ? 'Generado ' + DATOS.generado : '') +
+    (MARCAS.length ? '<br><button id="mandarTiempos" style="margin-top:14px;width:100%;padding:14px;' +
+      'border-radius:12px;border:0;background:var(--rojo);color:#fff;font:inherit;font-weight:800;' +
+      'font-size:15px;cursor:pointer">Mandar mis tiempos (' + MARCAS.length + ')</button>' : '');
+  const mt = $('mandarTiempos');
+  if (mt) mt.addEventListener('click', mandarTiempos);
+  pintarQuienSoy();
 
   $('tandas').innerHTML = DATOS.tandas.map((t, ti) => {
     const g = leer(ti);
@@ -203,6 +246,31 @@ function verMenu(){
     </button>`;
   }).join('');
 }
+
+/* ---------------------------------------------------- quien soy y que hago */
+function pintarQuienSoy(){
+  $('miNombre').value = QUIEN;
+  for (const b of document.querySelectorAll('.modoBtn')) b.classList.toggle('on', b.dataset.m === MODO);
+  const listo = !!(QUIEN.trim() && MODO);
+  $('tandas').classList.toggle('bloqueado', !listo);
+  $('ayudaModo').innerHTML = !listo
+    ? 'Pon tu nombre y elige qué haces. Sin eso no puedo medir a nadie.'
+    : (MODO === 'recoge'
+        ? 'Tu <b>Listo</b> significa: <b>paquete entregado</b> al que empaqueta. Ahí arranca su reloj.'
+        : 'Tu <b>Listo</b> significa: <b>paquete cerrado</b>. Ahí para el reloj.');
+}
+$('miNombre').addEventListener('input', () => {
+  QUIEN = $('miNombre').value;
+  localStorage.setItem('billys_quien', QUIEN);
+  pintarQuienSoy();
+});
+document.querySelector('.modos').addEventListener('click', (e) => {
+  const b = e.target.closest('.modoBtn'); if (!b) return;
+  MODO = b.dataset.m;
+  localStorage.setItem('billys_modo', MODO);
+  try{ MARCAS = JSON.parse(localStorage.getItem('billys_marcas_' + DATOS.titulo + '_' + MODO) || '[]'); }catch(e){ MARCAS = []; }
+  pintarQuienSoy();
+});
 
 $('tandas').addEventListener('click', (e) => {
   const b = e.target.closest('.tandaBtn'); if (!b) return;
@@ -253,6 +321,7 @@ function pintar(){
 }
 
 function terminar(){
+  const mf = $('mandarFin'); if (mf && !mf.__on) { mf.__on = 1; mf.addEventListener('click', mandarTiempos); }
   $('pila').innerHTML=''; $('pila').classList.remove('on'); $('pie').classList.remove('on');
   $('fin').classList.add('on');
   $('cuenta').textContent = FICHAS.length + ' / ' + FICHAS.length;
@@ -267,7 +336,12 @@ function terminar(){
 
 function avanzar(estado){
   if (i >= FICHAS.length) return;
-  if (estado === 'inc') incidencias.push(FICHAS[i]);
+  const f = FICHAS[i];
+  if (estado === 'inc') incidencias.push(f);
+  /* La hora se sella AQUI, en el momento del gesto, y no se recalcula nunca.
+     Es el unico dato que no se puede reconstruir despues. */
+  MARCAS.push({ pedido: f.pedido, apodo: f.apodo, prendas: f.numeros.length,
+                t: Date.now(), estado });
   historial.push({i, estado}); i++;
   guardar(); pintar();
   if (navigator.vibrate) navigator.vibrate(estado==='inc' ? [12,40,12] : 18);
@@ -275,7 +349,41 @@ function avanzar(estado){
 function atras(){
   const h = historial.pop(); if (!h) return;
   if (h.estado === 'inc') incidencias.pop();
+  MARCAS.pop();
   i = h.i; guardar(); pintar();
+}
+
+/* ---------------------------------------------------------- mandar tiempos
+ * Mismo truco que todo lo demas: los datos van DENTRO del enlace, detras de la
+ * almohadilla, asi que no viajan a ningun servidor. En el PC se abren los dos
+ * enlaces —el del que recoge y el del que empaqueta— y se cruzan por comprador.
+ * Se manda tambien el desfase del reloj de este movil para poder detectar si
+ * uno de los dos va desajustado: sin eso saldrian minutos negativos y nadie
+ * sabria por que. */
+function b64url(bytes){
+  let bin = '';
+  for (let k=0; k<bytes.length; k+=8192) bin += String.fromCharCode.apply(null, bytes.subarray(k, k+8192));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function empaquetar(o){
+  const bytes = new TextEncoder().encode(JSON.stringify(o));
+  if (typeof CompressionStream === 'undefined') return 'r' + b64url(bytes);
+  const cs = new CompressionStream('gzip');
+  const w = cs.writable.getWriter(); w.write(bytes); w.close();
+  return 'z' + b64url(new Uint8Array(await new Response(cs.readable).arrayBuffer()));
+}
+async function mandarTiempos(){
+  if (!MARCAS.length) { alert('Todavía no has marcado nada.'); return; }
+  const carga = await empaquetar({
+    v: 1, tipo: 'tiempos', modo: MODO, quien: QUIEN,
+    titulo: DATOS.titulo, desfaseHuso: new Date().getTimezoneOffset(),
+    marcas: MARCAS
+  });
+  const url = location.origin + location.pathname.replace(/[^/]*$/, 'tiempos.html') + '#' + carga;
+  const txt = (MODO === 'recoge' ? 'Prendas cogidas' : 'Paquetes cerrados') +
+    ' — ' + QUIEN + ' (' + MARCAS.length + ')\n' + url;
+  if (navigator.share) { try { await navigator.share({ text: txt }); return; } catch(e){} }
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 
 function arrastrable(el){

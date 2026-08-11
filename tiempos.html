@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tiempos de empaquetado</title>
+
+<!--
+  ===========================================================================
+  TIEMPOS DE EMPAQUETADO  ·  cuanto tarda cada paquete y quien es el tapon
+  ===========================================================================
+
+  DE DONDE SALE
+    De los dos moviles del almacen. Los dos abren la MISMA app de recogida con
+    el MISMO enlace, asi que ven los mismos paquetes en el mismo orden. Solo
+    cambia lo que significa su "Listo":
+
+      el que RECOGE   -> abre el paquete: junta las prendas y se lo pasa
+      el que EMPAQUETA-> lo cierra
+
+    Al terminar, cada uno manda sus tiempos y se pegan aqui los dos enlaces.
+
+  POR QUE SE CRUZA POR COMPRADOR Y NO POR HORA
+    Porque el numero de pedido del comprador es la misma clave en los dos
+    moviles, y una clave estable no se equivoca nunca. Cruzar por hora ya nos
+    costo 24 prendas mal atadas el 10 de agosto; no se repite el error.
+
+  EL RELOJ
+    Los dos moviles tienen relojes distintos. Si uno va adelantado salen
+    duraciones negativas, y eso NO se disimula: se dice arriba en rojo, porque
+    un dato imposible enseñado como bueno es peor que no tener dato.
+  ===========================================================================
+-->
+
+<style>
+  :root{--fondo:#0E1723;--tinta:#EDE7DB;--rojo:#C8321F;--verde:#2E9E6B;
+        --carta:#16212F;--borde:#243244;--tenue:#8A99AB;--ambar:#D9A441}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--fondo);color:var(--tinta);padding:24px;
+       font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+  .caja{max-width:1080px;margin:0 auto}
+  h1{font-size:23px;margin:0 0 4px;font-weight:800;letter-spacing:-.02em}
+  h2{font-size:16px;margin:28px 0 10px;font-weight:800}
+  .sub{color:var(--tenue);font-size:14px;margin:0 0 20px}
+  .panel{background:var(--carta);border:1.5px solid var(--borde);border-radius:14px;
+         padding:16px;margin-bottom:14px}
+  .panel.mal{border-color:var(--rojo);background:#2A1512}
+  .panel.ojo{border-color:var(--ambar);background:rgba(217,164,65,.10)}
+  .cifras{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .cifra{flex:1;min-width:140px;background:var(--carta);border:1.5px solid var(--borde);
+         border-radius:14px;padding:14px}
+  .cifra b{display:block;font-size:27px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .cifra span{font-size:12px;color:var(--tenue);display:block;margin-top:6px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--borde);text-align:left;white-space:nowrap}
+  th{color:var(--tenue);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  tr.ojo td{color:var(--ambar)}
+  .marco{overflow:auto;max-height:460px;border:1.5px solid var(--borde);border-radius:14px}
+  button{font:inherit;font-size:15px;font-weight:700;padding:12px 18px;border-radius:12px;
+         border:0;background:var(--rojo);color:#fff;cursor:pointer}
+  button.sec{background:transparent;border:1.5px solid var(--borde);color:var(--tinta)}
+  textarea{width:100%;height:70px;background:var(--fondo);color:var(--tinta);border:1.5px solid var(--borde);
+           border-radius:10px;padding:10px;font-family:ui-monospace,monospace;font-size:12px}
+  .fila{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .chip{display:inline-block;padding:5px 11px;border-radius:999px;font-size:12px;font-weight:700;
+        border:1.5px solid var(--borde);margin:0 6px 6px 0}
+  .chip.ok{color:var(--verde);border-color:rgba(46,158,107,.5)}
+</style>
+</head>
+<body>
+<div class="caja">
+  <h1>Tiempos de empaquetado</h1>
+  <p class="sub" id="cabecera">Pega aquí los enlaces que mandan los dos móviles del almacén.</p>
+  <div id="entrada"></div>
+  <div id="salida"></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const hhmmss = (t) => new Date(t).toLocaleTimeString('es-ES', { hour12: false });
+const mins = (ms) => (ms / 60000).toFixed(1).replace('.', ',');
+
+/* Las entregas se guardan en el navegador del PC, asi que se pueden ir pegando
+   los dos enlaces uno detras de otro sin perder el primero. */
+const LLAVE = 'billys_tiempos';
+let entregas = [];
+try { entregas = JSON.parse(localStorage.getItem(LLAVE) || '[]'); } catch (_) { entregas = []; }
+const guardar = () => { try { localStorage.setItem(LLAVE, JSON.stringify(entregas)); } catch (_) {} };
+
+function deB64url(s) {
+  s = s.replace(/-/g,'+').replace(/_/g,'/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s), b = new Uint8Array(bin.length);
+  for (let k = 0; k < bin.length; k++) b[k] = bin.charCodeAt(k);
+  return b;
+}
+async function desempaquetar(carga) {
+  const bytes = deB64url(carga.slice(1));
+  if (carga[0] === 'z' && typeof DecompressionStream !== 'undefined') {
+    const ds = new DecompressionStream('gzip');
+    const w = ds.writable.getWriter(); w.write(bytes); w.close();
+    return JSON.parse(await new Response(ds.readable).text());
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+function meter(d) {
+  if (!d || d.tipo !== 'tiempos') throw new Error('Ese enlace no es de tiempos de empaquetado.');
+  // Si la misma persona y el mismo modo mandan dos veces, manda lo ultimo.
+  entregas = entregas.filter((x) => !(x.modo === d.modo && x.quien === d.quien && x.titulo === d.titulo));
+  entregas.push(d);
+  guardar();
+}
+
+/* ------------------------------------------------------------------ cruce */
+function cruzar() {
+  const abre = new Map();    // pedido -> {t, quien}
+  const cierra = new Map();
+  for (const d of entregas) {
+    const donde = d.modo === 'recoge' ? abre : cierra;
+    for (const m of (d.marcas || [])) {
+      const previo = donde.get(m.pedido);
+      // Vale la PRIMERA marca de cada paquete: si alguien deshace y repite, la
+      // buena es la primera vez que lo toco de verdad.
+      if (!previo || m.t < previo.t) {
+        donde.set(m.pedido, { t: m.t, quien: d.quien, apodo: m.apodo, prendas: m.prendas, estado: m.estado });
+      }
+    }
+  }
+
+  const filas = [];
+  const todos = new Set([...abre.keys(), ...cierra.keys()]);
+  for (const p of todos) {
+    const a = abre.get(p), c = cierra.get(p);
+    filas.push({
+      pedido: p,
+      apodo: (a && a.apodo) || (c && c.apodo) || '',
+      prendas: (a && a.prendas) || (c && c.prendas) || 0,
+      recoge: a ? a.quien : null, tAbre: a ? a.t : null,
+      empaqueta: c ? c.quien : null, tCierra: c ? c.t : null,
+      dur: (a && c) ? c.t - a.t : null
+    });
+  }
+  filas.sort((x, y) => (x.tAbre || x.tCierra || 0) - (y.tAbre || y.tCierra || 0));
+  return filas;
+}
+
+/* -------------------------------------------------------------- pintado */
+function pintar() {
+  const modos = new Set(entregas.map((d) => d.modo));
+  $('cabecera').innerHTML = entregas.length
+    ? entregas.map((d) => `<span class="chip ok">${esc(d.quien)} · ${
+        d.modo === 'recoge' ? 'coge prendas' : 'cierra paquetes'} · ${(d.marcas||[]).length}</span>`).join('')
+    : 'Pega aquí los enlaces que mandan los dos móviles del almacén.';
+
+  if (!entregas.length) { $('salida').innerHTML = ''; return; }
+
+  const filas = cruzar();
+  const completas = filas.filter((f) => f.dur != null);
+  const negativas = completas.filter((f) => f.dur < 0);
+  const buenas = completas.filter((f) => f.dur >= 0);
+
+  let html = '';
+
+  if (!modos.has('recoge') || !modos.has('empaqueta')) {
+    html += `<div class="panel ojo"><b>Falta uno de los dos.</b> Tengo
+      ${modos.has('recoge') ? 'al que coge prendas' : 'al que cierra paquetes'} pero no al otro,
+      así que puedo contar paquetes pero no puedo medir cuánto tarda ninguno.
+      Pega también el enlace del otro móvil.</div>`;
+  }
+
+  if (negativas.length) {
+    /* Un paquete no se puede cerrar antes de abrirse. Si sale asi, uno de los
+       dos relojes va desajustado. Se dice y no se disimula. */
+    const peor = Math.min(...negativas.map((f) => f.dur));
+    html += `<div class="panel mal"><b>Los relojes de los dos móviles no van iguales.</b><br>
+      ${negativas.length} paquete(s) salen como cerrados ANTES de abrirse, hasta
+      ${mins(-peor)} min antes. Eso es imposible: uno de los dos teléfonos va desajustado.<br><br>
+      Pon la hora automática en los dos y vuelve a medir. Mientras tanto, esos
+      ${negativas.length} los dejo fuera del cálculo en vez de darte una media falsa.</div>`;
+  }
+
+  const total = buenas.reduce((a, f) => a + f.dur, 0);
+  const media = buenas.length ? total / buenas.length : null;
+  const ordenadas = [...buenas].sort((a, b) => a.dur - b.dur);
+  const mediana = ordenadas.length ? ordenadas[Math.floor(ordenadas.length / 2)].dur : null;
+
+  html += `<div class="cifras">
+    <div class="cifra"><b>${filas.length}</b><span>paquetes</span></div>
+    <div class="cifra ${buenas.length < filas.length ? 'ojo' : ''}"><b>${buenas.length}</b>
+      <span>con los dos tiempos</span></div>
+    <div class="cifra"><b>${media != null ? mins(media) : '—'}</b><span>min de media</span></div>
+    <div class="cifra"><b>${mediana != null ? mins(mediana) : '—'}</b><span>min la mediana</span></div>
+  </div>`;
+
+  // --- por persona
+  const gente = new Map();
+  const anota = (quien, papel, t) => {
+    if (!quien) return;
+    const k = quien + '|' + papel;
+    if (!gente.has(k)) gente.set(k, { quien, papel, n: 0, min: Infinity, max: 0 });
+    const g = gente.get(k);
+    g.n++; g.min = Math.min(g.min, t); g.max = Math.max(g.max, t);
+  };
+  for (const f of filas) { anota(f.recoge, 'coge', f.tAbre); anota(f.empaqueta, 'cierra', f.tCierra); }
+
+  html += `<h2>Por persona</h2><div class="marco"><table>
+    <thead><tr><th>Quién</th><th>Papel</th><th class="n">Paquetes</th><th>Desde</th><th>Hasta</th>
+    <th class="n">Horas</th><th class="n">Paquetes/hora</th></tr></thead><tbody>` +
+    [...gente.values()].map((g) => {
+      const h = (g.max - g.min) / 3600000;
+      /* Con menos de 6 minutos entre el primero y el ultimo, el ritmo por hora
+         es ruido. Mejor una raya que un numero que nadie deberia usar. */
+      const fiable = h >= 0.1;
+      return `<tr><td><b>${esc(g.quien)}</b></td>
+        <td>${g.papel === 'coge' ? 'coge prendas' : 'cierra paquetes'}</td>
+        <td class="n">${g.n}</td><td>${hhmmss(g.min)}</td><td>${hhmmss(g.max)}</td>
+        <td class="n">${h.toFixed(1).replace('.', ',')}</td>
+        <td class="n">${fiable ? (g.n / h).toFixed(1).replace('.', ',') : '—'}</td></tr>`;
+    }).join('') + '</tbody></table></div>';
+
+  // --- el tapon
+  if (buenas.length >= 5) {
+    const cogidos = filas.filter((f) => f.tAbre != null).length;
+    const cerrados = filas.filter((f) => f.tCierra != null).length;
+    const cola = cogidos - cerrados;
+    html += `<div class="panel ${cola > 5 ? 'ojo' : ''}"><b>Dónde está el tapón.</b><br>
+      Se cogieron <b>${cogidos}</b> paquetes y se cerraron <b>${cerrados}</b>.
+      ${cola > 5
+        ? `Quedaron <b>${cola}</b> esperando a cerrarse: el cuello de botella está en el que empaqueta.`
+        : (cola < -5
+          ? `Se cerraron ${-cola} más de los que constan cogidos: alguien no está marcando lo suyo.`
+          : 'Van parejos: ninguno de los dos está esperando al otro.')}
+      ${media != null ? `<br>Cada paquete tarda <b>${mins(media)} min</b> de media desde que se coge
+        hasta que se cierra.` : ''}</div>`;
+  }
+
+  // --- detalle
+  html += `<h2>Paquete a paquete</h2><div class="marco"><table>
+    <thead><tr><th>Comprador</th><th class="n">Prendas</th><th>Cogido</th><th>Cerrado</th>
+    <th class="n">Minutos</th><th>Quién lo cogió</th><th>Quién lo cerró</th></tr></thead><tbody>` +
+    filas.map((f) => `<tr class="${f.dur == null || f.dur < 0 ? 'ojo' : ''}">
+      <td>${esc(f.apodo)}</td><td class="n">${f.prendas || ''}</td>
+      <td>${f.tAbre ? hhmmss(f.tAbre) : '—'}</td>
+      <td>${f.tCierra ? hhmmss(f.tCierra) : '—'}</td>
+      <td class="n">${f.dur == null ? '—' : (f.dur < 0 ? 'imposible' : mins(f.dur))}</td>
+      <td>${esc(f.recoge || '—')}</td><td>${esc(f.empaqueta || '—')}</td></tr>`).join('') +
+    '</tbody></table></div>';
+
+  html += `<div class="fila">
+    <button id="csv">Descargar CSV</button>
+    <button id="otro" class="sec">Pegar otro enlace</button>
+    <button id="vaciar" class="sec">Empezar de cero</button>
+  </div>
+  <div id="pegarOtro" style="display:none;margin-top:12px">
+    <textarea id="txt2" placeholder="Pega aquí el enlace del otro móvil"></textarea>
+    <div class="fila"><button id="cargar2" class="sec">Cargar</button></div>
+  </div>`;
+
+  $('salida').innerHTML = html;
+  $('csv').onclick = () => descargar(filas);
+  $('otro').onclick = () => { const p = $('pegarOtro'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; };
+  $('cargar2').onclick = () => cargarTexto($('txt2').value);
+  $('vaciar').onclick = () => {
+    if (!confirm('¿Vaciar lo cargado? Descarga antes el CSV si lo necesitas.')) return;
+    entregas = []; guardar(); location.hash = ''; pintar(); pintarEntrada();
+  };
+}
+
+function descargar(filas) {
+  const cols = ['comprador','pedido','prendas','cogido','cerrado','minutos','quien_cogio','quien_cerro'];
+  const lineas = [cols.join(';')];
+  for (const f of filas) {
+    lineas.push([
+      f.apodo, f.pedido, f.prendas || '',
+      f.tAbre ? hhmmss(f.tAbre) : '', f.tCierra ? hhmmss(f.tCierra) : '',
+      f.dur == null || f.dur < 0 ? '' : (f.dur / 60000).toFixed(2).replace('.', ','),
+      f.recoge || '', f.empaqueta || ''
+    ].join(';'));
+  }
+  const blob = new Blob(['﻿' + lineas.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = `tiempos-empaquetado-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}.csv`;
+  a.click();
+}
+
+async function cargarTexto(v) {
+  v = (v || '').trim();
+  const i = v.indexOf('#');
+  const carga = i >= 0 ? v.slice(i + 1) : v;
+  if (carga.length < 8) { alert('Ese enlace no lleva datos dentro.'); return; }
+  try {
+    meter(await desempaquetar(carga));
+    location.hash = '';
+    pintar(); pintarEntrada();
+  } catch (err) {
+    alert('No he podido leerlo: ' + err.message);
+  }
+}
+
+function pintarEntrada() {
+  if (entregas.length) { $('entrada').innerHTML = ''; return; }
+  $('entrada').innerHTML = `<div class="panel">
+    <b>Cómo funciona.</b> Los dos del almacén abren la misma app de recogida con el mismo
+    enlace. El que <b>coge prendas</b> marca cuando entrega el paquete; el que
+    <b>cierra paquetes</b> marca cuando lo termina. Al acabar, cada uno pulsa
+    <b>Mandar mis tiempos</b> y esos dos enlaces se pegan aquí.
+    <div style="margin-top:12px"><textarea id="txt1" placeholder="Pega aquí el primer enlace"></textarea>
+    <div class="fila"><button id="cargar1">Cargar</button></div></div></div>`;
+  $('cargar1').onclick = () => cargarTexto($('txt1').value);
+}
+
+(async () => {
+  const h = (location.hash || '').slice(1);
+  if (h.length > 8) { try { meter(await desempaquetar(h)); location.hash = ''; } catch (_) {} }
+  pintarEntrada();
+  pintar();
+})();
+
+window.addEventListener('hashchange', () => location.reload());
+})();
+</script>
+</body>
+</html>
