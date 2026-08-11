@@ -70,6 +70,16 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 .usuario{font-size:13px;opacity:.45;margin-bottom:14px}
 .numeros{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-content:center;
  max-height:46vh;overflow:auto;margin-bottom:12px}
+/* Dos cuentas emitiendo contra el mismo almacén: cada una numera sus fichas
+   desde el 1, y los racks están separados por cuenta. El rótulo dice de qué
+   rack es cada número. Solo sale si el comprador tiene prendas de esa cuenta:
+   con una sola cuenta no se pinta nada y la tarjeta es la de siempre. */
+.grupos{display:flex;flex-direction:column;gap:10px;align-items:stretch;
+ max-height:46vh;overflow:auto;margin-bottom:12px;width:100%}
+.grupo{display:flex;flex-direction:column;gap:6px}
+.rack{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+ opacity:.55;text-align:center}
+.grupo .numeros{max-height:none;overflow:visible;margin-bottom:0}
 .n{background:var(--red);color:#fff;border-radius:14px;font-weight:900;
  font-variant-numeric:tabular-nums;padding:10px 14px;min-width:60px}
 .n.solo{font-size:clamp(54px,17vw,90px);padding:14px 26px;border-radius:22px;line-height:1}
@@ -295,13 +305,36 @@ function abrirTanda(ti){
 // --------------------------------------------------------------- tarjetas
 const claseNum = (n) => n===1 ? 'solo' : (n<=6 ? 'pocos' : 'muchos');
 
-function tarjetaHTML(f, cl){
+/* LOS NUMEROS DE LA TARJETA.
+ *
+ * Desde el 11 ago 2026 hay dos cuentas emitiendo contra el mismo almacen y
+ * CADA UNA NUMERA SUS FICHAS DESDE EL 1: el 19 de una y el 19 de la otra son
+ * dos prendas distintas, en racks distintos. Por eso los numeros van bajo el
+ * nombre de su cuenta, que es el rack donde estan.
+ *
+ * Solo se pinta el rotulo si hay mas de una cuenta en ESA tarjeta. Poner
+ * "billysvlc" encima de una sola fila de numeros no distingue nada y come
+ * altura de pantalla, que es lo que mas escasea en el movil.
+ *
+ * `porCuenta` puede no venir: un enlace generado con la version anterior solo
+ * trae `numeros`. En ese caso se pinta la fila de siempre. */
+function bloqueNumeros(f){
   const c = claseNum(f.numeros.length);
+  const chips = (nums) => `<div class="numeros">${nums.map(n=>`<span class="n ${c}">${n}</span>`).join('')}</div>`;
+  const g = (f.porCuenta || []).filter(x => x.numeros && x.numeros.length);
+  if (g.length < 2) return chips(f.numeros);
+  return `<div class="grupos">${g.map(x => `<div class="grupo">
+      <div class="rack">${x.cuenta || 'sin cuenta'}</div>
+      ${chips(x.numeros)}
+    </div>`).join('')}</div>`;
+}
+
+function tarjetaHTML(f, cl){
   return `<div class="tarjeta ${cl||''}">
     <div class="sello ok">LISTO</div><div class="sello no">INCIDENCIA</div>
     <div class="nombre">${f.apodo}</div>
     <div class="usuario">${f.usuario||''}</div>
-    <div class="numeros">${f.numeros.map(n=>`<span class="n ${c}">${n}</span>`).join('')}</div>
+    ${bloqueNumeros(f)}
     <div class="cuantas">${f.numeros.length} ${f.numeros.length===1?'PRENDA':'PRENDAS'}</div>
     <div class="pedido">${f.pedido}</div>
   </div>`;
@@ -329,7 +362,12 @@ function terminar(){
   $('finTitulo').textContent = DATOS.tandas[tandaActual].etiqueta + ' · terminada';
   $('finTexto').innerHTML = incidencias.length
     ? '<b>' + incidencias.length + ' con incidencia:</b><br>' +
-      incidencias.map(f => f.apodo + ' — ' + f.numeros.join(', ')).join('<br>')
+      incidencias.map(f => {
+        const g = (f.porCuenta || []).filter(x => x.numeros && x.numeros.length);
+        return f.apodo + ' — ' + (g.length > 1
+          ? g.map(x => (x.cuenta || 'sin cuenta') + ': ' + x.numeros.join(', ')).join(' · ')
+          : f.numeros.join(', '));
+      }).join('<br>')
     : 'Los ' + FICHAS.length + ' paquetes de esta tanda están hechos.';
   guardar();
 }
