@@ -105,6 +105,18 @@ const CONFIG = {
   ventanaAtrasMs: 10 * 60000,
   // Margen hacia delante, para absorber que la hora del lote va al minuto.
   margenDelanteMs: 90000,
+  /* Y el margen hacia delante CUANDO LA HORA ES BUENA (directoLotes).
+   *
+   * Aquí tiene que ser casi cero, y la prueba lo demostró: con los 90 s de
+   * arriba, un toque se llevaba una prenda que todavía NO se había vendido —
+   * cogía el lote de dos ventas más adelante. Los 90 s existen para tapar que
+   * la hora aproximada va al minuto; con la hora real no hay nada que tapar.
+   *
+   * Los 5 segundos que quedan son para el desfase de reloj entre la tablet y el
+   * servidor de TikTok. Por eso los móviles y las tablets del almacén tienen
+   * que tener la HORA AUTOMÁTICA puesta: si un reloj va cinco minutos adelantado,
+   * este cruce se rompe y no hay código que lo arregle. */
+  margenDelanteFiableMs: 5000,
   /* Lo que se tarda razonablemente en coger el movil y pulsar. Si el lote que
      toca se cerro hace menos que esto, ES el suyo y no se busca mas alla. Sin
      este freno, con lotes muy seguidos el cruce se adelantaba al lote de
@@ -140,7 +152,8 @@ async function desempaquetar(carga) {
 }
 
 /* ------------------------------------------- entrada: los lotes del directo */
-let lotes = null;      // [{num, price, at}]
+let lotes = null;      // [{num, price, at, pagado, skuId}]
+let horaFiable = false;  // ¿las horas vienen de directoLotes (reales) o de billysItems (aproximadas)?
 let sesiones = null;
 
 const DESTINO = (location.origin && location.origin !== 'null') ? location.origin : '*';
@@ -148,14 +161,64 @@ window.addEventListener('message', (e) => {
   if (e.source !== window) return;
   const m = e.data;
   if (!m || m.fuente !== 'billys-pantalla') return;
+  /* DE DONDE SALEN LOS LOTES, Y POR QUE IMPORTA TANTO.
+   *
+   * Hay dos fuentes y NO valen lo mismo:
+   *
+   *   directoLotes — lo levanta directo-main.js leyendo las props de React de
+   *     cada fila vendida. Trae `creado`, que es orderCreatedTime: la hora REAL
+   *     del cierre de la venta, al segundo. Es la buena.
+   *
+   *   billysItems — lo levanta content.js para las pantallas. Su hora es
+   *     `ahora - seenAgo`, sacada de leer "hace 1 minuto" del panel. Precisión
+   *     de minuto, y al arrancar el lector se traga cientos de filas de golpe y
+   *     todas acaban con la misma hora. Cruzar por ahí fue lo que dejó 24 de 65
+   *     prendas sin lote el 10 ago 2026.
+   *
+   * Se prefiere siempre directoLotes. billysItems se queda de reserva, y cuando
+   * se usa el panel lo dice, porque el resultado no merece la misma confianza.
+   *
+   * La hora llega a veces en segundos y a veces en milisegundos según la
+   * superficie. Se normaliza sin suponer cuál es. */
+  const hora = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const ms = n < 1e12 ? n * 1000 : n;
+    return (ms > 1e11 && ms < 1e14) ? ms : null;
+  };
+
+  const dl = m.datos && m.datos.directoLotes;
+  if (dl) {
+    const fuentes = [dl, ...Object.values(dl.historico || {})];
+    const porNum = new Map();
+    for (const f of fuentes) {
+      for (const l of Object.values((f && f.lotes) || {})) {
+        if (!Number.isFinite(l.num)) continue;
+        const t = hora(l.creado);
+        const previo = porNum.get(l.num);
+        // Gana el que tenga hora; entre dos con hora, el más reciente.
+        if (!previo || (t && (!previo.at || t > previo.at))) {
+          porNum.set(l.num, { num: l.num, price: Number(l.precio), at: t || 0,
+                              pagado: l.pagado, skuId: l.skuId });
+        }
+      }
+    }
+    if (porNum.size) {
+      lotes = [...porNum.values()].sort((a, b) => a.at - b.at || a.num - b.num);
+      horaFiable = lotes.filter((l) => l.at).length >= lotes.length * 0.8;
+      pintar();
+      return;
+    }
+  }
+
   const it = m.datos && m.datos.billysItems;
   if (!it || !it.items) return;
-  /* Ya no se exige que el lote tenga hora: el cruce por orden no la usa. Solo
-     la necesita el metodo viejo, y ahi un 0 lo deja fuera por si solo. */
+  if (lotes && horaFiable) return;      // ya tenemos algo mejor
   lotes = Object.values(it.items)
     .filter((x) => Number.isFinite(x.num))
     .map((x) => ({ num: x.num, price: Number(x.price), at: x.at || 0, pagado: x.paid }))
     .sort((a, b) => a.at - b.at);
+  horaFiable = false;
   pintar();
 });
 window.postMessage({ fuente: 'billys-pantalla-pide' }, DESTINO);
@@ -187,6 +250,57 @@ window.postMessage({ fuente: 'billys-pantalla-pide' }, DESTINO);
  * Si faltan los anclajes (turnos viejos, o no supo el numero), se cae al metodo
  * de horas de siempre, que sigue aqui abajo. Y se dice cual se ha usado.
  */
+/* CRUCE POR TIEMPO — el que aguanta que se olviden de marcar.
+ *
+ * ESTE ES EL METODO PRINCIPAL cuando las horas vienen de directoLotes.
+ *
+ * POR QUE NO POR ORDEN. Alinear por orden es exacto mientras no falte ningun
+ * toque, y catastrofico en cuanto falta uno: se olvida una prenda y TODO lo que
+ * viene detras se corre una posicion. Un olvido no cuesta una prenda, cuesta el
+ * turno entero, y encima sin avisar: los numeros siguen saliendo, solo que
+ * equivocados. Es el peor fallo posible, porque parece que ha ido bien.
+ *
+ * LA REGLA. Cada toque se lleva EL LOTE MAS RECIENTE cerrado antes de el que
+ * todavia no tenga dueno, y solo si no hace mas de `ventanaAtrasMs`.
+ *
+ * "El mas reciente" es exactamente la pieza que aguanta los olvidos. Si se le
+ * pasa una prenda, ese lote se queda atras sin dueno y el toque siguiente coge
+ * EL SUYO, no el olvidado. El error se queda en una prenda y no se propaga. La
+ * version anterior iba con un puntero hacia delante, y por eso un olvido lo
+ * corria todo.
+ *
+ * Lo que no se cruza no se reparte a ojo: se dice. Un lote sin toque sale en
+ * "lotes sin marcar" y un toque sin lote sale como "sin cruce". Prefiero una
+ * cifra con un hueco visible que una cuadrada y falsa.
+ */
+function cruzarPorTiempo(toques, lista) {
+  /* Con valores por defecto A PROPOSITO. Si mañana alguien toca CONFIG y se
+     deja uno fuera, esto sigue funcionando; sin ellos, `q.t + undefined` es NaN,
+     ninguna comparación se cumple y el cruce asigna la última prenda del
+     directo a todos los toques sin quejarse. Lo cazó el banco de pruebas. */
+  const margenDelante = Number.isFinite(CONFIG.margenDelanteFiableMs) ? CONFIG.margenDelanteFiableMs : 5000;
+  const ventanaAtras  = Number.isFinite(CONFIG.ventanaAtrasMs) ? CONFIG.ventanaAtrasMs : 600000;
+  const conHora = lista.filter((l) => Number.isFinite(l.at) && l.at > 0)
+                       .sort((a, b) => a.at - b.at);
+  const usado = new Set();
+  const salida = [];
+
+  for (const q of [...toques].sort((a, b) => a.t - b.t)) {
+    let elegido = null;
+    // De atras hacia delante: el mas reciente que ya se hubiera vendido.
+    for (let i = conHora.length - 1; i >= 0; i--) {
+      const l = conHora[i];
+      if (l.at > q.t + margenDelante) continue;   // todavia no se habia vendido
+      if (q.t - l.at > ventanaAtras) break;        // ya es demasiado viejo para ser suyo
+      if (usado.has(l.num)) continue;                      // ya tiene dueno
+      elegido = l; break;
+    }
+    if (elegido) usado.add(elegido.num);
+    salida.push({ toque: q, lote: elegido });
+  }
+  return salida;
+}
+
 function cruzarPorOrden(sesion, lista) {
   const a = sesion.loteInicio, b = sesion.loteFin;
   if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return null;
@@ -234,7 +348,33 @@ function cruzar() {
     if (resto.length) sinSellar.push({ ...s, toques: resto });
   }
 
-  // --- 1. los turnos que traen anclaje, cada uno por su cuenta y por orden
+  /* --- 1. CON HORAS BUENAS, POR TIEMPO Y PARA TODOS.
+   *
+   * Si los lotes vienen de directoLotes, la hora es real y el cruce por tiempo
+   * es mejor que el de orden para lo que de verdad pasa en el almacén: que
+   * alguna prenda se quede sin marcar. Por orden, un olvido descuadra el resto
+   * del turno; por tiempo, cuesta esa prenda y nada más.
+   *
+   * El anclaje no se tira: se usa para CONTROLAR. Si en su tramo pasaron 40
+   * lotes y marcó 34, eso sale en pantalla aunque las 34 hayan cruzado bien. */
+  if (horaFiable && sinSellar.length) {
+    for (const s of sinSellar) {
+      const r = cruzarPorTiempo(s.toques, lista);
+      for (const { toque, lote } of r) {
+        filas.push(fila({ vendedora: s.vendedora, c: toque.c, t: toque.t }, lote, 'tiempo'));
+        porHora++;
+      }
+      if (Number.isFinite(s.loteInicio) && Number.isFinite(s.loteFin) && s.loteFin > s.loteInicio) {
+        const enTramo = lista.filter((l) => l.num > s.loteInicio && l.num <= s.loteFin).length;
+        if (enTramo > s.toques.length) {
+          huecos.push({ vendedora: s.vendedora, lotes: enTramo, toques: s.toques.length });
+        }
+      }
+    }
+    sinSellar.length = 0;
+  }
+
+  // --- 2. sin horas buenas: el anclaje y el orden, como hasta ahora
   const sinAnclaje = [];
   for (const s of sinSellar) {
     const r = cruzarPorOrden(s, lista);
@@ -249,7 +389,7 @@ function cruzar() {
     }
   }
 
-  // --- 2. lo que no trae anclaje, por el metodo viejo de horas
+  // --- 3. lo que no trae anclaje ni horas buenas: el metodo viejo
   const toques = [];
   for (const s of sinAnclaje) {
     for (const t of s.toques) toques.push({ vendedora: s.vendedora, c: t.c, t: t.t });
@@ -366,7 +506,20 @@ function pintar() {
       por nada: el número lo puso el propio panel del directo en el momento del toque, así que no
       hay margen de error ni depende de la hora. Es lo que hace que dos directos a la vez no se
       mezclen.</div>` : ''}
-    ${r.porHora ? `<div class="panel aviso"><b>${r.porHora} toques se han cruzado por hora,
+    ${r.porHora && horaFiable ? `<div class="panel" style="border-color:#2E9E6B">
+      <b>${r.porHora} toques cruzados por la hora real de venta.</b>
+      La hora sale de <code>orderCreatedTime</code>, del propio panel del directo, al segundo.
+      Cada toque se lleva la última prenda vendida antes de él que no tuviera dueño, así que
+      <b>si a alguien se le pasa marcar una, se pierde esa y solo esa</b>: lo de detrás no se
+      corre. Las prendas que nadie marcó salen abajo, en lotes sin marcar.
+      ${r.huecos.length ? '' : ''}</div>` : ''}
+    ${!horaFiable && lotes ? `<div class="panel aviso">
+      <b>Las horas de los lotes son aproximadas</b>, vienen de leer "hace 1 minuto" del panel y
+      tienen precisión de minuto. Con eso el cruce por tiempo no es de fiar, así que se ha ido
+      por anclaje y orden. Para tener la hora buena hace falta que la pestaña del panel del
+      directo esté abierta con la extensión al día: es la que levanta el registro con la hora
+      real de cada venta.</div>` : ''}
+    ${r.porHora && !horaFiable ? `<div class="panel aviso"><b>${r.porHora} toques se han cruzado por hora,
       que es el metodo malo.</b> Ese turno no traia el numero de lote de entrada y salida.
       La app ya los pide: al empezar y al terminar el turno. Con ellos el cruce va por orden
       y no falla.</div>` : ''}
