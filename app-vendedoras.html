@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0E1723">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<!-- Le dice al puente de la extension que esta pagina quiere los datos del
+     directo. Sin esta etiqueta, pantalla-web.js se retira y no manda nada.
+     En un movil sin la extension no cambia nada: nadie contesta. -->
+<meta name="billys-datos" content="1">
 <title>Registro de prendas</title>
 
 <!--
@@ -33,9 +37,6 @@
     por WhatsApp. En el PC se abre ese enlace con cruce.html y ahi es donde se
     cruza con los lotes del directo.
 
-    Si algun dia hay un Google Apps Script desplegado, se pega su URL en
-    CONFIG.envioAutomatico y los toques viajan solos ademas de guardarse en el
-    movil. Mientras este vacio, no se intenta nada.
 
   NADA DE ESTO ESTA ATADO A UNA TIENDA CONCRETA: categorias, precios, textos y
   marca salen del bloque CONFIG de aqui abajo.
@@ -61,11 +62,11 @@
   h1{font-size:22px;margin:0 0 4px;font-weight:800;letter-spacing:-.02em}
   .sub{color:var(--tenue);font-size:14px;margin:0 0 20px}
 
-  input[type=text]{
+  input[type=text],input[type=number]{
     width:100%;padding:16px;font-size:19px;border-radius:14px;
     border:2px solid var(--borde);background:var(--carta);color:var(--tinta);
   }
-  input[type=text]:focus{outline:none;border-color:var(--acento)}
+  input[type=text]:focus,input[type=number]:focus{outline:none;border-color:var(--acento)}
 
   button{font-family:inherit;color:inherit;border:0;cursor:pointer}
   .primario{
@@ -114,7 +115,10 @@
   .pie{margin-top:14px;display:flex;gap:10px}
   .pie .secundario{flex:1}
 
-  #ultimo{
+  #conDirecto{font-size:12px;text-align:center;margin-top:6px;min-height:15px;
+ letter-spacing:.03em;color:rgba(237,231,219,.35)}
+#conDirecto.conectado{color:#2E9E6B;font-weight:700}
+#ultimo{
     min-height:22px;text-align:center;font-size:14px;color:var(--verde);
     font-weight:700;margin:10px 0 2px
   }
@@ -143,6 +147,15 @@
   <p class="sub">Pon tu nombre para empezar el turno.</p>
   <input id="nombre" type="text" placeholder="Tu nombre" autocomplete="off"
          autocapitalize="words" enterkeyhint="go">
+  <!-- El numero de lote es lo que ata el turno al directo. Sin el hay que
+       cruzar por horas, y las horas de venta que da TikTok no son de fiar:
+       el 10 ago 2026 eso dejo 24 de 65 prendas sin lote. Con este numero el
+       cruce va por ORDEN, que no falla. Ella lo tiene delante: es el que sale
+       en la pantalla del directo. -->
+  <input id="loteInicio" type="number" inputmode="numeric" placeholder="¿Por qué número va el directo?"
+         autocomplete="off" style="margin-top:10px">
+  <p class="sub" style="margin:8px 0 0;font-size:13px">Míralo en la pantalla del directo.
+    Si no lo sabes, déjalo vacío: se podrá cruzar igual, pero peor.</p>
   <div class="recientes" id="recientes"></div>
   <div style="margin-top:auto">
     <div id="pendientesAviso"></div>
@@ -164,13 +177,33 @@
   </div>
   <div class="rejilla" id="rejilla"></div>
   <div id="ultimo"></div>
+  <!-- Se enseña SOLO si la tablet tiene la extensión y el panel abierto. En un
+       móvil suelto queda vacío y no ocupa nada: no hay que explicar una
+       ausencia, pero sí conviene ver la presencia. -->
+  <div id="conDirecto"></div>
   <div class="pie">
     <button id="deshacer" class="secundario" disabled>Deshacer</button>
     <button id="terminar" class="secundario">Terminar</button>
   </div>
 </section>
 
-<!-- 3 · RESUMEN Y ENVIO -->
+<!-- 3 · CIERRE. Se pregunta el lote final antes del resumen: es la otra punta
+     del anclaje y lo que permite saber cuantas prendas se han quedado sin
+     marcar en vez de repartirlas mal. -->
+<section id="pCierre" class="pantalla">
+  <h1>Cerrar el turno</h1>
+  <p class="sub">Una última cosa y ya.</p>
+  <p style="font-size:18px;font-weight:700;margin-bottom:10px">¿Por qué número va el directo ahora?</p>
+  <input id="loteFin" type="number" inputmode="numeric" placeholder="Número de lote" autocomplete="off">
+  <p class="sub" style="margin-top:10px">Sirve para saber cuántas prendas han pasado
+    durante tu turno. Si no lo sabes, déjalo vacío.</p>
+  <div class="botonera">
+    <button id="cerrarYa" class="primario">Terminar turno</button>
+    <button id="volverAlTurno" class="secundario">Volver, aún no he terminado</button>
+  </div>
+</section>
+
+<!-- 4 · RESUMEN Y ENVIO -->
 <section id="pFin" class="pantalla">
   <h1>Turno terminado</h1>
   <p class="sub" id="finQuien"></p>
@@ -208,19 +241,6 @@ const CONFIG = {
   // para que quien lo reciba sepa donde abrirlo.
   urlCruce: 'https://cetauve.github.io/recogida/cruce.html',
 
-  /* A DONDE VIAJA CADA TOQUE, ademas de guardarse en el movil.
-   *
-   * Lo normal es que venga en la direccion: abrir la app como
-   *     app-vendedoras.html?srv=http://192.168.1.50:8080
-   * y entonces cada toque se manda al momento al PC de la tienda, que lo pinta
-   * en la pantalla de vendedoras y lo ata a su lote EN VIVO.
-   *
-   * La direccion del PC la escribe servidor.bat en su ventana al arrancar. Va
-   * en el QR, asi que la vendedora no teclea nada.
-   *
-   * Si no hay ?srv= ni nada aqui, no se intenta nada: la app sigue funcionando
-   * igual y los toques salen al final por el enlace de siempre. */
-  envioAutomatico: '',
 
   // Los costes viven tambien en costes-prendas.json. Si cambian, los dos.
   transportePorPieza: 0.05,
@@ -334,7 +354,9 @@ function arrancar() {
   nombres.unshift(v);
   guardar(LLAVE_NOMBRES, nombres.slice(0, 8));
 
-  sesion = { v: 1, vendedora: v, inicio: Date.now(), toques: [] };
+  const li = parseInt($('loteInicio').value, 10);
+  sesion = { v: 1, vendedora: v, inicio: Date.now(), toques: [],
+             loteInicio: Number.isFinite(li) ? li : null };
   guardar(LLAVE_SESION, sesion);
   /* Se avisa al PC de que empieza el turno. La pantalla en vivo necesita la
      HORA DE ENTRADA para calcular las horas trabajadas: si las sacara del hueco
@@ -364,15 +386,77 @@ function entrarTrabajo() {
   cronometro = setInterval(refrescar, 30000);
 }
 
+/* ===========================================================================
+ * EL LOTE, LEIDO DEL PANEL, EN EL MOMENTO DEL TOQUE
+ *
+ * Hasta ahora el toque solo guardaba la hora, y despues cruce.html adivinaba a
+ * que lote correspondia. Adivinaba mal: la hora de venta que publica el panel
+ * tiene precision de minuto y al arrancar se aplasta, asi que el 10 ago 2026
+ * quedaron 24 de 65 prendas sin lote, y el 11, con dos directos a la vez,
+ * quedaron TODAS sin cruzar.
+ *
+ * Pero las chicas trabajan con la tablet, y en esa misma tablet esta abierto el
+ * panel de subastas. Si la extension esta puesta ahi, el puente ya publica por
+ * que lote va el directo AHORA. Asi que no hay que adivinar nada: se sella el
+ * numero de lote en el mismo gesto, igual que se sella la hora.
+ *
+ * Y como cada tablet mira SU directo, el sessionId viene con el lote: dos
+ * directos a la vez dejan de ser un problema, porque cada toque dice de cual es.
+ *
+ * SI NO HAY EXTENSION no pasa nada: `loteAhora` se queda a null, el toque va
+ * como iba y cruce.html sigue con sus metodos de siempre. Un movil suelto
+ * funciona exactamente igual que ayer.
+ * ======================================================================== */
+let loteAhora = null;      // { num, sessionId, visto }
+
+window.addEventListener('message', (e) => {
+  if (e.source !== window) return;
+  const m = e.data;
+  if (!m || m.fuente !== 'billys-pantalla') return;
+  const now = m.datos && m.datos.billysNow;
+  if (!now) return;
+  const num = now.current && Number(now.current.num);
+  if (Number.isFinite(num)) {
+    loteAhora = { num, sessionId: now.sessionId || null, visto: Date.now() };
+  } else if (now.metrics && Number.isFinite(Number(now.metrics.loteActual))) {
+    loteAhora = { num: Number(now.metrics.loteActual), sessionId: now.sessionId || null, visto: Date.now() };
+  }
+  pintarDirecto();
+});
+window.postMessage({ fuente: 'billys-pantalla-pide' }, '*');
+
+/* El lote solo vale si es reciente. Si el panel se cerro hace un rato, el
+ * numero que quedo guardado ya no es el de ahora y pegarselo al toque seria
+ * mentir con mas seguridad que antes. Dos minutos. */
+const LOTE_FRESCO_MS = 120000;
+function loteValido() {
+  return loteAhora && (Date.now() - loteAhora.visto) < LOTE_FRESCO_MS ? loteAhora : null;
+}
+
+function pintarDirecto() {
+  const el = document.getElementById('conDirecto');
+  if (!el) return;
+  const l = loteValido();
+  el.textContent = l ? 'Conectado al directo · va por el #' + l.num : '';
+  el.className = l ? 'conectado' : '';
+}
+setInterval(pintarDirecto, 5000);
+
 function marcar(id, boton) {
   const ahora = Date.now();
   // Dos toques pegados casi siempre son el mismo dedo, no dos prendas.
   if (ahora - ultimoToque < ANTIRREBOTE_MS) return;
   ultimoToque = ahora;
 
-  sesion.toques.push({ c: id, t: ahora });
+  /* El lote se sella AQUI, en el gesto, igual que la hora. Los dos son datos
+     que despues no se pueden reconstruir. */
+  const l = loteValido();
+  const toque = { c: id, t: ahora };
+  if (l) { toque.lote = l.num; toque.sesionDirecto = l.sessionId; }
+  sesion.toques.push(toque);
   guardar(LLAVE_SESION, sesion);   // en disco ANTES de pintar nada
-  enviarSuelto({ vendedora: sesion.vendedora, categoria: id, t: ahora });
+  enviarSuelto({ vendedora: sesion.vendedora, categoria: id, t: ahora,
+                 lote: l ? l.num : null, sesionDirecto: l ? l.sessionId : null });
 
   if (navigator.vibrate) navigator.vibrate(18);
   boton.classList.add('pulsada');
@@ -407,7 +491,16 @@ function refrescar() {
 
 $('terminar').onclick = () => {
   if (!sesion) return;
-  if (sesion.toques.length && !confirm(`Terminar el turno de ${sesion.vendedora} con ${sesion.toques.length} prendas?`)) return;
+  $('loteFin').value = '';
+  pantalla('pCierre');
+};
+
+$('volverAlTurno').onclick = () => pantalla('pTrabajo');
+
+$('cerrarYa').onclick = () => {
+  if (!sesion) return;
+  const lf = parseInt($('loteFin').value, 10);
+  sesion.loteFin = Number.isFinite(lf) ? lf : null;
   sesion.fin = Date.now();
   enviarSuelto({ vendedora: sesion.vendedora, tipo: 'fin', t: sesion.fin });
 
@@ -509,33 +602,15 @@ function limpiarPendientes() {
 /* =========================================================================
    ENVIO SUELTO (opcional) · solo si hay un backend configurado
    ========================================================================= */
-/* La direccion del PC puede venir en la URL. Se limpia a conciencia: solo se
-   acepta http(s) y solo hacia una IP de red local. Este archivo esta en una
-   pagina publica y cualquiera podria pasarle un ?srv= apuntando a su servidor
-   para quedarse con los datos. Con esto, no. */
-const DESTINO_TOQUES = (() => {
-  const bruto = new URLSearchParams(location.search).get('srv') || CONFIG.envioAutomatico || '';
-  if (!bruto) return '';
-  let u;
-  try { u = new URL(bruto); } catch (_) { return ''; }
-  if (!/^https?:$/.test(u.protocol)) return '';
-  const red = /^(localhost$|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname);
-  if (!red) { console.warn("[Billy's] ?srv= no es una direccion de red local. Ignorado."); return ''; }
-  return u.origin + '/toque';
-})();
-
-function enviarSuelto(dato) {
-  if (!DESTINO_TOQUES) return;
-  try {
-    // keepalive: sale aunque se cierre la pestana justo despues del toque.
-    // no-cors: no necesitamos leer la respuesta, solo que llegue.
-    fetch(DESTINO_TOQUES, {
-      method: 'POST', mode: 'no-cors', keepalive: true,
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(dato)
-    }).catch(() => {});
-  } catch (_) { /* sin cobertura: da igual, el toque ya esta guardado en el movil */ }
-}
+/* Ya NO se manda nada en vivo a ningun sitio.
+   Decision del 11 ago 2026: no hace falta ver los toques en tiempo real, basta
+   con cuadrarlo al final del turno. Eso se llevo por delante el servidor local
+   —que ademas se lo comia el antivirus del PC de la tienda— y con el, todo el
+   montaje de IPs, ?srv= y cortafuegos.
+   Los toques y las horas de entrada y salida viajan dentro del enlace que se
+   manda al terminar. Si algun dia hace falta historico automatico, aqui es
+   donde iria la llamada. */
+function enviarSuelto() { /* a proposito, no hace nada */ }
 
 /* =========================================================================
    ARRANQUE  ·  si habia un turno a medias, se retoma donde estaba

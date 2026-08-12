@@ -150,9 +150,11 @@ window.addEventListener('message', (e) => {
   if (!m || m.fuente !== 'billys-pantalla') return;
   const it = m.datos && m.datos.billysItems;
   if (!it || !it.items) return;
+  /* Ya no se exige que el lote tenga hora: el cruce por orden no la usa. Solo
+     la necesita el metodo viejo, y ahi un 0 lo deja fuera por si solo. */
   lotes = Object.values(it.items)
-    .filter((x) => Number.isFinite(x.num) && x.at)
-    .map((x) => ({ num: x.num, price: Number(x.price), at: x.at, pagado: x.paid }))
+    .filter((x) => Number.isFinite(x.num))
+    .map((x) => ({ num: x.num, price: Number(x.price), at: x.at || 0, pagado: x.paid }))
     .sort((a, b) => a.at - b.at);
   pintar();
 });
@@ -161,77 +163,142 @@ window.postMessage({ fuente: 'billys-pantalla-pide' }, DESTINO);
 /* --------------------------------------------------------------- el cruce */
 /* EL CRUCE
  *
- * La primera version recorria los lotes de atras hacia delante buscando "el
- * ultimo cerrado antes del toque". Con lotes espaciados eso funciona, pero en
- * cuanto varios lotes caen juntos el primer toque se llevaba el lote MAS NUEVO
- * y el siguiente el anterior: los numeros salian AL REVES. Comprobado el 7 ago
- * 2026 en una prueba con seis lotes seguidos.
+ * HISTORIA, PORQUE EXPLICA EL DISENO. La primera version ataba cada toque a un
+ * lote comparando HORAS. El 10 de agosto de 2026 eso dejo 24 de 65 prendas sin
+ * lote. El motivo no era la ventana de tolerancia: era que la hora de venta de
+ * un lote NO ES DE FIAR. content.js la sella asi:
  *
- * Lo que sabemos con total seguridad es que el orden se respeta: si un toque va
- * antes que otro, su lote tambien. Asi que se recorren los dos en orden con un
- * puntero, y no se permite volver atras nunca.
+ *     patch.at = v.seenAgo != null ? ahora - v.seenAgo : ahora;
  *
- * Y hay que saltarse los lotes que nadie marca: lotes desiertos, o prendas que
- * se le pasan a la vendedora. Sin eso, UN solo lote sin marcar desplaza en uno
- * todo el resto del directo. La regla para saltarlo: si el lote siguiente ya se
- * ha cerrado y esta MAS CERCA del toque que el que toca, el que toca es un lote
- * que nadie marco y se descarta. Probado contra cinco casos, incluidos dos
- * lotes sin marcar seguidos y dos vendedoras alternandose.
+ * seenAgo sale de leer "1m" o "2h" del panel (resolucion de MINUTO, y solo si
+ * ese texto aparece). Si no aparece, la hora es la de cuando el lector se fijo
+ * en la prenda, no la de la venta. Y al arrancar, el lector se traga cientos de
+ * filas de golpe, asi que muchos lotes acaban con la MISMA hora. Con el eje de
+ * tiempos aplastado, cruzar por cercania es tirar una moneda.
+ *
+ * LO QUE SI ES DE FIAR:
+ *   1. El NUMERO de lote. Es el orden real de la subasta y no depende de nada.
+ *   2. El ORDEN de los toques. La vendedora marca una prenda cada vez.
+ *
+ * Asi que si sabemos por que numero iba el directo cuando entro y por cual
+ * cuando salio, su turno es un tramo de lotes conocido y sus toques se alinean
+ * ahi EN ORDEN. Sin horas. Por eso la app le pregunta esos dos numeros.
+ *
+ * Si faltan los anclajes (turnos viejos, o no supo el numero), se cae al metodo
+ * de horas de siempre, que sigue aqui abajo. Y se dice cual se ha usado.
  */
+function cruzarPorOrden(sesion, lista) {
+  const a = sesion.loteInicio, b = sesion.loteFin;
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return null;
+
+  /* Los lotes de su tramo. El primero que puede ser suyo es el a+1: cuando
+     entro, el a ya estaba cerrado o cerrandose. */
+  const tramo = lista.filter((l) => l.num > a && l.num <= b).sort((x, y) => x.num - y.num);
+  const toques = [...sesion.toques].sort((x, y) => x.t - y.t);
+
+  /* Si marco menos prendas que lotes hubo, es que se le pasaron algunas. NO se
+     puede saber CUALES, asi que no se reparten a ojo: se alinean desde el
+     principio y se dice cuantas faltan. Peor seria colocarlas mal y que el COGS
+     saliera limpio siendo mentira. */
+  return toques.map((q, i) => ({ toque: q, lote: tramo[i] || null }));
+}
+
 function cruzar() {
-  const toques = [];
+  const lista = lotes || [];
+  const filas = [];
+  let porOrden = 0, porHora = 0, sellados = 0;
+  const huecos = [];
+
+  /* --- 0. LOS TOQUES QUE YA TRAEN SU LOTE
+   *
+   * Desde el 12 ago 2026 la app de las vendedoras sella el número de lote en el
+   * momento del toque, leyéndolo del panel que está abierto en la misma tablet.
+   * Cuando un toque trae ese número NO SE CRUZA NADA: ya está cruzado, y por el
+   * único que lo sabía de verdad, que es el panel en ese instante.
+   *
+   * Esto es lo que arregla los dos directos a la vez. Cada tablet mira su
+   * propio panel, así que el toque viene con su sessionId y el 3 de un directo
+   * no se confunde con el 3 del otro. Adivinando por hora era imposible.
+   *
+   * Los toques sin sellar (móvil sin extensión, o panel cerrado) siguen por los
+   * métodos de siempre, que están debajo intactos. */
+  const sinSellar = [];
   for (const s of sesiones) {
+    const conLote = (s.toques || []).filter((q) => Number.isFinite(q.lote));
+    const resto   = (s.toques || []).filter((q) => !Number.isFinite(q.lote));
+    for (const q of conLote) {
+      const l = lista.find((x) => x.num === q.lote) || { num: q.lote, price: null, at: q.t };
+      filas.push(fila({ vendedora: s.vendedora, c: q.c, t: q.t }, l, 'sellado'));
+      sellados++;
+    }
+    if (resto.length) sinSellar.push({ ...s, toques: resto });
+  }
+
+  // --- 1. los turnos que traen anclaje, cada uno por su cuenta y por orden
+  const sinAnclaje = [];
+  for (const s of sinSellar) {
+    const r = cruzarPorOrden(s, lista);
+    if (!r) { sinAnclaje.push(s); continue; }
+    const lotesDelTramo = lista.filter((l) => l.num > s.loteInicio && l.num <= s.loteFin).length;
+    if (lotesDelTramo > s.toques.length) {
+      huecos.push({ vendedora: s.vendedora, lotes: lotesDelTramo, toques: s.toques.length });
+    }
+    for (const { toque, lote } of r) {
+      filas.push(fila({ vendedora: s.vendedora, c: toque.c, t: toque.t }, lote, 'orden'));
+      porOrden++;
+    }
+  }
+
+  // --- 2. lo que no trae anclaje, por el metodo viejo de horas
+  const toques = [];
+  for (const s of sinAnclaje) {
     for (const t of s.toques) toques.push({ vendedora: s.vendedora, c: t.c, t: t.t });
   }
-  toques.sort((a, b) => a.t - b.t);
+  toques.sort((x, y) => x.t - y.t);
 
-  const usados = new Set();
-  const filas = [];
-  const lista = lotes || [];
+  const usados = new Set(filas.map((f) => f.lote).filter((n) => n != null));
   let idx = 0;
-
   for (const q of toques) {
-    // Red de seguridad: lo que sea mas viejo que la ventana, fuera.
     while (idx < lista.length && lista[idx].at < q.t - CONFIG.ventanaAtrasMs) idx++;
-
-    // Y lo importante: descartar los lotes que nadie marco.
     while (idx + 1 < lista.length) {
       const actual = lista[idx], siguiente = lista[idx + 1];
-      if (Math.abs(q.t - actual.at) <= CONFIG.reaccionMaxMs) break;  // acaba de cerrarse: es el suyo
-      if (siguiente.at > q.t + CONFIG.margenDelanteMs) break;        // aun no ha cerrado
+      if (Math.abs(q.t - actual.at) <= CONFIG.reaccionMaxMs) break;
+      if (siguiente.at > q.t + CONFIG.margenDelanteMs) break;
       if (Math.abs(q.t - siguiente.at) < Math.abs(q.t - actual.at)) idx++;
       else break;
     }
-
     let elegido = null;
-    // El margen hacia delante absorbe que la hora del lote viene al minuto.
-    if (idx < lista.length && lista[idx].at <= q.t + CONFIG.margenDelanteMs) {
-      elegido = lista[idx];
-      idx++;
-    }
+    if (idx < lista.length && lista[idx].at <= q.t + CONFIG.margenDelanteMs &&
+        !usados.has(lista[idx].num)) { elegido = lista[idx]; idx++; }
     if (elegido) usados.add(elegido.num);
-
-    const c = cat(q.c);
-    const k = costes(c);
-    const ventaConIva = elegido ? elegido.price : null;
-    const ventaSinIva = ventaConIva != null ? ventaConIva / (1 + CONFIG.iva) : null;
-
-    filas.push({
-      ...q,
-      categoria: c.nombre,
-      lote: elegido ? elegido.num : null,
-      horaLote: elegido ? elegido.at : null,
-      desfase: elegido ? Math.round((q.t - elegido.at) / 1000) : null,
-      ventaConIva, ventaSinIva,
-      costeConIva: k.conIva, costeSinIva: k.sinIva,
-      margenConIva: ventaConIva != null ? ventaConIva - k.conIva : null,
-      margenSinIva: ventaSinIva != null ? ventaSinIva - k.sinIva : null
-    });
+    filas.push(fila(q, elegido, 'hora'));
+    porHora++;
   }
 
+  filas.sort((x, y) => x.t - y.t);
   const sinCruce = filas.filter((f) => f.lote == null);
-  const loteSinToque = (lotes || []).filter((l) => !usados.has(l.num));
-  return { filas, sinCruce, loteSinToque };
+  const loteSinToque = lista.filter((l) => !filas.some((f) => f.lote === l.num));
+  return { filas, sinCruce, loteSinToque, porOrden, porHora, sellados, huecos };
+}
+
+/* Una fila del detalle, con su dinero ya calculado. El precio de venta de
+   TikTok YA lleva IVA, asi que el margen va con IVA en los dos lados. */
+function fila(q, lote, metodo) {
+  const c = cat(q.c);
+  const k = costes(c);
+  const ventaConIva = lote ? Number(lote.price) : null;
+  const ventaSinIva = ventaConIva != null ? ventaConIva / (1 + CONFIG.iva) : null;
+  return {
+    ...q, metodo,
+    categoria: c.nombre,
+    lote: lote ? lote.num : null,
+    horaLote: lote ? lote.at : null,
+    desfase: lote ? Math.round((q.t - lote.at) / 1000) : null,
+    ventaConIva, ventaSinIva,
+    costeConIva: k.conIva, costeSinIva: k.sinIva,
+    margenConIva: ventaConIva != null ? ventaConIva - k.conIva : null,
+    margenSinIva: ventaSinIva != null ? ventaSinIva - k.sinIva : null
+  };
 }
 
 /* -------------------------------------------------------------- pintar */
@@ -286,12 +353,28 @@ function pintar() {
   $('salida').innerHTML = `
     <div class="cifras">
       <div class="cifra"><b>${r.filas.length}</b><span>prendas marcadas</span></div>
-      <div class="cifra"><b>${cruzadas}</b><span>cruzadas con su lote</span></div>
+      <div class="cifra"><b>${r.porOrden}</b><span>por orden de lote</span></div>
+      <div class="cifra ${r.porHora ? 'ojo' : ''}"><b>${r.porHora}</b><span>por hora (peor)</span></div>
       <div class="cifra ${r.sinCruce.length ? 'ojo' : ''}"><b>${r.sinCruce.length}</b><span>sin cruce</span></div>
       <div class="cifra"><b>${eur(totalVenta)}</b><span>vendido (con IVA)</span></div>
       <div class="cifra"><b>${eur(totalCoste)}</b><span>coste de compra</span></div>
       <div class="cifra"><b>${eur(totalMargen)}</b><span>margen</span></div>
     </div>
+
+    ${r.sellados ? `<div class="panel" style="border-color:#2E9E6B">
+      <b>${r.sellados} toques traían su lote sellado desde la tablet.</b> Esos no se han cruzado
+      por nada: el número lo puso el propio panel del directo en el momento del toque, así que no
+      hay margen de error ni depende de la hora. Es lo que hace que dos directos a la vez no se
+      mezclen.</div>` : ''}
+    ${r.porHora ? `<div class="panel aviso"><b>${r.porHora} toques se han cruzado por hora,
+      que es el metodo malo.</b> Ese turno no traia el numero de lote de entrada y salida.
+      La app ya los pide: al empezar y al terminar el turno. Con ellos el cruce va por orden
+      y no falla.</div>` : ''}
+    ${r.huecos.length ? `<div class="panel aviso"><b>Prendas sin marcar.</b>
+      ${r.huecos.map((h) => `${esc(h.vendedora)}: durante su turno pasaron <b>${h.lotes}</b> lotes
+        pero marco <b>${h.toques}</b> prendas. Faltan <b>${h.lotes - h.toques}</b>.`).join('<br>')}
+      <br><br>No puedo saber CUALES se le pasaron, asi que no las reparto a ojo: alineo desde el
+      principio y te lo digo. Preferible a que el COGS salga limpio siendo mentira.</div>` : ''}
 
     <h2>Por vendedora</h2>
     <div class="envoltorio"><table>
@@ -328,14 +411,13 @@ function pintar() {
     <h2>Detalle · ${r.filas.length} toques</h2>
     <div class="envoltorio"><table>
       <thead><tr><th>Hora</th><th>Vendedora</th><th>Categoria</th><th class="n">Lote</th>
-      <th>Hora lote</th><th class="n">Desfase</th><th class="n">Venta</th>
+      <th>Cruce</th><th class="n">Venta</th>
       <th class="n">Coste</th><th class="n">Margen</th></tr></thead>
       <tbody>${r.filas.map((f) => `
         <tr class="${f.lote == null ? 'dudoso' : ''}">
           <td>${hhmm(f.t)}</td><td>${esc(f.vendedora)}</td><td>${esc(f.categoria)}</td>
           <td class="n">${f.lote != null ? '#' + f.lote : 'sin cruce'}</td>
-          <td>${f.horaLote ? hhmm(f.horaLote) : ''}</td>
-          <td class="n">${f.desfase != null ? f.desfase + ' s' : ''}</td>
+          <td>${f.metodo === 'orden' ? 'por orden' : 'por hora'}</td>
           <td class="n">${eur(f.ventaConIva)}</td><td class="n">${eur(f.costeConIva)}</td>
           <td class="n">${eur(f.margenConIva)}</td>
         </tr>`).join('')}</tbody>
@@ -368,7 +450,7 @@ function pintar() {
 }
 
 function descargarCsv() {
-  const cols = ['fecha','hora_toque','vendedora','categoria','lote','hora_lote','desfase_seg',
+  const cols = ['fecha','hora_toque','vendedora','categoria','lote','metodo_cruce',
                 'venta_con_iva','coste_con_iva','margen_con_iva',
                 'venta_sin_iva','coste_sin_iva','margen_sin_iva'];
   const dec = (n) => n == null || !isFinite(n) ? '' : n.toFixed(4).replace('.', ',');
@@ -380,8 +462,7 @@ function descargarCsv() {
       new Date(f.t).toLocaleTimeString('es-ES', { hour12: false }),
       f.vendedora, f.categoria,
       f.lote != null ? f.lote : '',
-      f.horaLote ? new Date(f.horaLote).toLocaleTimeString('es-ES', { hour12: false }) : '',
-      f.desfase != null ? f.desfase : '',
+      f.metodo,
       dec(f.ventaConIva), dec(f.costeConIva), dec(f.margenConIva),
       dec(f.ventaSinIva), dec(f.costeSinIva), dec(f.margenSinIva)
     ].join(';'));
