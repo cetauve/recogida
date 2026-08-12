@@ -34,6 +34,12 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
  border-radius:20px;padding:18px 20px;margin-bottom:12px;font:inherit;position:relative;overflow:hidden}
 .tandaBtn .tt{font-size:19px;font-weight:800;margin-bottom:4px}
 .tandaBtn .dd{font-size:13px;opacity:.6}
+/* Qué hay de cada rack en esta tanda. Se lee antes de entrar, que es cuando
+   sirve: dentro las tarjetas van un rack y luego el otro. */
+.tandaBtn .racks{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.tandaBtn .rk{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+ background:rgba(237,231,219,.10);border-radius:999px;padding:3px 9px;opacity:.85}
+.tandaBtn .rk b{font-variant-numeric:tabular-nums}
 .tandaBtn .pp{position:absolute;left:0;bottom:0;height:4px;background:var(--verde)}
 .tandaBtn.lista{opacity:.5}
 .tandaBtn .tick{position:absolute;right:18px;top:50%;transform:translateY(-50%);
@@ -251,10 +257,43 @@ function verMenu(){
       <div class="tt">${t.etiqueta}</div>
       <div class="dd">${n} ${n===1?'paquete':'paquetes'} · ${prendas} prendas${
         hechos ? ' · <b>' + hechos + ' hechos</b>' : ''}</div>
+      ${racksDeTanda(t)}
       ${lista ? '<div class="tick">✓</div>' : ''}
       <div class="pp" style="width:${n?Math.round(hechos/n*100):0}%"></div>
     </button>`;
   }).join('');
+}
+
+/* QUE HAY DE CADA RACK EN CADA TANDA.
+ *
+ * Dentro de una tanda las tarjetas van rack a rack: primero todas las de una
+ * cuenta y luego las de la otra. Eso esta bien para recoger —una barrida de
+ * cada rack— pero engaña al mirar: pasas cinco tarjetas, todas del mismo rack,
+ * y das por hecho que del otro no hay ninguna. Pasó el 11 ago 2026 con
+ * billystourvlc, que tenia 7 tarjetas al final de la tanda 1.
+ *
+ * Asi que la cuenta se dice ANTES de entrar, en el boton de la tanda, con
+ * cuantas tarjetas hay de cada una. Con una sola cuenta no se pinta. */
+function racksDeTanda(t){
+  if (!DATOS.variasCuentas) return '';
+  const m = new Map();
+  for (const c of t.compradores) {
+    for (const g of (c.porCuenta || [])) {
+      if (!g.numeros || !g.numeros.length) continue;
+      const k = g.cuenta || 'sin cuenta';
+      if (!m.has(k)) m.set(k, { tarjetas: 0, prendas: 0 });
+      const e = m.get(k);
+      e.tarjetas++; e.prendas += g.numeros.length;
+    }
+  }
+  if (m.size < 2) {
+    // Una sola cuenta en esta tanda: se dice cual, que es justo el dato que
+    // falta cuando alguien busca la otra y no la encuentra.
+    const [k] = [...m.keys()];
+    return k ? `<div class="racks"><span class="rk">${k}</span></div>` : '';
+  }
+  return `<div class="racks">${[...m.entries()]
+    .map(([k, e]) => `<span class="rk">${k} · <b>${e.tarjetas}</b></span>`).join('')}</div>`;
 }
 
 /* ---------------------------------------------------- quien soy y que hago */
