@@ -77,6 +77,7 @@
   <h1>Cruce de prendas y lotes</h1>
   <p class="sub" id="cabecera">Abre aqui el enlace que manda la app de las vendedoras.</p>
   <div id="estado"></div>
+  <div id="cajaCsv"></div>
   <div id="salida"></div>
 </div>
 
@@ -250,6 +251,115 @@ window.postMessage({ fuente: 'billys-pantalla-pide' }, DESTINO);
  * Si faltan los anclajes (turnos viejos, o no supo el numero), se cae al metodo
  * de horas de siempre, que sigue aqui abajo. Y se dice cual se ha usado.
  */
+/* LEER EL CSV DE LOTES QUE SACA EL PANEL.
+ *
+ * Columnas: numero, cuenta, vendida_en (ISO), precio, sku, parado.
+ * Es un CSV nuestro, no de un tercero, así que el separador y las comillas son
+ * conocidos. Aun así se parte respetando comillas, porque un nombre de cuenta
+ * con una coma tiraría abajo el archivo entero y sería un fallo silencioso. */
+function partirCsv(linea) {
+  const out = []; let act = '', dentro = false;
+  for (let i = 0; i < linea.length; i++) {
+    const c = linea[i];
+    if (dentro) {
+      if (c === '"' && linea[i + 1] === '"') { act += '"'; i++; }
+      else if (c === '"') dentro = false;
+      else act += c;
+    } else if (c === '"') dentro = true;
+    else if (c === ',') { out.push(act); act = ''; }
+    else act += c;
+  }
+  out.push(act);
+  return out;
+}
+
+/* La hora del export de TikTok viene en formato de Estados Unidos y en hora
+ * LOCAL: "08/12/2026 10:44:15 AM". Date.parse() la lee mal en algunos
+ * navegadores, así que se parte a mano. Mes primero, día después: el 08/12 de
+ * ese archivo es el 12 de AGOSTO, no el 8 de diciembre. */
+function horaTikTok(v) {
+  const m = String(v || '').replace(/\t/g, '').trim()
+    .match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[ ,]+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!m) { const d = Date.parse(v); return Number.isFinite(d) ? d : 0; }
+  let h = parseInt(m[4], 10);
+  const ampm = (m[7] || '').toUpperCase();
+  if (ampm === 'PM' && h < 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return new Date(+m[3], +m[1] - 1, +m[2], h, +m[5], +m[6]).getTime();
+}
+
+const numeroSuelto = (v) => {
+  const t = String(v || '').replace(/[^\d.,-]/g, '');
+  if (!t) return null;
+  const x = t.includes(',') && !t.includes('.') ? t.replace(',', '.') : t.replace(/,/g, '');
+  const f = parseFloat(x);
+  return Number.isFinite(f) ? f : null;
+};
+
+function cargarCsvLotes(texto) {
+  const lineas = texto.replace(/^\ufeff/, '').split(/\r?\n/).filter((l) => l.trim());
+  if (lineas.length < 2) throw new Error('el archivo está vacío');
+  const crudo = partirCsv(lineas[0]).map((x) => x.replace(/\t/g, '').trim());
+  const cab = crudo.map((x) => x.toLowerCase());
+
+  /* DOS FORMATOS. El del panel de almacén, y el export propio de TikTok
+   * ("Exportar" en el Centro de vendedores). El de TikTok es preferible: no
+   * depende de que el panel haya capturado nada. Se reconoce por sus columnas. */
+  const iTikNum = cab.indexOf('seller sku');
+  const iTikAt = cab.indexOf('created time');
+  if (iTikNum >= 0 && iTikAt >= 0) {
+    const iPreT = cab.indexOf('sku subtotal after discount');
+    const iSkuT = cab.indexOf('sku id');
+    const iSubT = cab.indexOf('order substatus');
+    const salidaT = [];
+    for (let i = 1; i < lineas.length; i++) {
+      const c = partirCsv(lineas[i]).map((x) => String(x).replace(/\t/g, '').trim());
+      const num = parseInt(c[iTikNum], 10);
+      if (!Number.isFinite(num)) continue;
+      const at = horaTikTok(c[iTikAt]);
+      salidaT.push({
+        num,
+        price: iPreT >= 0 ? numeroSuelto(c[iPreT]) : null,
+        at: at || 0,
+        skuId: iSkuT >= 0 ? c[iSkuT] : '',
+        pagado: iSubT >= 0 ? !/cancel/i.test(c[iSubT]) : null
+      });
+    }
+    if (!salidaT.length) throw new Error('no hay ninguna fila con "Seller SKU"');
+    lotes = salidaT.sort((a, b) => a.at - b.at || a.num - b.num);
+    horaFiable = lotes.filter((l) => l.at > 0).length >= lotes.length * 0.8;
+    if (!horaFiable) throw new Error('no he podido leer las horas de "Created Time"');
+    return lotes.length;
+  }
+
+  const iNum = cab.indexOf('numero'), iAt = cab.indexOf('vendida_en'), iPre = cab.indexOf('precio');
+  if (iNum < 0 || iAt < 0) {
+    throw new Error('no reconozco las columnas. Vale el CSV del panel (numero, vendida_en) ' +
+      'o el export de TikTok (Seller SKU, Created Time)');
+  }
+  const iSku = cab.indexOf('sku'), iPar = cab.indexOf('parado');
+
+  const salida = [];
+  for (let i = 1; i < lineas.length; i++) {
+    const c = partirCsv(lineas[i]);
+    const num = parseInt(c[iNum], 10);
+    if (!Number.isFinite(num)) continue;
+    const at = c[iAt] ? Date.parse(c[iAt]) : NaN;
+    salida.push({
+      num,
+      price: iPre >= 0 ? Number(String(c[iPre]).replace(',', '.')) : null,
+      at: Number.isFinite(at) ? at : 0,
+      skuId: iSku >= 0 ? c[iSku] : '',
+      pagado: iPar >= 0 ? (c[iPar] !== 'si') : null
+    });
+  }
+  if (!salida.length) throw new Error('no hay ninguna fila con número');
+  lotes = salida.sort((a, b) => a.at - b.at || a.num - b.num);
+  horaFiable = lotes.filter((l) => l.at > 0).length >= lotes.length * 0.8;
+  if (!horaFiable) throw new Error('el CSV no trae horas: sin ellas no puedo cruzar por tiempo');
+  return lotes.length;
+}
+
 /* CRUCE POR TIEMPO — el que aguanta que se olviden de marcar.
  *
  * ESTE ES EL METODO PRINCIPAL cuando las horas vienen de directoLotes.
@@ -456,6 +566,39 @@ function pintar() {
       Sin eso solo puedo contar prendas, no cruzarlas con lo que se vendio.</div>`;
   } else {
     $('estado').innerHTML = '';
+  }
+
+  /* SUBIR LOS LOTES A MANO. El camino de la extensión falla cuando el registro
+   * del directo no se levantó, y entonces falla ENTERO — el 12 ago 2026 fueron
+   * 168 toques sin cruzar. Con el CSV de pedidos que saca el panel, el cruce no
+   * depende de nada de eso: los pedidos ya traen la hora real y el precio. */
+  const cajaCsv = document.getElementById('cajaCsv');
+  if (cajaCsv) {
+    cajaCsv.innerHTML = `<div class="panel">
+      <b>¿Sin lotes, o los lotes no cuadran?</b> Sube el CSV.<br>
+      <span class="sub">En el panel de almacén, pestaña <b>Recogida</b>, botón
+      <b>"Descargar lotes para el cruce (CSV)"</b>.<br>
+      <b>También vale el export de TikTok</b>: en el Centro de vendedores, botón <b>Exportar</b>.
+      Los dos traen la hora real de venta y el precio, que es lo que hace falta aquí.</span>
+      <div style="margin-top:10px"><input type="file" id="csvLotes" accept=".csv,text/csv"></div>
+      <div id="csvAviso" class="sub" style="margin-top:6px">${lotes
+        ? (horaFiable ? 'Ahora mismo hay ' + lotes.length + ' lotes con hora real.'
+                      : 'Ahora mismo hay ' + lotes.length + ' lotes con hora aproximada.')
+        : 'Ahora mismo no hay ningún lote.'}</div></div>`;
+    const inp = document.getElementById('csvLotes');
+    if (inp) inp.addEventListener('change', async (ev) => {
+      const f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      try {
+        const n = cargarCsvLotes(await f.text());
+        document.getElementById('csvAviso').innerHTML =
+          '<b style="color:#2E9E6B">' + n + ' lotes cargados del CSV.</b> Cruzando con su hora real.';
+        pintar();
+      } catch (err) {
+        document.getElementById('csvAviso').innerHTML =
+          '<b style="color:#C8321F">No he podido leerlo: ' + esc(err.message) + '</b>';
+      }
+    });
   }
 
   const r = ultimo = cruzar();
