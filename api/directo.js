@@ -126,9 +126,15 @@ module.exports = puerta(async (req, res) => {
      * necesita el número: no le mandamos cientos de filas por gusto. */
     if (String(q.solo || '') === 'lote') return res.status(200).json(cabecera);
 
+    /* TODAS las prendas del día, no solo las del último directo.
+     *
+     * La extensión manda un directo POR CUENTA, porque billysvlc y
+     * billystourvlc numeran sus fichas desde el 1 cada una. Filtrando por el
+     * último directo se veía un rack y el otro desaparecía: el 11 ago 2026 eso
+     * dejó las siete tarjetas de billystourvlc fuera de la vista. */
     const lotes = await s`
       select num, cuenta, vendida_en, precio, sku, titulo, parado, comprador
-      from lotes where directo = ${d.id} order by cuenta, num`;
+      from lotes where dia = ${dia} order by cuenta, num`;
     const regalos = await s`
       select tier, usuario, num, en from regalos where dia = ${dia} order by en`;
 
