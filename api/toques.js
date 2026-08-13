@@ -38,46 +38,116 @@ const VENTANA_ATRAS_MS = 10 * 60000;
 async function cruzar(s, dia, toques) {
   const lotes = await s`
     select directo, cuenta, num, vendida_en, precio, titulo
-    from lotes where dia = ${dia} and vendida_en is not null
+    from lotes where dia = ${dia} and vendida_en is not null and parado = false
     order by vendida_en`;
+  const turnos = await s`
+    select vendedora, empezo, acabo, lote_inicio, lote_fin
+    from turnos where dia = ${dia} order by empezo`;
 
   const libres = lotes.map((l) => ({ l, tomado: false }));
-  const orden = toques.slice().sort((a, b) => new Date(a.en) - new Date(b.en));
+  const ms = (x) => new Date(x).getTime();
+  const filas = [];
 
-  const filas = orden.map((t) => {
-    const tt = new Date(t.en).getTime();
+  /* ---------------------------------------------------------- 1 · EL LOTE
+   * Si la tablet tenía el panel abierto, el toque lleva pegado el número de
+   * prenda por el que iba el directo en ese instante. Eso no hay que
+   * adivinarlo: gana a cualquier cálculo por horas. */
+  const porNumero = new Map();
+  for (const x of libres) porNumero.set(x.l.cuenta + '#' + x.l.num, x);
+
+  const sinLote = [];
+  for (const t of toques) {
+    const sellado = t.lote == null ? null : (porNumero.get((t.cuenta || '') + '#' + t.lote) ||
+      libres.find((x) => !x.tomado && x.l.num === t.lote));
+    if (sellado && !sellado.tomado) {
+      sellado.tomado = true;
+      filas.push(hacerFila(t, sellado.l, 'lote'));
+    } else {
+      sinLote.push(t);
+    }
+  }
+
+  /* ---------------------------------------------------------- 2 · LA HORA
+   * Cada toque se queda con la prenda más reciente SIN RECLAMAR anterior a
+   * él. "Sin reclamar" es lo que impide que dos vendedoras se lleven la
+   * misma prenda. */
+  for (const t of sinLote.slice().sort((a, b) => ms(a.en) - ms(b.en))) {
+    const tt = ms(t.en);
     let elegido = null;
     for (let k = libres.length - 1; k >= 0; k--) {
       if (libres[k].tomado) continue;
-      const lt = new Date(libres[k].l.vendida_en).getTime();
+      const lt = ms(libres[k].l.vendida_en);
       if (lt > tt + MARGEN_DELANTE_MS) continue;
       if (tt - lt > VENTANA_ATRAS_MS) break;
       elegido = libres[k];
       break;
     }
     if (elegido) elegido.tomado = true;
-    return {
-      vendedora: t.vendedora, en: t.en, categoria: t.categoria,
-      lote: elegido ? elegido.l.num : null,
-      cuenta: elegido ? elegido.l.cuenta : null,
-      precio: elegido ? elegido.l.precio : null,
-      titulo: elegido ? elegido.l.titulo : null
-    };
-  });
+    filas.push(hacerFila(t, elegido && elegido.l, elegido ? 'hora' : null));
+  }
+
+  /* --------------------------------------------------------- 3 · EL TURNO
+   * EL PLAN B DE VERDAD. Si una prenda se vendió y nadie la marcó —se le
+   * olvidó pulsar, se quedó sin batería, la tablet no tenía el panel—, pero
+   * en ese momento SOLO HABÍA UNA VENDEDORA en turno, es suya y no hay
+   * ninguna duda. Con dos o más a la vez no se adjudica: preferimos decir
+   * "sin dueño" antes que repartir a ojo y que alguien cobre lo de otra.
+   *
+   * El rango se mira por hora y, si el turno trae números de lote apuntados,
+   * también por número: es la red de seguridad para cuando las horas de
+   * TikTok vienen mal. */
+  const enTurno = (tu, l) => {
+    const dentroPorHora = tu.empezo && ms(l.vendida_en) >= ms(tu.empezo) &&
+      (!tu.acabo || ms(l.vendida_en) <= ms(tu.acabo));
+    const dentroPorLote = tu.lote_inicio != null && tu.lote_fin != null &&
+      l.num >= tu.lote_inicio && l.num <= tu.lote_fin;
+    return dentroPorHora || dentroPorLote;
+  };
+
+  for (const x of libres) {
+    if (x.tomado) continue;
+    const suyas = turnos.filter((tu) => enTurno(tu, x.l));
+    if (suyas.length !== 1) continue;          // cero o varias: no se inventa
+    x.tomado = true;
+    filas.push({
+      vendedora: suyas[0].vendedora, en: x.l.vendida_en, categoria: '',
+      lote: x.l.num, cuenta: x.l.cuenta, precio: x.l.precio, titulo: x.l.titulo,
+      metodo: 'turno', sinToque: true
+    });
+  }
 
   const porVendedora = {};
   for (const f of filas) {
     const g = porVendedora[f.vendedora] = porVendedora[f.vendedora] ||
-      { vendedora: f.vendedora, prendas: 0, cruzadas: 0, euros: 0 };
+      { vendedora: f.vendedora, prendas: 0, cruzadas: 0, euros: 0,
+        porLote: 0, porHora: 0, porTurno: 0 };
     g.prendas++;
-    if (f.lote != null) { g.cruzadas++; g.euros += Number(f.precio || 0); }
+    if (f.lote != null) {
+      g.cruzadas++;
+      g.euros += Number(f.precio || 0);
+      if (f.metodo === 'lote')  g.porLote++;
+      if (f.metodo === 'hora')  g.porHora++;
+      if (f.metodo === 'turno') g.porTurno++;
+    }
   }
 
   return {
     lotes: lotes.length,
+    sinDuenyo: libres.filter((x) => !x.tomado).length,
     sinCruzar: filas.filter((f) => f.lote == null).length,
     porVendedora: Object.values(porVendedora).map((g) => ({ ...g, euros: Math.round(g.euros * 100) / 100 })),
-    filas
+    filas: filas.sort((a, b) => new Date(a.en) - new Date(b.en))
+  };
+}
+
+function hacerFila(t, l, metodo) {
+  return {
+    vendedora: t.vendedora, en: t.en, categoria: t.categoria,
+    lote: l ? l.num : null,
+    cuenta: l ? l.cuenta : null,
+    precio: l ? l.precio : null,
+    titulo: l ? l.titulo : null,
+    metodo: metodo
   };
 }
 
