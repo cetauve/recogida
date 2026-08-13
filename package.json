@@ -1,0 +1,9 @@
+{
+  "name": "billys-recogida",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Paginas del almacen de Billy's y la API que guarda los datos",
+  "dependencies": {
+    "postgres": "3.4.4"
+  }
+}

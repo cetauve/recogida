@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/recogida", "destination": "/app-recogida.html" },
+    { "source": "/vendedoras", "destination": "/app-vendedoras.html" },
+    { "source": "/tiempos", "destination": "/tiempos.html" },
+    { "source": "/pantalla", "destination": "/display.html" },
+    { "source": "/cruce", "destination": "/cruce.html" }
+  ]
+}

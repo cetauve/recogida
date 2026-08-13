@@ -227,6 +227,49 @@ async function desdeEnlace(){
   } catch(e){ console.warn('enlace ilegible', e); return null; }
 }
 
+/* DESDE EL SERVIDOR.
+ *
+ * El enlace con los datos dentro seguirá funcionando siempre —es el plan B si
+ * un día no hay internet en el almacén, y así nadie se queda tirado—, pero lo
+ * normal pasa a ser esto: la dirección se guarda una vez en la pantalla de
+ * inicio y ya no cambia nunca.
+ *
+ *     /recogida?d=CODIGO
+ *
+ * Sin el código no se devuelve nada: es lo único que separa los nombres de los
+ * compradores de cualquiera que teclee la dirección.
+ */
+const CODIGO = new URLSearchParams(location.search).get('d') || '';
+let GENERADO = null;      // el sello de lo que estamos usando ahora mismo
+let PENDIENTE = null;     // datos nuevos que aún no toca meter
+
+async function desdeApi(){
+  if (!CODIGO) return null;
+  try {
+    const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO), { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.hay || !j.datos || !(j.datos.tandas || []).length) return null;
+    j.datos.generado = j.datos.generado || j.generado;
+    return j.datos;
+  } catch(e){ console.warn('sin servidor', e); return null; }
+}
+
+/* NO SE LE CAMBIA LA PANTALLA A NADIE A MEDIO PAQUETE.
+ *
+ * Mientras alguien recoge, imprimimos otra tanda y el servidor cambia. Si la
+ * app se recargara sola en ese momento, quien está a mitad de un paquete vería
+ * cambiar los números en la mano. Así que lo nuevo espera guardado y entra
+ * cuando esa persona vuelve al menú, que es el único momento en que no está
+ * haciendo nada. */
+async function mirarSiHayNuevo(){
+  if (!CODIGO || document.hidden) return;
+  const d = await desdeApi();
+  if (!d || d.generado === GENERADO) return;
+  PENDIENTE = d;
+  if ($('menu').classList.contains('on')) verMenu();   // el menú se sirve solo
+}
+
 // El avance se guarda por tanda. Cada móvil tiene el suyo.
 const claveDe = (ti) => 'billys_rec_' + DATOS.titulo + '_t' + ti;
 function guardar(){
@@ -240,6 +283,10 @@ function leer(ti){
 
 // ------------------------------------------------------------------ menú
 function verMenu(){
+  /* Si llegaron tandas nuevas mientras alguien empaquetaba, entran aquí: al
+   * volver al menú no está a medias de nada. */
+  if (PENDIENTE) { DATOS = PENDIENTE; GENERADO = PENDIENTE.generado; PENDIENTE = null;
+                   document.title = 'Recogida · ' + DATOS.titulo; }
   tandaActual = null;
   ['barra','pila','pie','fin'].forEach(x => $(x).classList.remove('on'));
   $('menu').classList.add('on');
@@ -477,6 +524,28 @@ async function empaquetar(o){
 }
 async function mandarTiempos(){
   if (!MARCAS.length) { alert('Todavía no has marcado nada.'); return; }
+
+  /* Con servidor, esto deja de ser un WhatsApp. Se puede pulsar veinte veces
+   * sin miedo: la clave es (día, quien, pedido, estado), así que reenviar lo
+   * mismo no inventa paquetes. Por eso también se manda TODO cada vez y no
+   * solo lo nuevo — si un envío se perdió, el siguiente lo arregla solo. */
+  if (CODIGO && QUIEN) {
+    try {
+      const r = await fetch('/api/tiempos?d=' + encodeURIComponent(CODIGO), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quien: QUIEN, modo: MODO, marcas: MARCAS })
+      });
+      const j = await r.json();
+      if (r.ok && j.ok) {
+        alert('Mandado. ' + j.total + ' ' + (j.total === 1 ? 'marca guardada' : 'marcas guardadas') +
+              ' a tu nombre.\n\nSe ven en /tiempos junto a las de todos.');
+        return;
+      }
+    } catch(e){ console.warn('no he podido mandarlo al servidor', e); }
+    /* Si el servidor no contesta seguimos por WhatsApp, que es como se hacía
+     * hasta ahora: mejor un rodeo que perder los tiempos de una tarde. */
+  }
+
   const carga = await empaquetar({
     v: 1, tipo: 'tiempos', modo: MODO, quien: QUIEN,
     titulo: DATOS.titulo, desfaseHuso: new Date().getTimezoneOffset(),
@@ -553,9 +622,15 @@ async function arrancar(){
   if (hash === ultimoHash) return;
   ultimoHash = hash;
 
+  /* El orden importa: si alguien abre un enlace con datos dentro, gana el
+   * enlace. Es lo que hace que se pueda mandar una tanda suelta por WhatsApp
+   * aunque el servidor esté caído. Lo normal, sin embargo, es no traer nada
+   * en la almohadilla y que los datos vengan del servidor. */
   const delEnlace = await desdeEnlace();
   if (delEnlace && delEnlace.tandas && delEnlace.tandas.length) DATOS = delEnlace;
-  else DATOS = EMBEBIDOS;
+  else DATOS = (await desdeApi()) || EMBEBIDOS;
+  GENERADO = DATOS.generado || null;
+  PENDIENTE = null;
 
   if (!DATOS.tandas || !DATOS.tandas.length) {
     $('menu').classList.remove('on');
@@ -564,7 +639,9 @@ async function arrancar(){
     $('finTitulo').textContent = 'No hay nada que recoger';
     $('finTexto').textContent = hash.length > 8
       ? 'El enlace trae algo que no consigo leer. Vuelve a generarlo desde el panel.'
-      : 'Este enlace no trae datos. Genera uno nuevo desde el panel.';
+      : CODIGO
+        ? 'Todavía no hay tandas de hoy. Deja esto abierto: en cuanto se imprima la primera, aparece sola.'
+        : 'Este enlace no trae datos. Genera uno nuevo desde el panel.';
     $('alMenu').style.display = 'none'; $('reiniciar').style.display = 'none';
     return;
   }
@@ -575,6 +652,15 @@ async function arrancar(){
 
 window.addEventListener('hashchange', arrancar);
 arrancar();
+
+/* Mirar si hay tandas nuevas. Medio minuto es de sobra —entre que se imprime
+ * una tanda y llega el carro pasa bastante más— y no gasta batería del móvil
+ * de nadie. Cuando la pantalla está apagada no se pregunta; al volver, sí,
+ * porque es justo cuando alguien acaba de coger el móvil para seguir. */
+if (CODIGO) {
+  setInterval(mirarSiHayNuevo, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) mirarSiHayNuevo(); });
+}
 </script>
 </body>
 </html>
