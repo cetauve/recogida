@@ -118,6 +118,9 @@
   #conDirecto{font-size:12px;text-align:center;margin-top:6px;min-height:15px;
  letter-spacing:.03em;color:rgba(237,231,219,.35)}
 #conDirecto.conectado{color:#2E9E6B;font-weight:700}
+#estadoEnvio{font-size:12px;text-align:center;min-height:15px;
+ letter-spacing:.03em;color:rgba(237,231,219,.35)}
+#estadoEnvio.ok{color:#2E9E6B;font-weight:700}
 #ultimo{
     min-height:22px;text-align:center;font-size:14px;color:var(--verde);
     font-weight:700;margin:10px 0 2px
@@ -181,6 +184,7 @@
        móvil suelto queda vacío y no ocupa nada: no hay que explicar una
        ausencia, pero sí conviene ver la presencia. -->
   <div id="conDirecto"></div>
+  <div id="estadoEnvio"></div>
   <div class="pie">
     <button id="deshacer" class="secundario" disabled>Deshacer</button>
     <button id="terminar" class="secundario">Terminar</button>
@@ -309,6 +313,79 @@ function base64url(u8) {
 }
 
 /* =========================================================================
+   EL SERVIDOR
+   =========================================================================
+   La vendedora abre SIEMPRE el mismo enlace y no vuelve a tocarlo:
+
+       /vendedoras?d=CODIGO
+
+   Sin el código la app funciona exactamente como antes: todo se guarda en el
+   móvil y sale por WhatsApp al terminar. Con el código, además, los toques y
+   el turno viajan solos al servidor.
+
+   SE MANDA TODO CADA VEZ, no solo lo nuevo. La clave en el servidor es
+   (día, vendedora, hora exacta), así que repetir un envío no duplica nada y
+   sí arregla el anterior si se perdió por falta de cobertura. Es más simple
+   que llevar una cola de pendientes y falla de menos maneras.
+   ========================================================================= */
+const CODIGO = new URLSearchParams(location.search).get('d') || '';
+let mandando = false, otraVez = false, ultimoOk = 0;
+
+async function subir(cual) {
+  const ses = cual || sesion;
+  if (!CODIGO || !ses) return false;
+  if (mandando) { otraVez = true; return false; }   // ya hay uno en vuelo
+  mandando = true;
+  try {
+    const r = await fetch('/api/toques?d=' + encodeURIComponent(CODIGO), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vendedora: ses.vendedora,
+        /* El turno empieza cuando puso el nombre y entró a la rejilla, no en
+           su primer toque: si se contara desde el primer toque, las horas de
+           quien menos vende saldrían más cortas y su €/hora inflado. */
+        turno: {
+          empezo: new Date(ses.inicio).toISOString(),
+          acabo: ses.fin ? new Date(ses.fin).toISOString() : null,
+          loteInicio: ses.loteInicio,
+          loteFin: ses.loteFin == null ? null : ses.loteFin
+        },
+        toques: ses.toques.map((t) => ({
+          en: new Date(t.t).toISOString(),
+          categoria: t.c,
+          lote: t.lote == null ? null : t.lote,
+          sesion: t.sesionDirecto || ''
+        }))
+      })
+    });
+    const j = await r.json().catch(() => null);
+    const bien = r.ok && j && j.ok;
+    if (bien) ultimoOk = Date.now();
+    pintarEnvio(bien);
+    return bien;
+  } catch (_) {
+    pintarEnvio(false);
+    return false;
+  } finally {
+    mandando = false;
+    if (otraVez) { otraVez = false; subir(ses); }
+  }
+}
+
+/* Un solo renglón, sin alarmismo: si no hay cobertura no pasa nada grave
+   —lo de verdad está guardado en el móvil— pero conviene poder verlo. */
+function pintarEnvio(bien) {
+  const el = $('estadoEnvio');
+  if (!el || !CODIGO) return;
+  el.textContent = bien ? 'Guardado en el servidor' : 'Sin conexión · se reintenta al siguiente toque';
+  el.className = bien ? 'ok' : '';
+}
+
+/* Cada pocos toques y cada minuto. No en cada toque: la vendedora pulsa a
+   ráfagas y no hace falta una petición por dedo. */
+setInterval(() => { if (sesion && CODIGO && Date.now() - ultimoOk > 60000) subir(); }, 20000);
+
+/* =========================================================================
    ESTADO
    ========================================================================= */
 let sesion = null;          // { vendedora, inicio, toques:[{c,t}] }
@@ -362,7 +439,9 @@ function arrancar() {
      HORA DE ENTRADA para calcular las horas trabajadas: si las sacara del hueco
      entre el primer y el ultimo toque, estaria inflando el €/hora justo de
      quien menos vende. */
-  enviarSuelto({ vendedora: v, tipo: 'inicio', t: sesion.inicio });
+  /* El turno se abre en el servidor AQUÍ, no al terminar: así se sabe quién
+     está trabajando ahora mismo aunque el móvil se quede sin batería después. */
+  subir();
   entrarTrabajo();
 }
 
@@ -455,8 +534,9 @@ function marcar(id, boton) {
   if (l) { toque.lote = l.num; toque.sesionDirecto = l.sessionId; }
   sesion.toques.push(toque);
   guardar(LLAVE_SESION, sesion);   // en disco ANTES de pintar nada
-  enviarSuelto({ vendedora: sesion.vendedora, categoria: id, t: ahora,
-                 lote: l ? l.num : null, sesionDirecto: l ? l.sessionId : null });
+  /* Al servidor cada 5 toques. En disco va SIEMPRE, así que perder un envío
+     no pierde nada: el siguiente manda el turno entero otra vez. */
+  if (sesion.toques.length % 5 === 0) subir();
 
   if (navigator.vibrate) navigator.vibrate(18);
   boton.classList.add('pulsada');
@@ -502,15 +582,30 @@ $('cerrarYa').onclick = () => {
   const lf = parseInt($('loteFin').value, 10);
   sesion.loteFin = Number.isFinite(lf) ? lf : null;
   sesion.fin = Date.now();
-  enviarSuelto({ vendedora: sesion.vendedora, tipo: 'fin', t: sesion.fin });
 
+  const cerrado = sesion;
   const pend = leer(LLAVE_PENDIENTES, []);
   if (sesion.toques.length) pend.push(sesion);
   guardar(LLAVE_PENDIENTES, pend);
-  borrar(LLAVE_SESION);
   clearInterval(cronometro);
 
-  mostrarFin(sesion.toques.length ? [sesion] : pend);
+  /* El envío de cierre va con el turno completo (hora de salida y lote final).
+     Si sale bien, el turno ya está entero en el servidor y el WhatsApp pasa a
+     ser opcional; si sale mal, la pantalla de siempre sigue ahí. */
+  const alFinal = subir(cerrado).then((bien) => {
+    sesion = null; borrar(LLAVE_SESION);
+    const av = $('finAviso');
+    if (av && bien) {
+      av.innerHTML = 'Turno guardado en el servidor. Ya puedes cerrar.';
+      av.style.borderColor = 'var(--verde)';
+      av.style.background = '#12241C';
+      borrar(LLAVE_PENDIENTES);
+    }
+  });
+  if (!CODIGO) { sesion = null; borrar(LLAVE_SESION); }
+  void alFinal;
+
+  mostrarFin(cerrado.toques.length ? [cerrado] : pend);
 };
 
 /* =========================================================================
@@ -599,18 +694,6 @@ function limpiarPendientes() {
   $('finAviso').style.background = '#12241C';
 }
 
-/* =========================================================================
-   ENVIO SUELTO (opcional) · solo si hay un backend configurado
-   ========================================================================= */
-/* Ya NO se manda nada en vivo a ningun sitio.
-   Decision del 11 ago 2026: no hace falta ver los toques en tiempo real, basta
-   con cuadrarlo al final del turno. Eso se llevo por delante el servidor local
-   —que ademas se lo comia el antivirus del PC de la tienda— y con el, todo el
-   montaje de IPs, ?srv= y cortafuegos.
-   Los toques y las horas de entrada y salida viajan dentro del enlace que se
-   manda al terminar. Si algun dia hace falta historico automatico, aqui es
-   donde iria la llamada. */
-function enviarSuelto() { /* a proposito, no hace nada */ }
 
 /* =========================================================================
    ARRANQUE  ·  si habia un turno a medias, se retoma donde estaba

@@ -121,6 +121,22 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 #fin button{background:var(--red);color:#fff;border:0;border-radius:14px;padding:14px 24px;
  font:inherit;font-weight:800;margin-top:8px}
 #fin button.otro{background:rgba(237,231,219,.12)}
+
+/* --- la cola de empaquetado --- */
+#cola{display:none;flex-direction:column;min-height:100dvh;padding:18px 16px 24px}
+#cola.on{display:flex}
+#cola h1{margin:0 0 4px}
+#colaFicha{flex:1;display:flex;align-items:center;justify-content:center;padding:10px 0}
+#colaFicha .tarjeta{position:relative;width:100%;max-width:520px}
+#colaVacia{text-align:center;opacity:.6;font-size:16px;line-height:1.6;padding:40px 10px}
+#colaCabecera{display:flex;align-items:baseline;gap:10px;margin:6px 0 2px}
+#colaCabecera b{font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+#colaCabecera span{font-size:18px;font-weight:700}
+#colaBotones{display:flex;flex-direction:column;gap:10px;margin-top:auto}
+#colaBotones button{border:0;border-radius:14px;padding:16px;font:inherit;font-weight:800;font-size:17px}
+#pedir{background:var(--red);color:#fff}
+#cerrarPaq{background:#2E9E6B;color:#fff}
+#soltarPaq{background:rgba(237,231,219,.12);color:inherit;font-weight:600;font-size:15px;padding:12px}
 </style>
 </head>
 <body>
@@ -143,6 +159,22 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 
   <div id="tandas"></div>
   <div class="pie" id="menuPie"></div>
+</div>
+
+<!-- LA COLA · lo que ve quien empaqueta.
+     No elige paquete: lo pide. El servidor reparte y garantiza que a dos
+     personas no les toque el mismo. -->
+<div id="cola">
+  <h1>Paquetes</h1>
+  <div class="sub" id="colaSub"></div>
+  <div id="colaCabecera" style="display:none"><b id="colaNum"></b><span id="colaQuien"></span></div>
+  <div id="colaFicha"><div id="colaVacia">Pulsa <b>Dame el siguiente</b> cuando estés libre.</div></div>
+  <div id="colaBotones">
+    <button id="pedir">Dame el siguiente</button>
+    <button id="cerrarPaq" style="display:none">Paquete cerrado</button>
+    <button id="soltarPaq" style="display:none">No puedo con este · devolverlo</button>
+    <button id="colaSalir" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar de nombre o de tarea</button>
+  </div>
 </div>
 
 <div id="barra">
@@ -356,12 +388,146 @@ function pintarQuienSoy(){
   for (const b of document.querySelectorAll('.modoBtn')) b.classList.toggle('on', b.dataset.m === MODO);
   const listo = !!(QUIEN.trim() && MODO);
   $('tandas').classList.toggle('bloqueado', !listo);
+  /* Con cola, el que empaqueta ya no recorre tandas: pide paquetes. Verlas le
+     confundiria y ademas le dejaria hacer uno que ya esta haciendo otro. */
+  const aLaCola = listo && MODO === 'empaqueta' && !!CODIGO;
+  $('tandas').style.display = aLaCola ? 'none' : '';
   $('ayudaModo').innerHTML = !listo
     ? 'Pon tu nombre y elige qué haces. Sin eso no puedo medir a nadie.'
     : (MODO === 'recoge'
         ? 'Tu <b>Listo</b> significa: <b>paquete entregado</b> al que empaqueta. Ahí arranca su reloj.'
-        : 'Tu <b>Listo</b> significa: <b>paquete cerrado</b>. Ahí para el reloj.');
+        : (CODIGO
+            ? 'Vas a la <b>cola</b>: pides paquete y el servidor te lo da. Nadie hará el tuyo.'
+            : 'Tu <b>Listo</b> significa: <b>paquete cerrado</b>. Ahí para el reloj.'));
+  if (aLaCola) verCola();
 }
+
+/* =========================================================================
+   LA COLA DE EMPAQUETADO
+   =========================================================================
+   Antes los dos —el que recoge y el que empaqueta— recorrian la MISMA lista,
+   cada uno en su movil, y se cruzaban al final. Eso vale para una pareja fija.
+   No vale para un recogedor y tres personas doblando, que es como se trabaja:
+   no hay forma de que los tres sepan cual coger sin gritarselo, y dos acaban
+   haciendo el mismo paquete.
+
+   Ahora el recogedor EMPUJA: cada vez que desliza, ese paquete entra en la
+   cola del servidor. Los que empaquetan no eligen, piden. El reparto lo hace
+   Postgres con FOR UPDATE SKIP LOCKED, que es lo unico que garantiza que dos
+   moviles que pulsan a la vez se lleven paquetes distintos.
+   ========================================================================= */
+let PAQ = null;               // el paquete que tengo ahora mismo en la mesa
+
+async function apiCola(cuerpo){
+  const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+    method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
+    body: JSON.stringify(cuerpo)
+  });
+  return r.json();
+}
+
+function verCola(){
+  ['menu','barra','pila','pie','fin'].forEach(x => $(x).classList.remove('on'));
+  $('cola').classList.add('on');
+  pintarCola();
+  refrescarContador();
+}
+
+/* Cuantos quedan. Se mira al entrar y cada quince segundos: es lo que le dice
+   a quien empaqueta si puede ir al bano o si tiene diez encima. */
+let relojCola = null;
+async function refrescarContador(){
+  clearInterval(relojCola);
+  relojCola = setInterval(refrescarContador, 15000);
+  if (!$('cola').classList.contains('on')) { clearInterval(relojCola); return; }
+  try {
+    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
+    const j = await r.json();
+    if (!j || !j.ok) return;
+    $('colaSub').textContent = j.espera + (j.espera === 1 ? ' paquete esperando · ' : ' paquetes esperando · ')
+      + j.cerrado + ' hechos hoy';
+  } catch(e){ $('colaSub').textContent = 'Sin conexión con el servidor'; }
+}
+
+function pintarCola(){
+  const hay = !!PAQ;
+  $('pedir').style.display      = hay ? 'none' : '';
+  $('cerrarPaq').style.display  = hay ? '' : 'none';
+  $('soltarPaq').style.display  = hay ? '' : 'none';
+  $('colaCabecera').style.display = hay ? 'flex' : 'none';
+  if (!hay){
+    $('colaFicha').innerHTML = '<div id="colaVacia">Pulsa <b>Dame el siguiente</b> cuando estés libre.</div>';
+    return;
+  }
+  /* El numero de paquete es lo que se dicen en voz alta ("voy con el 12") y va
+     en grande; el nombre debajo, para cantarlo al entregarlo. */
+  $('colaNum').textContent = '#' + PAQ.numero;
+  $('colaQuien').textContent = PAQ.apodo || '';
+  $('colaFicha').innerHTML = tarjetaHTML(PAQ.ficha);
+}
+
+$('pedir').addEventListener('click', async () => {
+  $('pedir').disabled = true;
+  $('pedir').textContent = 'Pidiendo…';
+  try {
+    const j = await apiCola({ accion:'siguiente', quien: QUIEN });
+    if (j && j.ok && j.hay){
+      PAQ = j.paquete;
+      try{ localStorage.setItem('billys_paq', JSON.stringify(PAQ)); }catch(e){}
+      if (navigator.vibrate) navigator.vibrate(20);
+    } else {
+      PAQ = null;
+      $('colaFicha').innerHTML = '<div id="colaVacia">No hay paquetes esperando.<br>Vuelve a pulsar en un momento.</div>';
+    }
+  } catch(e){
+    $('colaFicha').innerHTML = '<div id="colaVacia">No he podido hablar con el servidor.<br>Prueba otra vez.</div>';
+  }
+  $('pedir').disabled = false;
+  $('pedir').textContent = 'Dame el siguiente';
+  pintarCola(); refrescarContador();
+});
+
+$('cerrarPaq').addEventListener('click', async () => {
+  if (!PAQ) return;
+  const b = $('cerrarPaq');
+  b.disabled = true;
+  /* La hora se sella AQUI, en el gesto. Si el envio falla se reintenta con la
+     hora original, no con la de cuando vuelva la cobertura. */
+  const en = new Date().toISOString();
+  const pedido = PAQ.pedido;
+  try {
+    const j = await apiCola({ accion:'cerrar', quien: QUIEN, pedido, en });
+    if (j && j.ok){
+      PAQ = null;
+      try{ localStorage.removeItem('billys_paq'); }catch(e){}
+      if (navigator.vibrate) navigator.vibrate([18,40,18]);
+    } else { alert('No se ha podido cerrar. Prueba otra vez.'); }
+  } catch(e){ alert('Sin conexión. El paquete sigue siendo tuyo; prueba otra vez.'); }
+  b.disabled = false;
+  pintarCola(); refrescarContador();
+});
+
+$('soltarPaq').addEventListener('click', async () => {
+  if (!PAQ) return;
+  if (!confirm('¿Devolverlo a la cola para que lo haga otro?')) return;
+  try { await apiCola({ accion:'soltar', quien: QUIEN, pedido: PAQ.pedido }); } catch(e){}
+  PAQ = null;
+  try{ localStorage.removeItem('billys_paq'); }catch(e){}
+  pintarCola(); refrescarContador();
+});
+
+$('colaSalir').addEventListener('click', () => {
+  clearInterval(relojCola);
+  $('cola').classList.remove('on');
+  $('menu').classList.add('on');
+});
+
+/* Si el movil se bloqueo con un paquete en la mesa, al volver sigue siendo
+   suyo: el servidor se lo devuelve tal cual en vez de darle otro. */
+try {
+  const g = JSON.parse(localStorage.getItem('billys_paq') || 'null');
+  if (g && g.pedido) PAQ = g;
+} catch(e){}
 $('miNombre').addEventListener('input', () => {
   QUIEN = $('miNombre').value;
   localStorage.setItem('billys_quien', QUIEN);
@@ -484,14 +650,73 @@ function terminar(){
   guardar();
 }
 
+/* ===========================================================================
+ * EL RECOGEDOR EMPUJA A LA COLA
+ *
+ * Se guarda primero en el movil y se manda despues. Si no hay cobertura, el
+ * paquete se queda en la lista de pendientes y sale con el siguiente deslice:
+ * el recogedor no se para nunca por culpa del wifi, y no hay ningun gesto que
+ * repetir a mano.
+ *
+ * Se manda la ficha ENTERA porque quien empaqueta entra por un enlace que no
+ * sabe nada de tandas: pide un paquete y tiene que recibir todo lo que
+ * necesita para hacerlo.
+ * ======================================================================== */
+const LLAVE_COLA = 'billys_cola_pend';
+let PENDCOLA = [];
+try { PENDCOLA = JSON.parse(localStorage.getItem(LLAVE_COLA) || '[]'); } catch(e){ PENDCOLA = []; }
+const guardarPend = () => { try{ localStorage.setItem(LLAVE_COLA, JSON.stringify(PENDCOLA)); }catch(e){} };
+
+function aLaCola(f, cuando){
+  if (!CODIGO || MODO !== 'recoge') return;
+  PENDCOLA.push({
+    pedido: f.pedido, apodo: f.apodo, prendas: f.numeros.length,
+    tanda: (DATOS.tandas[tandaActual] || {}).etiqueta || '',
+    ficha: f, en: new Date(cuando).toISOString()
+  });
+  guardarPend();
+  vaciarCola();
+}
+
+let vaciando = false;
+async function vaciarCola(){
+  if (vaciando || !PENDCOLA.length || !CODIGO) return;
+  vaciando = true;
+  const iban = PENDCOLA.slice();
+  try {
+    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+      method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
+      body: JSON.stringify({ accion:'meter', quien: QUIEN, paquetes: iban })
+    });
+    const j = await r.json();
+    if (j && j.ok) {
+      /* Solo se quitan los que iban en ESTE envio: mientras volaba puede
+         haberse deslizado otro y no hay que tragarselo sin mandarlo. */
+      const fuera = new Set(iban.map((x) => x.pedido));
+      PENDCOLA = PENDCOLA.filter((x) => !fuera.has(x.pedido));
+      guardarPend();
+    }
+  } catch(e){ /* sin red: se queda pendiente y sale con el siguiente */ }
+  vaciando = false;
+  if (PENDCOLA.length) setTimeout(vaciarCola, 4000);
+}
+/* Por si el ultimo deslice del dia se quedo sin mandar. */
+setInterval(vaciarCola, 20000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) vaciarCola(); });
+
 function avanzar(estado){
   if (i >= FICHAS.length) return;
   const f = FICHAS[i];
   if (estado === 'inc') incidencias.push(f);
   /* La hora se sella AQUI, en el momento del gesto, y no se recalcula nunca.
      Es el unico dato que no se puede reconstruir despues. */
+  const ahora = Date.now();
   MARCAS.push({ pedido: f.pedido, apodo: f.apodo, prendas: f.numeros.length,
-                t: Date.now(), estado });
+                t: ahora, estado });
+  /* AQUI EMPIEZA LA COLA. Deslizar "Listo" ya no es solo una marca de tiempo:
+     el paquete pasa a estar disponible para quien empaquete. Las incidencias
+     no entran —ese paquete tiene un problema y no se puede cerrar—. */
+  if (estado !== 'inc') aLaCola(f, ahora);
   historial.push({i, estado}); i++;
   guardar(); pintar();
   if (navigator.vibrate) navigator.vibrate(estado==='inc' ? [12,40,12] : 18);
