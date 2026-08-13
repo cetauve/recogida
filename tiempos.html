@@ -317,11 +317,67 @@ function pintarEntrada() {
   $('cargar1').onclick = () => cargarTexto($('txt1').value);
 }
 
+/* DESDE EL SERVIDOR.
+ *
+ * Hasta hoy había que pedirle a cada persona su enlace y pegarlo aquí uno a
+ * uno: si eran cuatro móviles, cuatro enlaces por WhatsApp, y si a alguien se
+ * le olvidaba, su turno no salía. Ahora sus marcas ya están arriba —el móvil
+ * las manda al pulsar "Mandar mis tiempos"— y esta página las junta sola.
+ *
+ *     /tiempos?d=CODIGO
+ *
+ * Los enlaces siguen funcionando, y no por costumbre: son el plan B del día
+ * que no haya internet en el almacén.
+ */
+const CODIGO = new URLSearchParams(location.search).get('d') || '';
+
+async function desdeApi() {
+  if (!CODIGO) return [];
+  const r = await fetch('/api/tiempos?d=' + encodeURIComponent(CODIGO), { cache: 'no-store' });
+  if (!r.ok) return [];
+  const j = await r.json();
+  if (!j || !j.ok) return [];
+
+  /* Del formato de la base al que ya entiende esta página: una "entrega" por
+   * persona y papel, que es como llegaban por enlace. Así el cruce, la tabla
+   * y el CSV siguen sin enterarse de que ha cambiado nada debajo. */
+  const por = new Map();
+  for (const m of (j.marcas || [])) {
+    const k = m.quien + '|' + m.modo;
+    if (!por.has(k)) por.set(k, {
+      tipo: 'tiempos', v: 1, modo: m.modo, quien: m.quien,
+      titulo: j.dia, delServidor: true, marcas: []
+    });
+    por.get(k).marcas.push({
+      pedido: m.pedido, apodo: m.apodo, prendas: m.prendas,
+      t: Date.parse(m.en), estado: m.estado
+    });
+  }
+  return [...por.values()];
+}
+
+async function refrescar() {
+  const nuevas = await desdeApi();
+  if (!nuevas.length) return false;
+  /* Lo del servidor manda sobre lo del servidor, y no toca lo que se haya
+   * pegado a mano por enlace: las dos fuentes conviven sin pisarse. */
+  entregas = entregas.filter((x) => !x.delServidor).concat(nuevas);
+  guardar();
+  return true;
+}
+
 (async () => {
   const h = (location.hash || '').slice(1);
   if (h.length > 8) { try { meter(await desempaquetar(h)); location.hash = ''; } catch (_) {} }
+  if (CODIGO) { try { await refrescar(); } catch (e) { console.warn('sin servidor', e); } }
   pintarEntrada();
   pintar();
+
+  /* Mientras se empaqueta, esto se mira desde el móvil o desde casa y tiene
+   * que ir solo. Medio minuto es de sobra para ver el ritmo. */
+  if (CODIGO) setInterval(async () => {
+    try { if (await refrescar()) { pintarEntrada(); pintar(); } } catch (_) {}
+  }, 30000);
 })();
 
 window.addEventListener('hashchange', () => location.reload());
