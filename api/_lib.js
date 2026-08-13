@@ -87,9 +87,63 @@ const ESQUEMA = [
      lote      integer,
      cuenta    text not null default '',
      sesion    text not null default '',
+     categoria text not null default '',
      unique (dia, vendedora, en)
    )`,
   `create index if not exists toques_dia on toques (dia, vendedora)`,
+  /* La app de la vendedora manda qué categoría pulsó desde el primer día y
+   * hasta hoy se tiraba. Sin ella no se puede saber qué vende cada una. */
+  `alter table toques add column if not exists categoria text not null default ''`,
+
+  /* EL TURNO DE CADA VENDEDORA · de qué hora a qué hora estuvo.
+   *
+   * Empieza a contar cuando pone su nombre y entra a la rejilla, NO en su
+   * primer toque. Si se midiera por los toques, las horas de quien menos vende
+   * saldrían más cortas y su €/hora inflado.
+   *
+   * La clave lleva la hora de entrada para que una misma persona pueda hacer
+   * dos turnos el mismo día (mañana y tarde) sin pisarse, y para que reenviar
+   * el mismo turno no cree uno nuevo. */
+  `create table if not exists turnos (
+     dia         date not null,
+     vendedora   text not null,
+     empezo      timestamptz not null,
+     acabo       timestamptz,
+     lote_inicio integer,
+     lote_fin    integer,
+     directo     text not null default '',
+     actualizado timestamptz not null default now(),
+     primary key (dia, vendedora, empezo)
+   )`,
+  `create index if not exists turnos_dia on turnos (dia)`,
+
+  /* LA COLA DE EMPAQUETADO.
+   *
+   * Un solo recogedor va dejando paquetes aquí según los desliza, y varios
+   * empaquetadores piden "el siguiente" desde sus móviles. El reparto se hace
+   * con FOR UPDATE SKIP LOCKED, que es lo único que garantiza que a dos
+   * móviles no les toque el mismo paquete aunque pulsen en el mismo instante.
+   *
+   * La ficha entera se guarda aquí dentro (jsonb) porque el empaquetador entra
+   * por un enlace que no sabe nada de tandas: pide un paquete y tiene que
+   * recibir TODO lo que necesita para hacerlo, sin buscarlo en ningún sitio. */
+  `create table if not exists cola (
+     dia          date not null,
+     pedido       text not null,
+     numero       integer,
+     apodo        text not null default '',
+     tanda        text not null default '',
+     prendas      integer,
+     ficha        jsonb not null,
+     estado       text not null default 'espera',
+     quien_abrio  text not null default '',
+     abierto_en   timestamptz not null,
+     quien_cierra text not null default '',
+     tomado_en    timestamptz,
+     cerrado_en   timestamptz,
+     primary key (dia, pedido)
+   )`,
+  `create index if not exists cola_espera on cola (dia, estado, numero)`,
 
   /* Lo calculado para el almacén: el mismo objeto que hasta hoy viajaba
    * detrás de la almohadilla del enlace. Una fila por día; la extensión
@@ -111,11 +165,16 @@ const ESQUEMA = [
      equipo text not null default '',
      pedido text not null default '',
      apodo  text,
+     prendas integer,
      en     timestamptz not null,
      estado text not null default 'listo',
      unique (dia, quien, pedido, estado)
    )`,
   `create index if not exists tiempos_dia on tiempos (dia, quien)`,
+  /* La base de producción se creó sin esta columna y el "create" de arriba ya
+   * no se vuelve a ejecutar sobre una base que existe. Sin el alter, /tiempos
+   * seguiría enseñando la columna de prendas vacía para siempre. */
+  `alter table tiempos add column if not exists prendas integer`,
 
   /* Quién ganó qué. Viaja a las tarjetas de recogida para que quien empaqueta
    * meta el detalle en ese paquete. */

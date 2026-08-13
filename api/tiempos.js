@@ -15,7 +15,7 @@
  * aparezcan paquetes de más.
  */
 const {
-  db, puerta, puedeLeer, noAutorizado, diaDe, aFecha, aTexto, cuerpo
+  db, puerta, puedeLeer, noAutorizado, diaDe, aFecha, aEntero, aTexto, cuerpo
 } = require('./_lib');
 
 const TROZO = 400;
@@ -37,6 +37,10 @@ module.exports = puerta(async (req, res) => {
         dia, quien, modo, equipo,
         pedido: aTexto(x.pedido),
         apodo: x.apodo === undefined ? null : aTexto(x.apodo),
+        /* Cuántas prendas llevaba el paquete. El móvil ya lo manda; sin esta
+         * línea /tiempos no puede decir "4 prendas en 3 minutos", que es la
+         * mitad de para qué existe esa página. */
+        prendas: aEntero(x.prendas),
         en: aFecha(x.en || x.t || x.cuando),
         estado: aTexto(x.estado) || 'listo'
       }))
@@ -50,12 +54,15 @@ module.exports = puerta(async (req, res) => {
     for (let i = 0; i < filas.length; i += TROZO) {
       const parte = filas.slice(i, i + TROZO);
       await s`
-        insert into tiempos ${s(parte, 'dia', 'quien', 'modo', 'equipo', 'pedido', 'apodo', 'en', 'estado')}
+        insert into tiempos ${s(parte, 'dia', 'quien', 'modo', 'equipo', 'pedido', 'apodo', 'prendas', 'en', 'estado')}
         on conflict (dia, quien, pedido, estado) do update set
           en     = excluded.en,
           modo   = case when excluded.modo = '' then tiempos.modo else excluded.modo end,
           equipo = case when excluded.equipo = '' then tiempos.equipo else excluded.equipo end,
-          apodo  = coalesce(excluded.apodo, tiempos.apodo)`;
+          apodo  = coalesce(excluded.apodo, tiempos.apodo),
+          /* coalesce y no pisar: un móvil viejo que reenvíe sin prendas no
+           * debe borrar la cuenta que ya había guardado otro envío. */
+          prendas = coalesce(excluded.prendas, tiempos.prendas)`;
       guardados += parte.length;
     }
 
@@ -68,7 +75,7 @@ module.exports = puerta(async (req, res) => {
     const q = req.query || {};
     const dia = diaDe(q.dia);
     const filas = await s`
-      select quien, modo, equipo, pedido, apodo, en, estado
+      select quien, modo, equipo, pedido, apodo, prendas, en, estado
       from tiempos where dia = ${dia} order by quien, en`;
 
     const gente = {};
