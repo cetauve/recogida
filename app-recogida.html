@@ -71,6 +71,13 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
  touch-action:pan-y;overflow:hidden}
 .tarjeta.d1{transform:scale(.94) translateY(14px);filter:brightness(.72)}
 .tarjeta.d2{transform:scale(.88) translateY(26px);filter:brightness(.52)}
+.regalos{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px}
+.rg{font-size:13px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
+ border-radius:999px;padding:7px 14px;background:#E8B84B;color:#2A1F05;
+ box-shadow:0 0 0 3px rgba(232,184,75,.25)}
+.rg-oro{background:#E8B84B;color:#2A1F05}
+.rg-plata{background:#CBD3DA;color:#1B2A3D}
+.rg-diamante{background:#8FE3F2;color:#06323C}
 .nombre{font-size:clamp(26px,7.5vw,40px);font-weight:900;line-height:1.05;letter-spacing:-.02em;
  margin-bottom:2px;word-break:break-word}
 .usuario{font-size:13px;opacity:.45;margin-bottom:14px}
@@ -373,9 +380,23 @@ function bloqueNumeros(f){
     </div>`).join('')}</div>`;
 }
 
+/* EL DETALLE QUE HAY QUE METER EN LA BOLSA.
+ *
+ * Quien gana un regalo en el directo se anuncia en pantalla… y hasta ahora
+ * ahí se acababa: en el almacén nadie se enteraba y el detalle no se metía.
+ * Va arriba del todo y en grande a propósito: si va abajo, con doce números
+ * por delante, no se ve. */
+function regaloHTML(f){
+  const r = f.regalos || [];
+  if (!r.length) return '';
+  return `<div class="regalos">${r.map(x => `<span class="rg rg-${(x.tier||'').toLowerCase()}">
+    ★ ${x.tier || 'regalo'}${x.num != null ? ' · ganó con la #' + x.num : ''}</span>`).join('')}</div>`;
+}
+
 function tarjetaHTML(f, cl){
   return `<div class="tarjeta ${cl||''}">
     <div class="sello ok">LISTO</div><div class="sello no">INCIDENCIA</div>
+    ${regaloHTML(f)}
     <div class="nombre">${f.apodo}</div>
     <div class="usuario">${f.usuario||''}</div>
     ${bloqueNumeros(f)}
