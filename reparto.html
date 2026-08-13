@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0E1723">
+<title>Reparto de prendas</title>
+
+<!--
+  ===========================================================================
+  QUÉ VENDIÓ CADA VENDEDORA  ·  /reparto?d=CODIGO
+  ===========================================================================
+
+  Junta las dos mitades que hasta ahora había que cuadrar a mano:
+
+     lo que leyó la extensión  →  cada prenda vendida, con su hora real
+     lo que marcaron ellas     →  cada toque, con su hora
+
+  Ninguna de las dos partes sabe de la otra. El cruce lo hace el servidor AL
+  LEER, nunca al guardar: si un día sale torcido se vuelve a mirar y ya está,
+  porque los dos lados siguen guardados en crudo. Sellar el reparto sería
+  irreversible, y además dejaría sin prenda cualquier toque dado sin cobertura.
+
+  POR ESO ESTA PÁGINA NO GUARDA NADA. Solo pregunta y enseña.
+
+  Cada prenda dice POR QUÉ VÍA se le ha adjudicado a alguien, y eso importa:
+  no es lo mismo un número que leyó la tablet en el momento que un reparto
+  hecho porque esa persona estaba sola. Lo primero es un hecho; lo segundo es
+  una deducción razonable. Quien mire esto tiene derecho a distinguirlos.
+
+  Esta página NO sustituye a cruce.html: aquella sigue siendo la de pegar
+  archivos y CSV a mano, que es el último recurso cuando no hay servidor.
+  ===========================================================================
+-->
+
+<style>
+  :root{
+    --fondo:#0E1723; --tinta:#EDE7DB; --acento:#C8321F; --verde:#2E9E6B;
+    --ambar:#D89B2E; --carta:#16212F; --borde:#243244; --tenue:#8A99AB;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--fondo);color:var(--tinta);
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    padding:22px 18px 60px;max-width:1100px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 2px;letter-spacing:-.02em}
+  .sub{color:var(--tenue);font-size:14px;margin:0 0 18px}
+  .fila{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+  input,button,select{font:inherit;color:inherit}
+  input[type=date]{background:var(--carta);border:1.5px solid var(--borde);
+    border-radius:11px;padding:10px 13px}
+  button{background:var(--acento);color:#fff;border:0;border-radius:11px;
+    padding:11px 18px;font-weight:700;cursor:pointer}
+  button.sec{background:transparent;border:1.5px solid var(--borde);color:var(--tinta);font-weight:600}
+
+  .aviso{border-radius:13px;padding:13px 16px;margin-bottom:16px;font-size:15px;line-height:1.55}
+  .aviso.rojo{background:#2A1512;border:1.5px solid var(--acento)}
+  .aviso.ambar{background:#241C0E;border:1.5px solid var(--ambar)}
+  .aviso.verde{background:#12241C;border:1.5px solid var(--verde)}
+
+  .gente{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-bottom:22px}
+  .quien{background:var(--carta);border:1.5px solid var(--borde);border-radius:15px;padding:15px 16px}
+  .quien h2{margin:0 0 2px;font-size:19px}
+  .quien .horas{color:var(--tenue);font-size:13px;margin-bottom:11px}
+  .cifras{display:flex;gap:14px;margin-bottom:11px}
+  .cifras div b{display:block;font-size:27px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .cifras div span{font-size:11px;color:var(--tenue);text-transform:uppercase;letter-spacing:.05em}
+  .via{display:flex;gap:5px;flex-wrap:wrap}
+  .et{font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700;letter-spacing:.02em}
+  .et.lote{background:rgba(46,158,107,.18);color:#7BD6AC}
+  .et.hora{background:rgba(216,155,46,.18);color:#E7C078}
+  .et.turno{background:rgba(200,50,31,.18);color:#F09080}
+  .et.no{background:rgba(138,153,171,.16);color:var(--tenue)}
+
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;color:var(--tenue);font-weight:600;font-size:12px;
+    text-transform:uppercase;letter-spacing:.05em;padding:0 10px 8px 0}
+  td{padding:8px 10px 8px 0;border-top:1px solid var(--borde);vertical-align:top}
+  td.n{font-variant-numeric:tabular-nums}
+  .cargando{color:var(--tenue);padding:30px 0}
+</style>
+</head>
+<body>
+
+<h1>Reparto de prendas</h1>
+<p class="sub" id="sub">Qué vendió cada una, cruzando lo del directo con lo que marcaron.</p>
+
+<div class="fila">
+  <input type="date" id="dia">
+  <button id="ver">Ver</button>
+  <button id="csv" class="sec">Descargar hoja de cálculo</button>
+</div>
+
+<div id="salida"><div class="cargando">Cargando…</div></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+/* Sin el código no se devuelve nada: es lo único que separa los datos del
+   negocio de cualquiera que teclee la dirección. */
+const CODIGO = new URLSearchParams(location.search).get('d') || '';
+
+const hhmm = (t) => {
+  if (!t) return '';
+  const d = new Date(t);
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+};
+const eur = (n) => (Math.round(Number(n || 0) * 100) / 100).toFixed(2).replace('.', ',') + ' €';
+
+/* Cómo se ha decidido que una prenda es de alguien. El orden importa: de más
+   seguro a menos, y la página lo dice con todas las letras. */
+const VIAS = {
+  lote:  { et:'lote',  txt:'número leído' },
+  hora:  { et:'hora',  txt:'por la hora' },
+  turno: { et:'turno', txt:'estaba sola' }
+};
+
+let ULTIMO = null;
+
+async function cargar() {
+  const dia = $('dia').value;
+  $('salida').innerHTML = '<div class="cargando">Cargando…</div>';
+  if (!CODIGO) {
+    $('salida').innerHTML = `<div class="aviso rojo"><b>Falta el código en la dirección.</b><br>
+      Esta página se abre con <code>?d=</code> y el código detrás. Pídeselo a quien
+      te pasó el enlace del equipo.</div>`;
+    return;
+  }
+  try {
+    const r = await fetch('/api/toques?d=' + encodeURIComponent(CODIGO) +
+      '&cruce=1' + (dia ? '&dia=' + dia : ''), { cache: 'no-store' });
+    const j = await r.json();
+    if (!j || !j.ok) throw new Error((j && j.detalle) || 'el servidor no ha contestado bien');
+    ULTIMO = j;
+    pintar(j);
+  } catch (e) {
+    $('salida').innerHTML = `<div class="aviso rojo"><b>No he podido preguntarle al servidor.</b><br>
+      ${esc(e.message)}</div>`;
+  }
+}
+
+function pintar(j) {
+  const c = j.cruce || { filas: [], porVendedora: [], lotes: 0, sinDuenyo: 0, sinCruzar: 0 };
+  $('sub').textContent = j.dia + ' · ' + c.lotes + ' prendas vendidas · ' +
+    j.total + ' toques de ' + (c.porVendedora.length || 0) + ' vendedoras';
+
+  let html = '';
+
+  /* LO PRIMERO ES DECIR SI ESTO SE PUEDE MIRAR O NO.
+     Un reparto con la mitad de las prendas sin dueño no es un reparto: es una
+     lista que alguien va a dar por buena sin fijarse. Mejor cantarlo arriba. */
+  if (!c.lotes) {
+    html += `<div class="aviso rojo"><b>No hay ninguna prenda del directo guardada este día.</b><br>
+      Eso lo manda la extensión del PC del almacén al leer el panel, en el paso 2.
+      Sin eso no hay nada que repartir. Comprueba que la extensión está activa y
+      que se ha hecho la lectura.</div>`;
+  } else if (c.sinDuenyo) {
+    const pct = Math.round(c.sinDuenyo / c.lotes * 100);
+    html += `<div class="aviso ${pct > 25 ? 'rojo' : 'ambar'}">
+      <b>${c.sinDuenyo} prendas sin dueño</b> de ${c.lotes} (${pct}%).
+      Nadie las marcó y en ese momento había más de una vendedora, así que no se
+      adjudican a ojo. Se reparten a mano o se dejan fuera.</div>`;
+  } else {
+    html += `<div class="aviso verde">Todas las prendas del día tienen dueño.</div>`;
+  }
+
+  if (c.sinCruzar) {
+    html += `<div class="aviso ambar"><b>${c.sinCruzar} toques sin prenda.</b>
+      Alguien pulsó cuando no había ninguna venta cerca. Suele ser un doble toque
+      o una prenda que se acabó devolviendo.</div>`;
+  }
+
+  // --------------------------------------------------------------- la gente
+  html += '<div class="gente">';
+  for (const g of c.porVendedora.slice().sort((a, b) => b.cruzadas - a.cruzadas)) {
+    const t = (j.turnos || []).find((x) => x.vendedora === g.vendedora);
+    const horas = t && t.empezo
+      ? hhmm(t.empezo) + '–' + (t.acabo ? hhmm(t.acabo) : 'sigue')
+      : 'sin turno apuntado';
+    const trabajadas = t && t.empezo && t.acabo
+      ? Math.max((new Date(t.acabo) - new Date(t.empezo)) / 3600000, 0.01) : null;
+    html += `<div class="quien">
+      <h2>${esc(g.vendedora)}</h2>
+      <div class="horas">${horas}${trabajadas ? ' · ' + trabajadas.toFixed(1).replace('.', ',') + ' h' : ''}</div>
+      <div class="cifras">
+        <div><b>${g.cruzadas}</b><span>prendas</span></div>
+        <div><b>${eur(g.euros)}</b><span>vendido</span></div>
+        ${trabajadas ? `<div><b>${eur(g.euros / trabajadas)}</b><span>por hora</span></div>` : ''}
+      </div>
+      <div class="via">
+        ${g.porLote  ? `<span class="et lote">${g.porLote} número leído</span>` : ''}
+        ${g.porHora  ? `<span class="et hora">${g.porHora} por la hora</span>` : ''}
+        ${g.porTurno ? `<span class="et turno">${g.porTurno} estaba sola</span>` : ''}
+        ${g.prendas - g.cruzadas ? `<span class="et no">${g.prendas - g.cruzadas} sin prenda</span>` : ''}
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+
+  if (!c.porVendedora.length) {
+    html += `<div class="aviso ambar">Nadie ha marcado prendas este día.
+      Las vendedoras entran por <code>/vendedoras?d=…</code> y su turno se abre al
+      poner el nombre.</div>`;
+  }
+
+  // -------------------------------------------------------------- el detalle
+  if (c.filas.length) {
+    html += `<h2 style="font-size:19px;margin:26px 0 10px">Prenda a prenda</h2>
+      <table><thead><tr>
+        <th>Hora</th><th>Vendedora</th><th>Ficha</th><th>Rack</th>
+        <th>Categoría</th><th>Precio</th><th>Cómo se ha sabido</th>
+      </tr></thead><tbody>`;
+    for (const f of c.filas) {
+      const v = VIAS[f.metodo];
+      html += `<tr>
+        <td class="n">${hhmm(f.en)}</td>
+        <td>${esc(f.vendedora)}</td>
+        <td class="n">${f.lote == null ? '—' : '#' + f.lote}</td>
+        <td>${esc(f.cuenta || '')}</td>
+        <td>${esc(f.categoria || (f.sinToque ? 'no la marcó' : ''))}</td>
+        <td class="n">${f.precio == null ? '' : eur(f.precio)}</td>
+        <td>${v ? `<span class="et ${v.et}">${v.txt}</span>` : '<span class="et no">sin cruzar</span>'}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+  }
+
+  $('salida').innerHTML = html;
+}
+
+/* La hoja de cálculo con punto y coma: es lo que abre bien el Excel en
+   español sin tener que tocar nada al importarla. */
+$('csv').onclick = () => {
+  if (!ULTIMO || !ULTIMO.cruce) return;
+  const cab = ['hora','vendedora','ficha','rack','categoria','precio','como_se_ha_sabido'];
+  const lineas = [cab.join(';')].concat(ULTIMO.cruce.filas.map((f) => [
+    hhmm(f.en), f.vendedora, f.lote == null ? '' : f.lote, f.cuenta || '',
+    f.categoria || '', f.precio == null ? '' : String(f.precio).replace('.', ','),
+    (VIAS[f.metodo] || {}).txt || 'sin cruzar'
+  ].map((x) => '"' + String(x).replace(/"/g, '""') + '"').join(';')));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + lineas.join('\n')], { type: 'text/csv' }));
+  a.download = 'reparto-' + ULTIMO.dia + '.csv';
+  a.click();
+};
+
+$('ver').onclick = cargar;
+$('dia').addEventListener('change', cargar);
+
+/* El día del negocio en hora de Valencia, que es el que usa el servidor. */
+$('dia').value = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+cargar();
+/* Durante el directo interesa verlo moverse; fuera del directo da igual. */
+setInterval(() => { if (!document.hidden) cargar(); }, 60000);
+})();
+</script>
+</body>
+</html>

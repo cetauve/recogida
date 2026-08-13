@@ -71,7 +71,7 @@
 <body>
 <div class="caja">
   <h1>Tiempos de empaquetado</h1>
-  <p class="sub" id="cabecera">Pega aquí los enlaces que mandan los dos móviles del almacén.</p>
+  <p class="sub" id="cabecera">Cargando…</p>
   <div id="entrada"></div>
   <div id="salida"></div>
 </div>
@@ -156,7 +156,8 @@ function pintar() {
   $('cabecera').innerHTML = entregas.length
     ? entregas.map((d) => `<span class="chip ok">${esc(d.quien)} · ${
         d.modo === 'recoge' ? 'coge prendas' : 'cierra paquetes'} · ${(d.marcas||[]).length}</span>`).join('')
-    : 'Pega aquí los enlaces que mandan los dos móviles del almacén.';
+    : (CODIGO ? 'Los tiempos llegan solos desde los móviles del almacén.'
+              : 'Pega aquí los enlaces que mandan los dos móviles del almacén.');
 
   if (!entregas.length) { $('salida').innerHTML = ''; return; }
 
@@ -307,6 +308,29 @@ async function cargarTexto(v) {
 
 function pintarEntrada() {
   if (entregas.length) { $('entrada').innerHTML = ''; return; }
+
+  /* CON SERVIDOR NO HAY QUE PEGAR NADA, y decir lo contrario hace que alguien
+     se ponga a buscar enlaces que ya nadie manda. Si esta vacio es que todavia
+     no ha marcado nadie hoy, y punto. Lo de pegar a mano sigue estando, pero
+     escondido: es el ultimo recurso de un dia sin internet en el almacen. */
+  if (CODIGO) {
+    $('entrada').innerHTML = `<div class="panel">
+      <b>Todavía no ha marcado nadie hoy.</b><br>
+      Los tiempos llegan solos desde los móviles del almacén, según van cerrando
+      paquetes. Esta página se actualiza sola; no hay que pegar nada.
+      <div style="margin-top:14px"><button id="verAMano" class="sec">No hay internet en el almacén · pegar enlaces a mano</button></div>
+      <div id="aMano" style="display:none;margin-top:12px">
+        <textarea id="txt1" placeholder="Pega aquí el primer enlace"></textarea>
+        <div class="fila"><button id="cargar1">Cargar</button></div>
+      </div></div>`;
+    $('verAMano').onclick = () => {
+      const m = $('aMano');
+      m.style.display = m.style.display === 'none' ? 'block' : 'none';
+    };
+    $('cargar1').onclick = () => cargarTexto($('txt1').value);
+    return;
+  }
+
   $('entrada').innerHTML = `<div class="panel">
     <b>Cómo funciona.</b> Los dos del almacén abren la misma app de recogida con el mismo
     enlace. El que <b>coge prendas</b> marca cuando entrega el paquete; el que
