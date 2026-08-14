@@ -140,6 +140,13 @@
     padding:12px 14px;font-size:14px;margin-bottom:16px
   }
   .botonera{display:flex;flex-direction:column;gap:10px;margin-top:auto;padding-top:16px}
+
+  #versionNueva{position:fixed;left:12px;right:12px;bottom:12px;z-index:99;display:none;
+   background:#12241C;border:1.5px solid var(--verde);border-radius:14px;padding:12px 14px;
+   align-items:center;gap:12px;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+  #versionNueva.on{display:flex}
+  #versionNueva button{margin-left:auto;background:var(--verde);color:#fff;border:0;
+   border-radius:10px;padding:10px 16px;font:inherit;font-weight:800}
 </style>
 </head>
 <body>
@@ -165,6 +172,13 @@
     <button id="empezar" class="primario" disabled>Empezar turno</button>
   </div>
 </section>
+
+<!-- Se avisa, no se recarga solo: recargar a alguien a media venta le borra
+     la pantalla de las manos. -->
+<div id="versionNueva">
+  <span><b>Hay una versión nueva.</b> Toca para ponerte al día.</span>
+  <button id="actualizarYa">Actualizar</button>
+</div>
 
 <!-- 2 · TRABAJO -->
 <section id="pTrabajo" class="pantalla">
@@ -694,6 +708,29 @@ function limpiarPendientes() {
   $('finAviso').style.background = '#12241C';
 }
 
+
+
+/* =========================================================================
+   AVISO DE VERSION NUEVA
+   =========================================================================
+   Un movil con la pestaña abierta no se entera de que hay version nueva. El
+   14 ago 2026 el almacen estuvo una tarde con la app de antes por esto. Se
+   compara el sello del archivo con el que habia al abrir, y se avisa. Nunca
+   se recarga solo: a media venta le borrarias la pantalla de las manos.
+   ========================================================================= */
+let selloVersion = null;
+async function mirarVersion() {
+  try {
+    const r = await fetch(location.pathname + '?v=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+    const sello = r.headers.get('etag') || r.headers.get('last-modified');
+    if (!sello) return;
+    if (selloVersion === null) { selloVersion = sello; return; }
+    if (sello !== selloVersion) $('versionNueva').classList.add('on');
+  } catch (_) { /* sin red, otra vez sera */ }
+}
+$('actualizarYa').onclick = () => location.reload();
+mirarVersion();
+setInterval(mirarVersion, 90000);
 
 /* =========================================================================
    ARRANQUE  ·  si habia un turno a medias, se retoma donde estaba

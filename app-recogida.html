@@ -137,6 +137,23 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 #pedir{background:var(--red);color:#fff}
 #cerrarPaq{background:#2E9E6B;color:#fff}
 #soltarPaq{background:rgba(237,231,219,.12);color:inherit;font-weight:600;font-size:15px;padding:12px}
+
+/* --- quien lleva cada tanda --- */
+.ocupada{display:inline-block;margin-top:6px;font-size:12px;font-weight:700;
+ padding:3px 9px;border-radius:999px;background:rgba(216,155,46,.18);color:#E7C078}
+.tandaBtn.deOtro{opacity:.55}
+
+/* --- aviso de version nueva --- */
+#versionNueva{position:fixed;left:12px;right:12px;bottom:12px;z-index:99;display:none;
+ background:#12241C;border:1.5px solid #2E9E6B;border-radius:14px;padding:12px 14px;
+ align-items:center;gap:12px;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#versionNueva.on{display:flex}
+#versionNueva button{margin-left:auto;background:#2E9E6B;color:#fff;border:0;border-radius:10px;
+ padding:10px 16px;font:inherit;font-weight:800;cursor:pointer}
+
+/* --- cambiar rol --- */
+.cambiarRol{background:transparent;border:1.5px solid var(--linea,rgba(237,231,219,.2));
+ color:inherit;border-radius:10px;padding:8px 12px;font:inherit;font-weight:600;font-size:13px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -158,6 +175,11 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
   </div>
 
   <div id="tandas"></div>
+  <!-- No se salta solo a la cola desde el menu: si lo hiciera, "cambiar rol"
+       te devolveria a la cola una y otra vez y no habria forma de salir. -->
+  <button id="irCola" style="display:none;width:100%;padding:18px;border:0;border-radius:14px;
+    background:var(--rojo);color:#fff;font:inherit;font-weight:800;font-size:17px;cursor:pointer">
+    Ir a la cola de paquetes</button>
   <div class="pie" id="menuPie"></div>
 </div>
 
@@ -173,8 +195,16 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
     <button id="pedir">Dame el siguiente</button>
     <button id="cerrarPaq" style="display:none">Paquete cerrado</button>
     <button id="soltarPaq" style="display:none">No puedo con este · devolverlo</button>
-    <button id="colaSalir" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar de nombre o de tarea</button>
+    <button id="colaSalir" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar rol o nombre</button>
   </div>
+</div>
+
+<!-- SE AVISA, NO SE RECARGA SOLO. Recargar a alguien a mitad de un paquete es
+     justo lo que no se puede hacer: pierde de vista los numeros que tenia en la
+     mano. Se le dice y decide el. -->
+<div id="versionNueva">
+  <span><b>Hay una versión nueva de la app.</b><br>Toca para ponerte al día.</span>
+  <button id="actualizarYa">Actualizar</button>
 </div>
 
 <div id="barra">
@@ -182,6 +212,7 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
   <div id="medio"><div id="tanda"></div><div id="progreso"><div id="barraProg"></div></div></div>
   <div id="cuenta"></div>
   <button id="atras" disabled>Atrás</button>
+  <button id="rolBarra" class="cambiarRol">Rol</button>
 </div>
 
 <div id="pila"></div>
@@ -222,6 +253,10 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 const EMBEBIDOS = /*DATOS*/{"titulo":"Sin datos","generado":"","tandas":[]}/*FIN*/;
 
 const $ = (id) => document.getElementById(id);
+/* Los nombres los escriben ellos a mano. Escapar es barato y evita que un
+   apostrofe o un "<" deje la pantalla en blanco a mitad de turno. */
+const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g,
+  (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 let DATOS = EMBEBIDOS;
 let tandaActual = null;      // índice de la tanda elegida
 let FICHAS = [];             // compradores de esa tanda
@@ -333,21 +368,75 @@ function verMenu(){
   if (mt) mt.addEventListener('click', mandarTiempos);
   pintarQuienSoy();
 
+  pintarTandas();
+  mirarTandas();
+}
+
+/* ===========================================================================
+ * DOS RECOGEDORES SIN PISARSE
+ *
+ * Repartir de una en una, como con los que empaquetan, aqui haria lo contrario
+ * de lo que hace falta: quien recoge necesita ver la tanda ENTERA para hacer
+ * una sola barrida del perchero en orden de numero. Darle un paquete suelto
+ * cada vez le obligaria a ir y volver por el mismo rack.
+ *
+ * Asi que el reparto es POR TANDAS. La primera persona que entra en una se la
+ * queda, y a la otra le sale marcada con quien la lleva y por donde va. No es
+ * un candado: se puede entrar igual, pero preguntando antes, porque a veces
+ * alguien se va a mitad y hay que terminarsela.
+ * ========================================================================= */
+let TANDAS_TOMA = [];      // [{tanda, quien, hechos, total, fria}]
+
+const tomaDe = (t) => TANDAS_TOMA.find((x) => x.tanda === t.etiqueta);
+
+function pintarTandas(){
   $('tandas').innerHTML = DATOS.tandas.map((t, ti) => {
     const g = leer(ti);
     const hechos = g ? g.i : 0;
     const n = t.compradores.length;
     const lista = hechos >= n;
     const prendas = t.compradores.reduce((s,c) => s + c.numeros.length, 0);
-    return `<button class="tandaBtn ${lista?'lista':''}" data-t="${ti}">
+    /* Solo se marca si la lleva OTRA persona y sigue viva. La tuya no se marca:
+       ya sabes que es tuya y ensuciaria la pantalla. */
+    const toma = tomaDe(t);
+    const deOtro = toma && toma.quien && toma.quien !== QUIEN && !toma.fria;
+    return `<button class="tandaBtn ${lista?'lista':''} ${deOtro?'deOtro':''}" data-t="${ti}">
       <div class="tt">${t.etiqueta}</div>
       <div class="dd">${n} ${n===1?'paquete':'paquetes'} · ${prendas} prendas${
         hechos ? ' · <b>' + hechos + ' hechos</b>' : ''}</div>
       ${racksDeTanda(t)}
+      ${deOtro ? `<span class="ocupada">la lleva ${esc(toma.quien)}${
+        toma.total ? ' · ' + toma.hechos + ' de ' + toma.total : ''}</span>` : ''}
       ${lista ? '<div class="tick">✓</div>' : ''}
       <div class="pp" style="width:${n?Math.round(hechos/n*100):0}%"></div>
     </button>`;
   }).join('');
+}
+
+let relojTandas = null;
+async function mirarTandas(){
+  clearInterval(relojTandas);
+  if (!CODIGO || !$('menu').classList.contains('on')) return;
+  relojTandas = setInterval(mirarTandas, 15000);
+  try {
+    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
+    const j = await r.json();
+    if (j && j.ok) { TANDAS_TOMA = j.tandas || []; pintarTandas(); }
+  } catch(e){ /* sin red: se ve como siempre y a trabajar */ }
+}
+
+/* Se avisa al servidor de por donde voy. Cada avance, sin miedo: es una fila
+   que se sobreescribe, no un historico. */
+async function apuntarTanda(etiqueta, hechos, total, forzar){
+  if (!CODIGO || MODO !== 'recoge' || !QUIEN.trim()) return null;
+  try {
+    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+      method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
+      body: JSON.stringify({ accion:'tanda', quien: QUIEN, tanda: etiqueta,
+                             hechos, total, forzar: !!forzar })
+    });
+    return await r.json();
+  } catch(e){ return null; }
 }
 
 /* QUE HAY DE CADA RACK EN CADA TANDA.
@@ -392,6 +481,7 @@ function pintarQuienSoy(){
      confundiria y ademas le dejaria hacer uno que ya esta haciendo otro. */
   const aLaCola = listo && MODO === 'empaqueta' && !!CODIGO;
   $('tandas').style.display = aLaCola ? 'none' : '';
+  $('irCola').style.display = aLaCola ? '' : 'none';
   $('ayudaModo').innerHTML = !listo
     ? 'Pon tu nombre y elige qué haces. Sin eso no puedo medir a nadie.'
     : (MODO === 'recoge'
@@ -399,7 +489,6 @@ function pintarQuienSoy(){
         : (CODIGO
             ? 'Vas a la <b>cola</b>: pides paquete y el servidor te lo da. Nadie hará el tuyo.'
             : 'Tu <b>Listo</b> significa: <b>paquete cerrado</b>. Ahí para el reloj.'));
-  if (aLaCola) verCola();
 }
 
 /* =========================================================================
@@ -516,11 +605,49 @@ $('soltarPaq').addEventListener('click', async () => {
   pintarCola(); refrescarContador();
 });
 
-$('colaSalir').addEventListener('click', () => {
-  clearInterval(relojCola);
-  $('cola').classList.remove('on');
+
+/* ===========================================================================
+ * AVISO DE VERSION NUEVA
+ *
+ * El 14 ago 2026 el equipo estuvo una tarde entera con la app de antes: tenian
+ * la pestaña abierta desde antes de subir los cambios y un movil con la
+ * pestaña abierta no se entera de nada. La cola estaba puesta y no se uso ni
+ * una vez, y nadie podia saberlo mirando el movil.
+ *
+ * Se pregunta por el sello del archivo (una cabecera, sin descargar la pagina)
+ * y se compara con el que habia al abrir. NO SE RECARGA SOLO: recargar a
+ * alguien a mitad de un paquete le quita de la vista los numeros que tiene en
+ * la mano. Se le enseña un boton y decide el.
+ * ========================================================================= */
+let selloVersion = null;
+async function mirarVersion(){
+  try {
+    const r = await fetch(location.pathname + '?v=' + Date.now(), { method:'HEAD', cache:'no-store' });
+    const sello = r.headers.get('etag') || r.headers.get('last-modified');
+    if (!sello) return;
+    if (selloVersion === null) { selloVersion = sello; return; }
+    if (sello !== selloVersion) $('versionNueva').classList.add('on');
+  } catch(e){ /* sin red, otra vez sera */ }
+}
+$('actualizarYa').addEventListener('click', () => location.reload());
+mirarVersion();
+setInterval(mirarVersion, 90000);
+
+/* ---------------------------------------------------------- cambiar de rol
+ * Se cambia varias veces por turno: si se acumulan paquetes sin cerrar, uno
+ * de los que recogen se pasa a empaquetar, y al reves. Tiene que estar a un
+ * toque desde donde esten, no escondido. */
+function cambiarRol(){
+  clearInterval(relojTandas); clearInterval(relojCola);
+  tandaActual = null;
+  ['barra','pila','pie','fin','cola'].forEach(x => $(x).classList.remove('on'));
   $('menu').classList.add('on');
-});
+  verMenu();
+  $('miNombre').scrollIntoView({ block:'center', behavior:'smooth' });
+}
+$('rolBarra').addEventListener('click', cambiarRol);
+
+$('colaSalir').addEventListener('click', cambiarRol);
 
 /* Si el movil se bloqueo con un paquete en la mesa, al volver sigue siendo
    suyo: el servidor se lo devuelve tal cual en vez de darle otro. */
@@ -539,14 +666,39 @@ document.querySelector('.modos').addEventListener('click', (e) => {
   localStorage.setItem('billys_modo', MODO);
   try{ MARCAS = JSON.parse(localStorage.getItem('billys_marcas_' + DATOS.titulo + '_' + MODO) || '[]'); }catch(e){ MARCAS = []; }
   pintarQuienSoy();
+  /* Al ELEGIR el rol si se entra derecho, que es lo que se espera al pulsar. */
+  if (MODO === 'empaqueta' && CODIGO && QUIEN.trim()) verCola();
 });
+
+$('irCola').addEventListener('click', verCola);
 
 $('tandas').addEventListener('click', (e) => {
   const b = e.target.closest('.tandaBtn'); if (!b) return;
-  abrirTanda(parseInt(b.dataset.t, 10));
+  b.disabled = true;
+  abrirTanda(parseInt(b.dataset.t, 10)).finally(() => { b.disabled = false; });
 });
 
-function abrirTanda(ti){
+async function abrirTanda(ti){
+  const t = DATOS.tandas[ti];
+
+  /* ANTES DE ENTRAR, PREGUNTAR SI LA LLEVA OTRO. No se prohibe —a veces hay
+     que terminar la de alguien que se fue— pero se dice, que es lo que hoy no
+     pasaba: las dos entraban y recogian las mismas prendas. */
+  if (CODIGO && MODO === 'recoge' && QUIEN.trim()) {
+    const g0 = leer(ti);
+    const r = await apuntarTanda(t.etiqueta, g0 ? g0.i : 0, t.compradores.length, false);
+    if (r && r.ok && !r.mia) {
+      const va = r.total ? ' (va por ' + r.hechos + ' de ' + r.total + ')' : '';
+      if (!confirm('Esta tanda la está haciendo ' + r.quien + va +
+                   '.\n\n¿Entras tú también? Recogeríais las mismas prendas.')) {
+        mirarTandas();
+        return;
+      }
+      await apuntarTanda(t.etiqueta, g0 ? g0.i : 0, t.compradores.length, true);
+    }
+  }
+
+  clearInterval(relojTandas);
   tandaActual = ti;
   FICHAS = DATOS.tandas[ti].compradores.slice();
   const g = leer(ti);
@@ -719,6 +871,9 @@ function avanzar(estado){
   if (estado !== 'inc') aLaCola(f, ahora);
   historial.push({i, estado}); i++;
   guardar(); pintar();
+  /* Para que el otro vea en el menu por donde voy y no se meta aqui. */
+  const tv = DATOS.tandas[tandaActual];
+  if (tv) apuntarTanda(tv.etiqueta, i, FICHAS.length, false);
   if (navigator.vibrate) navigator.vibrate(estado==='inc' ? [12,40,12] : 18);
 }
 function atras(){
@@ -873,6 +1028,14 @@ async function arrancar(){
   $('alMenu').style.display = ''; $('reiniciar').style.display = '';
   document.title = 'Recogida · ' + DATOS.titulo;
   verMenu();
+
+  /* AL ABRIR —y solo al abrir— quien empaqueta va derecho a su cola. Recargar
+   * la pagina no puede costarle un toque de mas para volver a donde estaba.
+   *
+   * Ojo: esto NO puede vivir dentro de pintarQuienSoy. Estuvo ahi un rato y
+   * hacia que "cambiar rol" te devolviera a la cola una y otra vez, sin forma
+   * de salir. El salto automatico es cosa del arranque, no del menu. */
+  if (MODO === 'empaqueta' && CODIGO && QUIEN.trim()) verCola();
 }
 
 window.addEventListener('hashchange', arrancar);
