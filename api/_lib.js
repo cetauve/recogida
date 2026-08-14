@@ -145,6 +145,27 @@ const ESQUEMA = [
    )`,
   `create index if not exists cola_espera on cola (dia, estado, numero)`,
 
+  /* QUIÉN ESTÁ HACIENDO CADA TANDA.
+   *
+   * Con dos personas recogiendo, nada impedía que las dos abrieran la misma
+   * tanda y recogieran las mismas prendas. Repartir de una en una lo
+   * arreglaría pero las haría lentas: quien recoge necesita ver la tanda
+   * entera para hacer UNA barrida del perchero en orden de número.
+   *
+   * Así que se reparte por tandas, no por paquetes: la primera que entra se
+   * la queda, y a la otra le sale marcada con quién la está haciendo y por
+   * dónde va. Se puede entrar igual si hace falta —a veces alguien se va—,
+   * pero preguntando primero. */
+  `create table if not exists tandas_toma (
+     dia         date not null,
+     tanda       text not null,
+     quien       text not null default '',
+     hechos      integer not null default 0,
+     total       integer,
+     actualizado timestamptz not null default now(),
+     primary key (dia, tanda)
+   )`,
+
   /* Lo calculado para el almacén: el mismo objeto que hasta hoy viajaba
    * detrás de la almohadilla del enlace. Una fila por día; la extensión
    * recalcula todo y lo vuelve a mandar entero. */

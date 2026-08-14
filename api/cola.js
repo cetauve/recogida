@@ -179,6 +179,45 @@ module.exports = puerta(async (req, res) => {
       return res.status(200).json({ ok: true, dia, pedido, ...c });
     }
 
+    /* ------------------------------------------------------------- TANDA
+     * Quien recoge dice en qué tanda está y por dónde va. No es un candado
+     * duro: es para que el otro lo VEA antes de meterse en la misma.
+     *
+     * Se puede quitar una tanda a alguien solo si lleva un rato largo sin dar
+     * señales. Alguien que deja el móvil en la mesa diez minutos sigue
+     * trabajando; alguien que cerró la pestaña hace media hora, no. */
+    if (accion === 'tanda') {
+      const tanda = aTexto(b.tanda).trim();
+      if (!tanda) return res.status(400).json({ ok: false, error: 'sin-tanda' });
+      const hechos = aEntero(b.hechos) || 0;
+      const total = aEntero(b.total);
+      const forzar = !!b.forzar;
+
+      const [fila] = await s`
+        insert into tandas_toma (dia, tanda, quien, hechos, total, actualizado)
+        values (${dia}, ${tanda}, ${quien}, ${hechos}, ${total}, now())
+        on conflict (dia, tanda) do update set
+          quien       = case when tandas_toma.quien = ''
+                              or tandas_toma.quien = ${quien}
+                              or ${forzar}
+                              or tandas_toma.actualizado < now() - interval '20 minutes'
+                             then ${quien} else tandas_toma.quien end,
+          hechos      = case when tandas_toma.quien = ${quien} or ${forzar}
+                             then ${hechos} else tandas_toma.hechos end,
+          total       = coalesce(${total}, tandas_toma.total),
+          actualizado = case when tandas_toma.quien = ${quien} or ${forzar}
+                             then now() else tandas_toma.actualizado end
+        returning quien, hechos, total, actualizado`;
+
+      return res.status(200).json({
+        ok: true, dia, tanda,
+        /* mia: false significa "esta tanda la está haciendo otro". Quien
+         * pregunta decide si entra igual; aquí no se le prohíbe nada. */
+        mia: fila.quien === quien,
+        quien: fila.quien, hechos: fila.hechos, total: fila.total
+      });
+    }
+
     /* ------------------------------------------------------------ SOLTAR
      * Se lo ha pedido y no puede hacerlo (le falta una prenda, se va a comer).
      * Vuelve a la cola para que lo coja otro, en su sitio de siempre. */
@@ -215,8 +254,16 @@ module.exports = puerta(async (req, res) => {
       }
     }
 
+    /* Quién anda por cada tanda. Las que llevan mucho paradas se devuelven
+     * marcadas como frías, para que el menú no diga "la hace Luis" de alguien
+     * que se fue hace media hora. */
+    const tandas = await s`
+      select tanda, quien, hechos, total, actualizado,
+             (actualizado < now() - interval '20 minutes') as fria
+      from tandas_toma where dia = ${dia} order by tanda`;
+
     return res.status(200).json({
-      ok: true, dia,
+      ok: true, dia, tandas,
       espera:   filas.filter((f) => f.estado === 'espera').length,
       haciendo: filas.filter((f) => f.estado === 'haciendo').length,
       cerrado:  filas.filter((f) => f.estado === 'cerrado').length,
