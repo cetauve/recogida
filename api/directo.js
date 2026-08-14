@@ -83,19 +83,6 @@ module.exports = puerta(async (req, res) => {
       lotes += parte.length;
     }
 
-    /* LA LECTURA DEL FINAL MANDA SOBRE LO LEÍDO EN VIVO.
-     *
-     * En vivo solo se conoce el productId, no el nombre de la cuenta, así que
-     * esas filas van con la cuenta puesta al productId y marcadas provisional.
-     * Cuando llega la lectura del paso 2 —que sí trae billysvlc y
-     * billystourvlc— se borran las provisionales de esos mismos números, o el
-     * día tendría cada prenda dos veces y el cruce contaría el doble. */
-    if (!b.provisional && lista.length) {
-      const nums = [...new Set(lista.map((x) => x.num))];
-      await s`delete from lotes
-              where dia = ${dia} and provisional = true and num in ${s(nums)}`;
-    }
-
     let regalos = 0;
     const reg = (Array.isArray(b.regalos) ? b.regalos : [])
       .map((x) => ({
@@ -151,8 +138,37 @@ module.exports = puerta(async (req, res) => {
      * último directo se veía un rack y el otro desaparecía: el 11 ago 2026 eso
      * dejó las siete tarjetas de billystourvlc fuera de la vista. */
     const lotes = await s`
-      select num, cuenta, vendida_en, precio, sku, titulo, parado, comprador
-      from lotes where dia = ${dia} order by cuenta, num`;
+      select l.num, l.cuenta, l.vendida_en, l.precio, l.sku, l.titulo, l.parado, l.comprador
+      from lotes l
+      where l.dia = ${dia} and (
+        /* UNA PRENDA, UNA FILA. La misma prenda entra dos veces: en vivo desde
+         * el panel (provisional, sin nombre de cuenta) y al final desde la
+         * lectura del paso 2 (definitiva). Aquí se descarta la provisional si
+         * ya existe la buena.
+         *
+         * SE HACE AL LEER, NO AL ESCRIBIR. Borrarlas al escribir no vale: el
+         * envío en vivo remanda todo el directo cada veinte segundos y las
+         * vuelve a meter. El 14 ago 2026 eso hizo que un directo de 72 prendas
+         * saliera con 129 y el margen se fuera al garete.
+         *
+         * Se emparejan por SKU, que es lo único único de verdad: el número se
+         * repite entre las dos cuentas. Sin SKU se cae al número. */
+        l.provisional = false
+        or not exists (
+          select 1 from lotes z
+          where z.dia = l.dia and z.provisional = false
+            and (
+              /* Con SKU en los dos lados se empareja por SKU, que es lo único
+               * único de verdad y distingue el 47 de una cuenta del 47 de la
+               * otra. Si a alguno le falta el SKU se cae al número: se puede
+               * pasar de listo entre cuentas, pero es mejor que contar la
+               * misma prenda dos veces. */
+              (coalesce(l.sku, '') <> '' and coalesce(z.sku, '') = coalesce(l.sku, ''))
+              or ((coalesce(l.sku, '') = '' or coalesce(z.sku, '') = '') and z.num = l.num)
+            )
+        )
+      )
+      order by l.cuenta, l.num`;
     const regalos = await s`
       select tier, usuario, num, en from regalos where dia = ${dia} order by en`;
 

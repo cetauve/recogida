@@ -37,9 +37,38 @@ const VENTANA_ATRAS_MS = 10 * 60000;
  * en vez de inventarle uno. */
 async function cruzar(s, dia, toques) {
   const lotes = await s`
-    select directo, cuenta, num, vendida_en, precio, titulo
-    from lotes where dia = ${dia} and vendida_en is not null and parado = false
-    order by vendida_en`;
+    select l.directo, l.cuenta, l.num, l.vendida_en, l.precio, l.titulo
+    from lotes l
+    where l.dia = ${dia} and l.vendida_en is not null and l.parado = false
+      and (
+        /* UNA PRENDA, UNA FILA. La misma prenda entra dos veces: en vivo desde
+         * el panel (provisional, sin nombre de cuenta) y al final desde la
+         * lectura del paso 2 (definitiva). Aquí se descarta la provisional si
+         * ya existe la buena.
+         *
+         * SE HACE AL LEER, NO AL ESCRIBIR. Borrarlas al escribir no vale: el
+         * envío en vivo remanda todo el directo cada veinte segundos y las
+         * vuelve a meter. El 14 ago 2026 eso hizo que un directo de 72 prendas
+         * saliera con 129 y el margen se fuera al garete.
+         *
+         * Se emparejan por SKU, que es lo único único de verdad: el número se
+         * repite entre las dos cuentas. Sin SKU se cae al número. */
+        l.provisional = false
+        or not exists (
+          select 1 from lotes z
+          where z.dia = l.dia and z.provisional = false
+            and (
+              /* Con SKU en los dos lados se empareja por SKU, que es lo único
+               * único de verdad y distingue el 47 de una cuenta del 47 de la
+               * otra. Si a alguno le falta el SKU se cae al número: se puede
+               * pasar de listo entre cuentas, pero es mejor que contar la
+               * misma prenda dos veces. */
+              (coalesce(l.sku, '') <> '' and coalesce(z.sku, '') = coalesce(l.sku, ''))
+              or ((coalesce(l.sku, '') = '' or coalesce(z.sku, '') = '') and z.num = l.num)
+            )
+        )
+      )
+    order by l.vendida_en`;
   const turnos = await s`
     select vendedora, empezo, acabo, lote_inicio, lote_fin
     from turnos where dia = ${dia} order by empezo`;
