@@ -149,9 +149,80 @@ async function cruzar(s, dia, toques) {
     }
   }
 
+  /* ===================================================================
+   *  CUÁNTO DEL DINERO SE HA MARCADO, Y EN EL TURNO DE QUIÉN SE PERDIÓ
+   * ===================================================================
+   *  Contar prendas no basta. Diez camisetas de 1 € sin marcar no son lo
+   *  mismo que dos chaquetas de 30, y el que decide es el dinero.
+   *
+   *  Y saber QUIÉN estaba cuando se dejó de marcar no es lo mismo que
+   *  adjudicarle la venta: la prenda sin marcar sigue sin contar para nadie
+   *  —eso no se toca—, pero sí se puede decir que durante el turno de Fulana
+   *  se vendieron 40 y marcó 25. Eso es exactamente de lo que cuelga el
+   *  incentivo, y no se inventa nada: la hora de la venta y la hora del turno
+   *  están las dos guardadas.
+   *
+   *  CON DOS A LA VEZ NO SE SEÑALA A NADIE. Si dos turnos se solapan, lo no
+   *  marcado en ese rato es de los dos o de ninguno; se marca `solapado` y
+   *  que lo mire una persona.
+   * =================================================================== */
+  const eur = (x) => Number(x || 0);
+  const euros = lotes.reduce((a, l) => a + eur(l.precio), 0);
+  const eurosMarcados = libres.filter((x) => x.tomado).reduce((a, x) => a + eur(x.l.precio), 0);
+
+  const enVentana = (t, cuando) => {
+    const q = ms(cuando);
+    return t.empezo && q >= ms(t.empezo) && q <= ms(t.acabo || Date.now());
+  };
+  const porTurno = turnos.map((t) => {
+    const dentro = lotes.filter((l) => enVentana(t, l.vendida_en));
+    const suyas = filas.filter((f) => f.vendedora === t.vendedora && f.lote != null);
+    const solapado = turnos.some((o) => o !== t && o.vendedora !== t.vendedora &&
+      ms(o.empezo) < ms(t.acabo || Date.now()) && ms(o.acabo || Date.now()) > ms(t.empezo));
+    return {
+      vendedora: t.vendedora, empezo: t.empezo, acabo: t.acabo, abierto: !t.acabo, solapado,
+      /* Lo que se vendió mientras ella estaba. */
+      vendidas: dentro.length,
+      euros: Math.round(dentro.reduce((a, l) => a + eur(l.precio), 0) * 100) / 100,
+      /* Lo que ella marcó y cruzó. */
+      marcadas: suyas.length,
+      eurosMarcados: Math.round(suyas.reduce((a, f) => a + eur(f.precio), 0) * 100) / 100,
+      pct: dentro.length ? Math.round(suyas.length / dentro.length * 100) : null
+    };
+  });
+
+  /* Hora a hora: es lo que enseña CUÁNDO se dejó de marcar. Un día al 70 % no
+   * suele ser un 70 % constante, sino dos horas al 100 % y una a cero. */
+  const porHora = [];
+  for (const l of lotes) {
+    const h = new Date(l.vendida_en);
+    const clave = String(h.getHours()).padStart(2, '0') + ':00';
+    let f = porHora.find((x) => x.hora === clave);
+    if (!f) porHora.push(f = { hora: clave, vendidas: 0, marcadas: 0, euros: 0, eurosMarcados: 0 });
+    f.vendidas++; f.euros += eur(l.precio);
+  }
+  for (const x of libres) {
+    if (!x.tomado) continue;
+    const clave = String(new Date(x.l.vendida_en).getHours()).padStart(2, '0') + ':00';
+    const f = porHora.find((y) => y.hora === clave);
+    if (f) { f.marcadas++; f.eurosMarcados += eur(x.l.precio); }
+  }
+  porHora.sort((a, b) => a.hora.localeCompare(b.hora));
+  for (const f of porHora) {
+    f.euros = Math.round(f.euros * 100) / 100;
+    f.eurosMarcados = Math.round(f.eurosMarcados * 100) / 100;
+  }
+
   const sinMarcar = libres.filter((x) => !x.tomado).length;
   return {
     lotes: lotes.length,
+    /* El dinero del directo entero, esté marcado o no. Es la referencia contra
+     * la que se mide todo lo demás. */
+    euros: Math.round(euros * 100) / 100,
+    eurosMarcados: Math.round(eurosMarcados * 100) / 100,
+    marcadoEurosPct: euros ? Math.round(eurosMarcados / euros * 100) : null,
+    porTurno,
+    porHora,
     /* Cuándo entró la última prenda. Si el envío en vivo se para, esto deja de
      * moverse y se puede cantar en pantalla. El 14 ago 2026 estuvo parado
      * horas y nadie se enteró hasta que los números no cuadraron. */
