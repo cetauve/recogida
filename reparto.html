@@ -212,6 +212,24 @@ function pintar(j) {
 
   let html = '';
 
+  /* CUÁNDO ENTRÓ LA ÚLTIMA PRENDA.
+   *
+   * El 14 ago 2026 el envío en vivo se paró y estuvo horas parado sin que
+   * nadie lo supiera: la pantalla del directo iba por la 226 y aquí ponía 88.
+   * Un número que no se mueve no se nota; un reloj que dice "hace 40 minutos"
+   * sí. Esto es lo que convierte una avería silenciosa en una visible. */
+  if (c.ultimaVenta) {
+    const min = Math.round((Date.now() - new Date(c.ultimaVenta)) / 60000);
+    const hayTurnoAbierto = (j.turnos || []).some((t) => !t.acabo);
+    if (hayTurnoAbierto && min >= 15) {
+      html += `<div class="aviso rojo">
+        <b>La última prenda entró hace ${min} minutos</b> y hay un turno abierto.
+        Si el directo sigue vendiendo, es que <b>han dejado de llegar</b>.
+        Mira que el PC del almacén siga encendido y con el panel del directo abierto.</div>`;
+    }
+  }
+
+
   /* LO PRIMERO ES DECIR SI ESTO SE PUEDE MIRAR O NO.
      Un reparto con la mitad de las prendas sin dueño no es un reparto: es una
      lista que alguien va a dar por buena sin fijarse. Mejor cantarlo arriba. */
@@ -400,6 +418,9 @@ $('dia').value = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' })
 cargar();
 /* Durante el directo interesa verlo moverse; fuera del directo da igual. */
 setInterval(() => { if (!document.hidden) cargar(); }, 60000);
+/* Al volver a la pestaña se pide de nuevo. Una pestaña de fondo no refresca, y
+   volver a ella y leer una foto de hace media hora es peor que no mirar. */
+document.addEventListener('visibilitychange', () => { if (!document.hidden) cargar(); });
 })();
 </script>
 </body>
