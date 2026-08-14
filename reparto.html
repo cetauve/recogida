@@ -97,6 +97,20 @@
   .barra i{display:block;height:100%;background:var(--verde)}
   .barra i.flojo{background:var(--ambar)}
   .barra i.malo{background:var(--acento)}
+  .barra i.neutro{background:var(--tenue)}
+
+  /* Los botoncitos de ordenar. Sin colores nuevos: el que está puesto se nota
+     porque se enciende la letra, no porque cambie de color. */
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+  .chip{background:transparent;border:1.5px solid var(--borde);color:var(--tenue);
+    border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
+  .chip.on{border-color:var(--tenue);color:var(--tinta)}
+  .gr{font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;
+    margin:18px 0 6px;color:var(--tenue)}
+  .gr.bien{color:#7BD6AC}
+  .gr.mal{color:#F09080}
+  .neg{color:#F09080}
+  .bien{color:#7BD6AC}
 
   table{width:100%;border-collapse:collapse;font-size:14px}
   th{text-align:left;color:var(--tenue);font-weight:600;font-size:12px;
@@ -136,6 +150,8 @@ const hhmm = (t) => {
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 };
 const eur = (n) => (Math.round(Number(n || 0) * 100) / 100).toFixed(2).replace('.', ',') + ' €';
+/* "1 prendas" canta mucho en una página que se enseña a la gente. */
+const pl = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
 
 /* Cómo se ha decidido que una prenda es de alguien. El orden importa: de más
    seguro a menos, y la página lo dice con todas las letras. */
@@ -145,6 +161,8 @@ const VIAS = {
 };
 
 let ULTIMO = null;
+let TIPOS = null;          // el análisis por categoría ya hecho, para reordenarlo sin recargar
+let ORDEN = 'margen';      // por qué columna se ordena la tabla de tipos
 
 /* =========================================================================
    EL DINERO
@@ -195,6 +213,259 @@ const horasDe = (t) => (t && t.empezo && t.acabo)
    el €/hora de quien está trabajando saldría disparado. */
 const horasVivas = (t) => (t && t.empezo)
   ? Math.max((new Date(t.acabo || Date.now()) - new Date(t.empezo)) / 3600000, 0.01) : null;
+
+/* =========================================================================
+   ANÁLISIS POR TIPO DE PRENDA
+   =========================================================================
+   La pregunta que hace Aaron es "¿qué tipo de prenda me da dinero y cuál me
+   lo quita?". Con el precio de venta de cada prenda y el coste de su
+   categoría eso ya se puede contestar sin inventarse nada.
+
+   SOLO ENTRA LO MARCADO. Una prenda sin categoría no tiene coste, y sin
+   coste no hay margen: no se reparte por ahí ni se estima. Se cuenta aparte
+   y se dice cuántas son.
+
+   Ojo con "pierde dinero": aquí no se reparte el coste de presentadora entre
+   categorías. Ese coste es del rato, no de la prenda, y repartirlo por
+   unidades haría que una categoría barata pareciera ruinosa solo por ser
+   barata. Lo que se ve aquí es el margen de compra-venta de la ropa.
+   ========================================================================= */
+function nombreCat(id) {
+  return (COSTES && COSTES.porId[id] && COSTES.porId[id].nombre) || id || '(sin categoría)';
+}
+
+function analizarTipos(c) {
+  const m = {};
+  const bajoCoste = [];       // prendas vendidas por debajo de lo que costaron
+  let unidades = 0, sinTarifa = 0;
+
+  for (const f of c.filas) {
+    if (f.lote == null) continue;                       // toque sin prenda: no hay venta
+    const id = f.categoria || '(sin categoría)';
+    const g = m[id] = m[id] || {
+      id, nombre: nombreCat(f.categoria), unidades: 0, venta: 0, coste: 0,
+      conTarifa: 0, sinTarifa: 0, bajoCoste: 0, min: null, max: null
+    };
+    const p = Number(f.precio || 0);
+    const cp = costeDe(f.categoria);
+    g.unidades++; unidades++;
+    g.venta += p;
+    g.min = g.min == null ? p : Math.min(g.min, p);
+    g.max = g.max == null ? p : Math.max(g.max, p);
+    if (cp == null) { g.sinTarifa++; sinTarifa++; }
+    else {
+      g.coste += cp; g.conTarifa++;
+      if (p < cp) { g.bajoCoste++; bajoCoste.push({ ...f, coste: cp, perdida: cp - p }); }
+    }
+  }
+
+  const lista = Object.values(m).map((g) => {
+    const margen = g.venta - g.coste;
+    return {
+      ...g,
+      margen,
+      margenUd: g.unidades ? margen / g.unidades : 0,
+      precioMedio: g.unidades ? g.venta / g.unidades : 0,
+      costeUd: g.conTarifa ? g.coste / g.conTarifa : null,
+      /* Cuánto de cada euro vendido se queda. Es lo que compara bien una
+         chaqueta de 20 € con una camiseta de 3 €: el margen suelto no. */
+      pct: g.venta ? Math.round(margen / g.venta * 100) : 0
+    };
+  });
+
+  /* UNA CATEGORÍA SIN TARIFA NO ES UNA CATEGORÍA RENTABLE.
+     Si no está en costes-prendas.json su coste es desconocido, no cero. Si se
+     dejara en el montón la tabla la pintaría al 100 % de margen y sería la
+     estrella del día por no saber lo que costó. Va en su propio grupo. */
+  const conocidos = lista.filter((g) => g.conTarifa > 0);
+  const sinCoste  = lista.filter((g) => g.conTarifa === 0);
+  const buenos = conocidos.filter((g) => g.margen > 0);
+  const malos  = conocidos.filter((g) => g.margen <= 0);
+  const margenBueno = buenos.reduce((a, g) => a + g.margen, 0);
+
+  bajoCoste.sort((a, b) => b.perdida - a.perdida);
+
+  return {
+    lista, conocidos, sinCoste, buenos, malos, unidades, sinTarifa, bajoCoste, margenBueno,
+    margenTotal: conocidos.reduce((a, g) => a + g.margen, 0),
+    ventaTotal: lista.reduce((a, g) => a + g.venta, 0),
+    /* Para las barras: la referencia es el que más, no el total. Así la barra
+       más larga siempre llena y las demás se comparan con ella. */
+    topUnidades: Math.max(1, ...lista.map((g) => g.unidades)),
+    topMargen: Math.max(0.01, ...lista.map((g) => Math.abs(g.margen)))
+  };
+}
+
+const ORDENES = {
+  margen:   { txt: 'Lo que más deja',      f: (a, b) => b.margen - a.margen },
+  ud:       { txt: 'Margen por prenda',    f: (a, b) => b.margenUd - a.margenUd },
+  pct:      { txt: '% que se queda',       f: (a, b) => b.pct - a.pct },
+  unidades: { txt: 'Más vendidas',         f: (a, b) => b.unidades - a.unidades },
+  precio:   { txt: 'Precio medio',         f: (a, b) => b.precioMedio - a.precioMedio }
+};
+
+function filaTipo(g, t) {
+  const anchoU = Math.round(g.unidades / t.topUnidades * 100);
+  const anchoM = Math.round(Math.abs(g.margen) / t.topMargen * 100);
+  /* Sin tarifa no se enseña margen: enseñar "100 %" porque el coste está a
+     cero sería mentir con la cara muy seria. */
+  const mudo = g.conTarifa === 0;
+  return `<tr>
+    <td>${esc(g.nombre)}${(g.sinTarifa && !mudo) ? ` <span class="et no">${g.sinTarifa} sin tarifa</span>` : ''}</td>
+    <td class="n">${g.unidades}
+      <span class="barra" style="display:inline-block;width:52px;vertical-align:middle">
+        <i class="neutro" style="width:${anchoU}%"></i></span></td>
+    <td class="n">${eur(g.precioMedio)}</td>
+    <td class="n">${g.costeUd == null ? '—' : eur(g.costeUd)}</td>
+    <td class="n ${g.margenUd < 0 ? 'neg' : ''}">${mudo ? '—' : eur(g.margenUd)}</td>
+    <td class="n ${g.pct < 0 ? 'neg' : ''}">${mudo ? '—' : g.pct + '%'}</td>
+    <td class="n ${mudo ? '' : (g.margen < 0 ? 'neg' : 'bien')}">${mudo ? '—' : eur(g.margen) +
+      `<span class="barra" style="display:inline-block;width:52px;vertical-align:middle">
+        <i class="${g.margen < 0 ? 'malo' : ''}" style="width:${anchoM}%"></i></span>`}</td>
+  </tr>`;
+}
+
+const CABECERA_TIPOS = `<thead><tr>
+  <th>Tipo de prenda</th><th>Vendidas</th><th>Precio medio</th><th>Coste ud.</th>
+  <th>Margen ud.</th><th>% del precio</th><th>Margen total</th></tr></thead>`;
+
+/* Solo la tabla: se vuelve a pintar sola cuando se cambia el orden, sin
+   recargar la página ni cerrar el desplegable. */
+function pintarTipos() {
+  const caja = $('tablaTipos');
+  if (!caja || !TIPOS) return;
+  const t = TIPOS;
+  const orden = (ORDENES[ORDEN] || ORDENES.margen).f;
+  const buenos = t.buenos.slice().sort(orden);
+  const malos = t.malos.slice().sort(orden);
+
+  let h = '';
+  if (malos.length) {
+    h += `<div class="gr mal">Pierden dinero · ${pl(malos.length, 'tipo', 'tipos')}</div>
+      <table>${CABECERA_TIPOS}<tbody>${malos.map((g) => filaTipo(g, t)).join('')}</tbody></table>`;
+  }
+  if (buenos.length) {
+    h += `<div class="gr bien">Dan dinero · ${pl(buenos.length, 'tipo', 'tipos')}</div>
+      <table>${CABECERA_TIPOS}<tbody>${buenos.map((g) => filaTipo(g, t)).join('')}</tbody></table>`;
+  }
+  if (t.sinCoste.length) {
+    h += `<div class="gr">Sin tarifa · ${pl(t.sinCoste.length, 'tipo', 'tipos')}</div>
+      <table>${CABECERA_TIPOS}<tbody>${t.sinCoste.slice().sort(orden).map((g) => filaTipo(g, t)).join('')}</tbody></table>
+      <p class="nota" style="margin:8px 0 0">Estos no están en la tabla de costes, así que no se
+        sabe lo que costaron. <b>No se cuentan como beneficio</b>: aparecen aparte para que se
+        vean, no para sumarlos.</p>`;
+  }
+  if (!h) h = '<p class="nota">Todavía no hay prendas marcadas con categoría este día.</p>';
+  caja.innerHTML = h;
+}
+
+function bloqueTipos(t) {
+  if (!t.lista.length) return '';
+  const masVendido = t.lista.slice().sort((a, b) => b.unidades - a.unidades)[0];
+  const masDeja = t.conocidos.slice().sort((a, b) => b.margen - a.margen)[0];
+  const peor = t.conocidos.slice().sort((a, b) => a.margen - b.margen)[0];
+
+  /* El resumen en una frase: quien abra esto y no quiera leer tablas ya se
+     lleva lo importante en dos líneas. */
+  let resumen = `De los <b>${t.conocidos.length}</b> tipos de prenda marcados hoy,
+    <b>${t.buenos.length}</b> dejan dinero y <b class="${t.malos.length ? 'neg' : ''}">${t.malos.length}</b> no.`;
+  if (masDeja) {
+    resumen += ` El que más aporta es <b>${esc(masDeja.nombre)}</b> con ${eur(masDeja.margen)}${
+      t.margenBueno > 0 ? ` (${Math.round(masDeja.margen / t.margenBueno * 100)}% de lo que se gana)` : ''}.`;
+  }
+  resumen += ` El más vendido es <b>${esc(masVendido.nombre)}</b>, ${pl(masVendido.unidades, 'prenda', 'prendas')}
+    (${Math.round(masVendido.unidades / t.unidades * 100)}% de lo marcado).`;
+  if (peor && peor.margen < 0) {
+    resumen += ` El que más resta es <b class="neg">${esc(peor.nombre)}</b>: ${eur(peor.margen)}
+      en ${pl(peor.unidades, 'prenda', 'prendas')}.`;
+  }
+
+  let h = `<details class="mas"><summary>Analizar por tipo de prenda</summary>
+    <p class="nota" style="margin-top:4px">${resumen}</p>
+
+    <div class="chips" id="ordenTipos">
+      ${Object.entries(ORDENES).map(([k, v]) =>
+        `<button class="chip${k === ORDEN ? ' on' : ''}" data-orden="${k}">${v.txt}</button>`).join('')}
+    </div>
+    <div id="tablaTipos"></div>
+    <p class="nota" style="margin-top:12px">
+      <b>Margen ud.</b> es lo que deja una prenda de ese tipo de media: precio de venta
+      menos lo que costó comprarla. <b>% del precio</b> es cuánto de cada euro vendido
+      se queda, y es lo que compara bien una chaqueta de 20 € con una camiseta de 3 €.<br>
+      Aquí <b>no</b> se reparte el coste de presentadora: ese es del rato, no de la prenda.
+      El beneficio de arriba sí lo lleva descontado.
+      ${t.sinTarifa ? `<br><b>${pl(t.sinTarifa, 'prenda', 'prendas')}</b> ${t.sinTarifa === 1 ? 'lleva' : 'llevan'}
+        una categoría que no está en la tabla de costes: ${t.sinTarifa === 1 ? 'suma' : 'suman'} venta pero no coste.` : ''}
+    </p>`;
+
+  /* PRENDAS VENDIDAS POR DEBAJO DE COSTE.
+     Una categoría puede salir en verde y aun así llevar dentro diez prendas
+     rematadas a 1 €. Esto las saca a la luz una a una. */
+  if (t.bajoCoste.length) {
+    const ver = t.bajoCoste.slice(0, 15);
+    const perdido = t.bajoCoste.reduce((a, f) => a + f.perdida, 0);
+    h += `<h3>Vendidas por debajo de lo que costaron</h3>
+      <p class="nota"><b>${pl(t.bajoCoste.length, 'prenda salió', 'prendas salieron')}</b> por menos de su coste.
+        Entre todas se dejaron <b class="neg">${eur(perdido)}</b>. No es un error del sistema:
+        es el precio al que se remataron.</p>
+      <table><thead><tr><th>Hora</th><th>Ficha</th><th>Tipo</th><th>Vendedora</th>
+        <th>Precio</th><th>Coste</th><th>Diferencia</th></tr></thead><tbody>
+        ${ver.map((f) => `<tr>
+          <td class="n">${hhmm(f.en)}</td>
+          <td class="n">${f.lote == null ? '—' : '#' + f.lote}</td>
+          <td>${esc(nombreCat(f.categoria))}</td>
+          <td>${esc(f.vendedora)}</td>
+          <td class="n">${eur(f.precio)}</td>
+          <td class="n">${eur(f.coste)}</td>
+          <td class="n neg">−${eur(f.perdida)}</td>
+        </tr>`).join('')}
+      </tbody></table>
+      ${t.bajoCoste.length > ver.length
+        ? `<p class="nota" style="margin-top:8px">Y ${t.bajoCoste.length - ver.length} más.
+            Están todas en la hoja de cálculo.</p>` : ''}`;
+  }
+
+  h += '</details>';
+  return h;
+}
+
+/* Qué tipo de prenda vendió cada una. No es para señalar: sirve para ver si
+   una está atascada en lo barato mientras otra saca las chaquetas. */
+function bloqueMix(c) {
+  const m = {};
+  for (const f of c.filas) {
+    if (f.lote == null || !f.categoria) continue;
+    const g = m[f.vendedora] = m[f.vendedora] ||
+      { vendedora: f.vendedora, prendas: 0, venta: 0, coste: 0, conTarifa: 0, ventaConTarifa: 0, cats: {} };
+    const cp = costeDe(f.categoria);
+    g.prendas++; g.venta += Number(f.precio || 0);
+    /* El margen medio solo se hace con lo que tiene tarifa: una prenda sin
+       coste conocido saldría con margen entero y le subiría la media a quien
+       marcó categorías viejas. */
+    if (cp != null) { g.coste += cp; g.conTarifa++; g.ventaConTarifa += Number(f.precio || 0); }
+    g.cats[f.categoria] = (g.cats[f.categoria] || 0) + 1;
+  }
+  const lista = Object.values(m);
+  if (!lista.length) return '';
+  for (const g of lista) {
+    g.margenUd = g.conTarifa ? (g.ventaConTarifa - g.coste) / g.conTarifa : null;
+    g.top = Object.entries(g.cats).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  }
+  lista.sort((a, b) => (b.margenUd == null ? -1e9 : b.margenUd) - (a.margenUd == null ? -1e9 : a.margenUd));
+  return `<h3>Qué vende cada una</h3>
+    <p class="nota">De lo que marcaron. Sirve para ver si a alguien le tocan siempre
+      las prendas baratas, no para premiar ni castigar.</p>
+    <table><thead><tr><th>Vendedora</th><th>Marcadas</th><th>Precio medio</th>
+      <th>Margen por prenda</th><th>Lo que más marcó</th></tr></thead><tbody>
+      ${lista.map((g) => `<tr>
+        <td>${esc(g.vendedora)}</td>
+        <td class="n">${g.prendas}</td>
+        <td class="n">${eur(g.venta / g.prendas)}</td>
+        <td class="n ${g.margenUd < 0 ? 'neg' : ''}">${g.margenUd == null ? '—' : eur(g.margenUd)}</td>
+        <td>${g.top.map(([id, n]) => `<span class="et no">${esc(nombreCat(id))} ${n}</span>`).join(' ')}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
 
 async function cargar() {
   const dia = $('dia').value;
@@ -421,37 +692,12 @@ function pintar(j) {
     html += '</tbody></table>';
   }
 
+  // -------------------------------------------- analizar por tipo de prenda
+  TIPOS = analizarTipos(c);
+  html += bloqueTipos(TIPOS);
+
   // ------------------------------------------------------ ver más estadísticas
-  const porCat = {};
-  for (const f of c.filas) {
-    if (f.lote == null) continue;
-    const id = f.categoria || '(sin marcar)';
-    const g = porCat[id] = porCat[id] || { id, unidades: 0, venta: 0, coste: 0 };
-    g.unidades++; g.venta += Number(f.precio || 0);
-    const cp = costeDe(f.categoria);
-    if (cp != null) g.coste += cp;
-  }
-  const cats = Object.values(porCat).sort((a, b) => (b.venta - b.coste) - (a.venta - a.coste));
-
   html += `<details class="mas"><summary>Ver más estadísticas</summary>
-
-    <h3>Margen por categoría</h3>
-    <p class="nota">Qué tipo de prenda deja dinero y cuál no. Es para lo que existe
-      que marquen: sin categoría, esta tabla no se puede hacer.</p>
-    <table><thead><tr><th>Categoría</th><th>Unidades</th><th>Vendido</th>
-      <th>Coste</th><th>Margen</th><th>Margen medio</th><th>Precio medio</th></tr></thead><tbody>
-      ${cats.map((g) => {
-        const m = g.venta - g.coste;
-        return `<tr>
-          <td>${esc((COSTES && COSTES.porId[g.id] && COSTES.porId[g.id].nombre) || g.id)}</td>
-          <td class="n">${g.unidades}</td>
-          <td class="n">${eur(g.venta)}</td>
-          <td class="n">${eur(g.coste)}</td>
-          <td class="n" style="color:${m < 0 ? '#F09080' : '#7BD6AC'}">${eur(m)}</td>
-          <td class="n">${eur(m / g.unidades)}</td>
-          <td class="n">${eur(g.venta / g.unidades)}</td>
-        </tr>`; }).join('')}
-    </tbody></table>
 
     <h3>Hora a hora</h3>
     <p class="nota">Un día al 70 % casi nunca es un 70 % constante: suelen ser dos horas
@@ -468,12 +714,14 @@ function pintar(j) {
         </tr>`; }).join('')}
     </tbody></table>
 
+    ${bloqueMix(c)}
+
     <h3>El directo en números</h3>
     <table><tbody>
       <tr><td>Prendas vendidas</td><td class="n">${c.lotes}</td></tr>
       <tr><td>Precio medio de venta</td><td class="n">${eur(c.lotes ? c.euros / c.lotes : 0)}</td></tr>
       <tr><td>Prenda más cara</td><td class="n">${eur(Math.max(0, ...c.filas.map((f) => Number(f.precio || 0))))}</td></tr>
-      <tr><td>Ritmo de venta</td><td class="n">${tHoras ? Math.round(c.lotes / tHoras) : 0} prendas/hora</td></tr>
+      <tr><td>Ritmo de venta</td><td class="n">${pl(tHoras ? Math.round(c.lotes / tHoras) : 0, 'prenda', 'prendas')}/hora</td></tr>
       <tr><td>Coste medio de la ropa marcada</td><td class="n">${eur(tPrendas ? tCoste / tPrendas : 0)}</td></tr>
       <tr><td>Horas de presentadora</td><td class="n">${tHoras.toFixed(1).replace('.', ',')} h · ${eur(tPersonal)}</td></tr>
       <tr><td>Toques que no cuadraron con ninguna prenda</td><td class="n">${c.sinCruzar}</td></tr>
@@ -520,6 +768,18 @@ function pintar(j) {
   }
 
   $('salida').innerHTML = html;
+
+  /* La tabla de tipos se pinta aparte para poder reordenarla con los botones
+     sin volver a preguntarle al servidor ni cerrar el desplegable. */
+  pintarTipos();
+  const chips = $('ordenTipos');
+  if (chips) chips.onclick = (e) => {
+    const b = e.target.closest('.chip');
+    if (!b) return;
+    ORDEN = b.dataset.orden;
+    for (const x of chips.querySelectorAll('.chip')) x.classList.toggle('on', x === b);
+    pintarTipos();
+  };
 }
 
 /* La hoja de cálculo con punto y coma: es lo que abre bien el Excel en
