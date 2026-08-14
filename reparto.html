@@ -155,10 +155,23 @@ function pintar(j) {
      Un reparto con la mitad de las prendas sin dueño no es un reparto: es una
      lista que alguien va a dar por buena sin fijarse. Mejor cantarlo arriba. */
   if (!c.lotes) {
-    html += `<div class="aviso rojo"><b>No hay ninguna prenda del directo guardada este día.</b><br>
-      Eso lo manda la extensión del PC del almacén al leer el panel, en el paso 2.
-      Sin eso no hay nada que repartir. Comprueba que la extensión está activa y
-      que se ha hecho la lectura.</div>`;
+    /* NO ES UNA ALARMA. Las prendas suben cuando alguien hace la lectura del
+     * paso 2, que se hace al final del directo, al imprimir etiquetas. Durante
+     * el directo este día sale a cero y eso es lo normal.
+     *
+     * Poner aquí "comprueba que la extensión está activa" hizo que el 14 ago
+     * 2026 se parara un directo a buscar una avería que no existía. Un aviso
+     * que salta cuando no pasa nada acaba ignorándose cuando sí pasa. */
+    const conToques = j.total > 0;
+    html += `<div class="aviso ambar">
+      <b>Todavía no hay prendas de este día.</b><br>
+      Las prendas del directo suben cuando se hace <b>la lectura del panel</b> (paso 2
+      de la extensión), que normalmente es al final, al imprimir las etiquetas.
+      Si el directo está en marcha, esto es lo normal: aparecerán al leer.
+      ${conToques ? `<br><br>Mientras tanto sí están llegando los toques:
+        <b>${j.total}</b> de ${(j.turnos || []).length || 'varias'} vendedoras.
+        Se cruzarán solos en cuanto suban las prendas.` : ''}
+      </div>`;
   } else if (c.sinMarcar) {
     /* LA CIFRA DEL DÍA. Sin categoría no hay coste ni margen, así que una
        prenda sin marcar no entra en el cálculo — da igual de quién fuera.
