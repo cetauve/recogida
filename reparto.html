@@ -84,6 +84,20 @@
   .et.turno{background:rgba(200,50,31,.18);color:#F09080}
   .et.no{background:rgba(138,153,171,.16);color:var(--tenue)}
 
+  details.mas{background:var(--carta);border:1.5px solid var(--borde);border-radius:15px;
+    padding:0 18px;margin:22px 0}
+  details.mas summary{cursor:pointer;padding:15px 0;font-weight:700;font-size:16px;list-style:none}
+  details.mas summary::-webkit-details-marker{display:none}
+  details.mas summary::before{content:'▸ ';color:var(--tenue)}
+  details.mas[open] summary::before{content:'▾ '}
+  details.mas h3{font-size:15px;margin:20px 0 8px;color:var(--tenue);
+    text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  details.mas .nota{color:var(--tenue);font-size:13px;line-height:1.6;margin:0 0 18px}
+  .barra{height:7px;background:rgba(237,231,219,.1);border-radius:99px;overflow:hidden;min-width:70px}
+  .barra i{display:block;height:100%;background:var(--verde)}
+  .barra i.flojo{background:var(--ambar)}
+  .barra i.malo{background:var(--acento)}
+
   table{width:100%;border-collapse:collapse;font-size:14px}
   th{text-align:left;color:var(--tenue);font-weight:600;font-size:12px;
     text-transform:uppercase;letter-spacing:.05em;padding:0 10px 8px 0}
@@ -300,11 +314,18 @@ function pintar(j) {
   const tNeto = tVenta - tCoste - tPersonal;
 
   if (tPrendas) {
+    /* EL DINERO DEL DIRECTO ENTERO, MARCADO O NO.
+     *
+     * Contar prendas no basta: diez camisetas de 1 € sin marcar no son lo
+     * mismo que dos chaquetas de 30. Lo que decide es el dinero, así que el
+     * % que manda es el de euros, no el de unidades. */
     html += `<div class="totales">
-      <div><b>${eur(tVenta)}</b><span>vendido</span></div>
+      <div><b>${eur(c.euros)}</b><span>vendido en el directo</span></div>
+      <div><b>${eur(c.eurosMarcados)}</b><span>vendido y marcado</span></div>
+      <div><b class="${c.marcadoEurosPct < 75 ? 'neg' : 'bien'}">${c.marcadoEurosPct}%</b><span>del dinero, marcado</span></div>
       <div><b>${eur(tCoste)}</b><span>coste ropa</span></div>
       <div><b>${eur(tPersonal)}</b><span>coste presentadoras</span></div>
-      <div><b class="${tNeto < 0 ? 'neg' : 'bien'}">${eur(tNeto)}</b><span>beneficio del directo</span></div>
+      <div><b class="${tNeto < 0 ? 'neg' : 'bien'}">${eur(tNeto)}</b><span>beneficio de lo marcado</span></div>
       <div><b>${eur(tPrendas ? (tVenta - tCoste) / tPrendas : 0)}</b><span>beneficio por prenda</span></div>
       <div><b class="${tNeto < 0 ? 'neg' : ''}">${eur(tHoras ? tNeto / tHoras : 0)}</b><span>beneficio por hora</span></div>
     </div>`;
@@ -364,10 +385,120 @@ function pintar(j) {
       poner el nombre.</div>`;
   }
 
+  /* =======================================================================
+   *  QUIÉN ESTABA CUANDO SE DEJÓ DE MARCAR
+   * =======================================================================
+   *  Esto NO adjudica ventas. Una prenda sin marcar sigue sin contar para
+   *  nadie —esa regla no se toca—. Lo que se dice aquí es otra cosa: durante
+   *  el turno de Fulana se vendieron 40 prendas y ella marcó 25. No se
+   *  inventa nada; la hora de cada venta y la de cada turno están las dos
+   *  guardadas.
+   *
+   *  Y con dos a la vez no se señala a nadie: lo no marcado en un rato
+   *  solapado es de las dos o de ninguna, y así se dice. */
+  if ((c.porTurno || []).length) {
+    html += `<h2 style="font-size:19px;margin:26px 0 4px">Marcado por turno</h2>
+      <p class="sub" style="margin-bottom:10px">Lo que se vendió mientras cada una estaba, y lo que marcó.
+      Las prendas sin marcar no cuentan para nadie: esto solo dice en qué rato se perdieron.</p>
+      <table><thead><tr>
+        <th>Vendedora</th><th>Turno</th><th>Vendidas</th><th>Marcadas</th>
+        <th>Marcado</th><th>Dinero del rato</th><th>Sin marcar</th>
+      </tr></thead><tbody>`;
+    for (const t of c.porTurno) {
+      const falta = t.vendidas - t.marcadas;
+      const clase = t.pct == null ? '' : (t.pct >= 90 ? '' : (t.pct >= 70 ? 'flojo' : 'malo'));
+      html += `<tr>
+        <td>${esc(t.vendedora)}${t.abierto ? '<span class="enCurso">en curso</span>' : ''}</td>
+        <td class="n">${hhmm(t.empezo)}–${t.acabo ? hhmm(t.acabo) : 'sigue'}${
+          t.solapado ? '<br><span class="et no">solapado con otra</span>' : ''}</td>
+        <td class="n">${t.vendidas}</td>
+        <td class="n">${t.marcadas}</td>
+        <td class="n">${t.pct == null ? '—' : `${t.pct}% <span class="barra" style="display:inline-block;width:60px;vertical-align:middle"><i class="${clase}" style="width:${t.pct}%"></i></span>`}</td>
+        <td class="n">${eur(t.euros)}</td>
+        <td class="n">${falta > 0 ? falta + ' · ' + eur(t.euros - t.eurosMarcados) : '—'}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+  }
+
+  // ------------------------------------------------------ ver más estadísticas
+  const porCat = {};
+  for (const f of c.filas) {
+    if (f.lote == null) continue;
+    const id = f.categoria || '(sin marcar)';
+    const g = porCat[id] = porCat[id] || { id, unidades: 0, venta: 0, coste: 0 };
+    g.unidades++; g.venta += Number(f.precio || 0);
+    const cp = costeDe(f.categoria);
+    if (cp != null) g.coste += cp;
+  }
+  const cats = Object.values(porCat).sort((a, b) => (b.venta - b.coste) - (a.venta - a.coste));
+
+  html += `<details class="mas"><summary>Ver más estadísticas</summary>
+
+    <h3>Margen por categoría</h3>
+    <p class="nota">Qué tipo de prenda deja dinero y cuál no. Es para lo que existe
+      que marquen: sin categoría, esta tabla no se puede hacer.</p>
+    <table><thead><tr><th>Categoría</th><th>Unidades</th><th>Vendido</th>
+      <th>Coste</th><th>Margen</th><th>Margen medio</th><th>Precio medio</th></tr></thead><tbody>
+      ${cats.map((g) => {
+        const m = g.venta - g.coste;
+        return `<tr>
+          <td>${esc((COSTES && COSTES.porId[g.id] && COSTES.porId[g.id].nombre) || g.id)}</td>
+          <td class="n">${g.unidades}</td>
+          <td class="n">${eur(g.venta)}</td>
+          <td class="n">${eur(g.coste)}</td>
+          <td class="n" style="color:${m < 0 ? '#F09080' : '#7BD6AC'}">${eur(m)}</td>
+          <td class="n">${eur(m / g.unidades)}</td>
+          <td class="n">${eur(g.venta / g.unidades)}</td>
+        </tr>`; }).join('')}
+    </tbody></table>
+
+    <h3>Hora a hora</h3>
+    <p class="nota">Un día al 70 % casi nunca es un 70 % constante: suelen ser dos horas
+      al 100 % y una a cero. Aquí se ve en qué hora se rompió.</p>
+    <table><thead><tr><th>Hora</th><th>Vendidas</th><th>Marcadas</th><th>Marcado</th>
+      <th>Vendido</th><th>Marcado (€)</th></tr></thead><tbody>
+      ${(c.porHora || []).map((f) => {
+        const p = f.vendidas ? Math.round(f.marcadas / f.vendidas * 100) : 0;
+        const clase = p >= 90 ? '' : (p >= 70 ? 'flojo' : 'malo');
+        return `<tr>
+          <td class="n">${f.hora}</td><td class="n">${f.vendidas}</td><td class="n">${f.marcadas}</td>
+          <td class="n">${p}% <span class="barra" style="display:inline-block;width:60px;vertical-align:middle"><i class="${clase}" style="width:${p}%"></i></span></td>
+          <td class="n">${eur(f.euros)}</td><td class="n">${eur(f.eurosMarcados)}</td>
+        </tr>`; }).join('')}
+    </tbody></table>
+
+    <h3>El directo en números</h3>
+    <table><tbody>
+      <tr><td>Prendas vendidas</td><td class="n">${c.lotes}</td></tr>
+      <tr><td>Precio medio de venta</td><td class="n">${eur(c.lotes ? c.euros / c.lotes : 0)}</td></tr>
+      <tr><td>Prenda más cara</td><td class="n">${eur(Math.max(0, ...c.filas.map((f) => Number(f.precio || 0))))}</td></tr>
+      <tr><td>Ritmo de venta</td><td class="n">${tHoras ? Math.round(c.lotes / tHoras) : 0} prendas/hora</td></tr>
+      <tr><td>Coste medio de la ropa marcada</td><td class="n">${eur(tPrendas ? tCoste / tPrendas : 0)}</td></tr>
+      <tr><td>Horas de presentadora</td><td class="n">${tHoras.toFixed(1).replace('.', ',')} h · ${eur(tPersonal)}</td></tr>
+      <tr><td>Toques que no cuadraron con ninguna prenda</td><td class="n">${c.sinCruzar}</td></tr>
+    </tbody></table>
+
+    <h3>Cómo se calcula el dinero</h3>
+    <p class="nota">
+      <b>Coste de una prenda</b> = (€/kilo ÷ piezas/kilo + 0,05 € de transporte) × 1,21 de IVA.
+      Sale de <code>costes-prendas.json</code> y se recalcula con la fórmula, no se copia.<br>
+      <b>Beneficio de una prenda</b> = lo que se vendió − lo que costó comprarla.<br>
+      <b>Beneficio de un turno</b> = beneficio de sus prendas − sus horas × ${eur(COSTES ? COSTES.hora : 0)}.
+      Solo sale cuando el turno ha terminado.<br>
+      <b>Beneficio del directo</b> = todo lo anterior sumado.<br><br>
+      Con IVA en los dos lados, porque el precio de TikTok ya lo lleva. La hora de
+      presentadora va <b>sin</b> IVA: un salario no lo lleva.<br><br>
+      <b>Solo entra lo marcado.</b> Sin categoría no hay coste, y sin coste no hay margen.
+      Por eso el beneficio es el de <b>lo marcado</b>, no el del directo entero: si hoy
+      se marcó el ${c.marcadoEurosPct}% del dinero, esto es el margen de ese ${c.marcadoEurosPct}%.
+    </p>
+  </details>`;
+
   // -------------------------------------------------------------- el detalle
   if (c.filas.length) {
     html += `<h2 style="font-size:19px;margin:26px 0 10px">Prenda a prenda</h2>
-      <table><thead><tr>
+      <table id="prendaAPrenda"><thead><tr>
         <th>Hora</th><th>Vendedora</th><th>Ficha</th><th>Rack</th>
         <th>Categoría</th><th>Precio</th><th>Coste</th><th>Beneficio</th><th>Cómo se ha sabido</th>
       </tr></thead><tbody>`;
