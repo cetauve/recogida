@@ -152,6 +152,10 @@ async function cruzar(s, dia, toques) {
   const sinMarcar = libres.filter((x) => !x.tomado).length;
   return {
     lotes: lotes.length,
+    /* Cuándo entró la última prenda. Si el envío en vivo se para, esto deja de
+     * moverse y se puede cantar en pantalla. El 14 ago 2026 estuvo parado
+     * horas y nadie se enteró hasta que los números no cuadraron. */
+    ultimaVenta: lotes.length ? lotes[lotes.length - 1].vendida_en : null,
     sinMarcar,
     /* Qué parte del día tiene categoría y por tanto entra en el cálculo de
      * margen. Es la cifra que hay que mirar todos los días. */
