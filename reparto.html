@@ -23,10 +23,13 @@
 
   POR ESO ESTA PÁGINA NO GUARDA NADA. Solo pregunta y enseña.
 
-  Cada prenda dice POR QUÉ VÍA se le ha adjudicado a alguien, y eso importa:
-  no es lo mismo un número que leyó la tablet en el momento que un reparto
-  hecho porque esa persona estaba sola. Lo primero es un hecho; lo segundo es
-  una deducción razonable. Quien mire esto tiene derecho a distinguirlos.
+  LO QUE NADIE MARCÓ NO SE REPARTE, y no es una limitación: el toque existe
+  para saber QUÉ TIPO DE PRENDA era —la categoría no está en ningún otro
+  sitio— y sin categoría no hay coste ni margen. Una prenda sin marcar no
+  sirve de nada aunque supiéramos de quién es. Además, si esto se rellenara
+  solo, marcar dejaría de dar incentivo y se acabaría el dato.
+
+  Por eso la cifra que manda es el % MARCADO, y va arriba del todo.
 
   Esta página NO sustituye a cruce.html: aquella sigue siendo la de pegar
   archivos y CSV a mano, que es el último recurso cuando no hay servidor.
@@ -82,7 +85,7 @@
 <body>
 
 <h1>Reparto de prendas</h1>
-<p class="sub" id="sub">Qué vendió cada una, cruzando lo del directo con lo que marcaron.</p>
+<p class="sub" id="sub">Qué categoría tiene cada prenda vendida, según lo que marcaron.</p>
 
 <div class="fila">
   <input type="date" id="dia">
@@ -113,9 +116,8 @@ const eur = (n) => (Math.round(Number(n || 0) * 100) / 100).toFixed(2).replace('
 /* Cómo se ha decidido que una prenda es de alguien. El orden importa: de más
    seguro a menos, y la página lo dice con todas las letras. */
 const VIAS = {
-  lote:  { et:'lote',  txt:'número leído' },
-  hora:  { et:'hora',  txt:'por la hora' },
-  turno: { et:'turno', txt:'estaba sola' }
+  lote: { et:'lote', txt:'número leído' },
+  hora: { et:'hora', txt:'por la hora' }
 };
 
 let ULTIMO = null;
@@ -143,9 +145,9 @@ async function cargar() {
 }
 
 function pintar(j) {
-  const c = j.cruce || { filas: [], porVendedora: [], lotes: 0, sinDuenyo: 0, sinCruzar: 0 };
+  const c = j.cruce || { filas: [], porVendedora: [], lotes: 0, sinMarcar: 0, sinCruzar: 0 };
   $('sub').textContent = j.dia + ' · ' + c.lotes + ' prendas vendidas · ' +
-    j.total + ' toques de ' + (c.porVendedora.length || 0) + ' vendedoras';
+    j.total + ' marcadas por ' + (c.porVendedora.length || 0) + ' vendedoras';
 
   let html = '';
 
@@ -157,14 +159,17 @@ function pintar(j) {
       Eso lo manda la extensión del PC del almacén al leer el panel, en el paso 2.
       Sin eso no hay nada que repartir. Comprueba que la extensión está activa y
       que se ha hecho la lectura.</div>`;
-  } else if (c.sinDuenyo) {
-    const pct = Math.round(c.sinDuenyo / c.lotes * 100);
-    html += `<div class="aviso ${pct > 25 ? 'rojo' : 'ambar'}">
-      <b>${c.sinDuenyo} prendas sin dueño</b> de ${c.lotes} (${pct}%).
-      Nadie las marcó y en ese momento había más de una vendedora, así que no se
-      adjudican a ojo. Se reparten a mano o se dejan fuera.</div>`;
+  } else if (c.sinMarcar) {
+    /* LA CIFRA DEL DÍA. Sin categoría no hay coste ni margen, así que una
+       prenda sin marcar no entra en el cálculo — da igual de quién fuera.
+       Y como el incentivo cuelga de esto, va arriba y en grande. */
+    html += `<div class="aviso ${c.marcadoPct < 75 ? 'rojo' : 'ambar'}">
+      <b>Marcado el ${c.marcadoPct}%</b> · ${c.lotes - c.sinMarcar} de ${c.lotes} prendas.
+      <br>Las <b>${c.sinMarcar}</b> que nadie marcó se quedan fuera del cálculo: sin
+      categoría no hay coste ni margen. No se reparten ni se rellenan.</div>`;
   } else {
-    html += `<div class="aviso verde">Todas las prendas del día tienen dueño.</div>`;
+    html += `<div class="aviso verde"><b>Marcado el 100%.</b> Todas las prendas del día
+      llevan categoría y entran en el cálculo.</div>`;
   }
 
   if (c.sinCruzar) {
@@ -191,9 +196,8 @@ function pintar(j) {
         ${trabajadas ? `<div><b>${eur(g.euros / trabajadas)}</b><span>por hora</span></div>` : ''}
       </div>
       <div class="via">
-        ${g.porLote  ? `<span class="et lote">${g.porLote} número leído</span>` : ''}
-        ${g.porHora  ? `<span class="et hora">${g.porHora} por la hora</span>` : ''}
-        ${g.porTurno ? `<span class="et turno">${g.porTurno} estaba sola</span>` : ''}
+        ${g.porLote ? `<span class="et lote">${g.porLote} número leído</span>` : ''}
+        ${g.porHora ? `<span class="et hora">${g.porHora} por la hora</span>` : ''}
         ${g.prendas - g.cruzadas ? `<span class="et no">${g.prendas - g.cruzadas} sin prenda</span>` : ''}
       </div>
     </div>`;
@@ -220,7 +224,7 @@ function pintar(j) {
         <td>${esc(f.vendedora)}</td>
         <td class="n">${f.lote == null ? '—' : '#' + f.lote}</td>
         <td>${esc(f.cuenta || '')}</td>
-        <td>${esc(f.categoria || (f.sinToque ? 'no la marcó' : ''))}</td>
+        <td>${esc(f.categoria || '')}</td>
         <td class="n">${f.precio == null ? '' : eur(f.precio)}</td>
         <td>${v ? `<span class="et ${v.et}">${v.txt}</span>` : '<span class="et no">sin cruzar</span>'}</td>
       </tr>`;
