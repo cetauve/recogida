@@ -86,55 +86,49 @@ async function cruzar(s, dia, toques) {
     filas.push(hacerFila(t, elegido && elegido.l, elegido ? 'hora' : null));
   }
 
-  /* --------------------------------------------------------- 3 · EL TURNO
-   * EL PLAN B DE VERDAD. Si una prenda se vendió y nadie la marcó —se le
-   * olvidó pulsar, se quedó sin batería, la tablet no tenía el panel—, pero
-   * en ese momento SOLO HABÍA UNA VENDEDORA en turno, es suya y no hay
-   * ninguna duda. Con dos o más a la vez no se adjudica: preferimos decir
-   * "sin dueño" antes que repartir a ojo y que alguien cobre lo de otra.
+  /* ------------------------------------------- LO QUE NADIE MARCÓ SE QUEDA
+   * NO SE REPARTE. Y no es una limitación: es la regla del negocio.
    *
-   * El rango se mira por hora y, si el turno trae números de lote apuntados,
-   * también por número: es la red de seguridad para cuando las horas de
-   * TikTok vienen mal. */
-  const enTurno = (tu, l) => {
-    const dentroPorHora = tu.empezo && ms(l.vendida_en) >= ms(tu.empezo) &&
-      (!tu.acabo || ms(l.vendida_en) <= ms(tu.acabo));
-    const dentroPorLote = tu.lote_inicio != null && tu.lote_fin != null &&
-      l.num >= tu.lote_inicio && l.num <= tu.lote_fin;
-    return dentroPorHora || dentroPorLote;
-  };
-
-  for (const x of libres) {
-    if (x.tomado) continue;
-    const suyas = turnos.filter((tu) => enTurno(tu, x.l));
-    if (suyas.length !== 1) continue;          // cero o varias: no se inventa
-    x.tomado = true;
-    filas.push({
-      vendedora: suyas[0].vendedora, en: x.l.vendida_en, categoria: '',
-      lote: x.l.num, cuenta: x.l.cuenta, precio: x.l.precio, titulo: x.l.titulo,
-      metodo: 'turno', sinToque: true
-    });
-  }
+   * El toque no existe para saber quién vendió —eso ya se sabe con las horas
+   * de entrada y salida y el centro de pedidos—. Existe para saber QUÉ TIPO
+   * DE PRENDA era, que no está en ningún otro sitio, y sin eso no hay coste
+   * ni margen, que es para lo que existe todo esto.
+   *
+   * Así que una prenda sin marcar no vale para nada aunque supiéramos de
+   * quién es: no tiene categoría. Y si el sistema rellenara los huecos solo,
+   * marcar dejaría de dar incentivo y se acabaría el dato.
+   *
+   * Aaron, 14 ago 2026: "no tengo ningún interés en inventarme o rellenar
+   * cosas si no las han marcado".
+   *
+   * Hubo aquí un reparto automático que daba las prendas no marcadas a quien
+   * estuviera sola en turno. Se quitó el 14 ago 2026. NO LO VUELVAS A METER.
+   *
+   * Lo que sí se hace es CONTARLAS: cuántas se vendieron sin marcar es el
+   * número del que cuelga el incentivo. */
 
   const porVendedora = {};
   for (const f of filas) {
     const g = porVendedora[f.vendedora] = porVendedora[f.vendedora] ||
-      { vendedora: f.vendedora, prendas: 0, cruzadas: 0, euros: 0,
-        porLote: 0, porHora: 0, porTurno: 0 };
+      { vendedora: f.vendedora, prendas: 0, cruzadas: 0, euros: 0, porLote: 0, porHora: 0 };
     g.prendas++;
     if (f.lote != null) {
       g.cruzadas++;
       g.euros += Number(f.precio || 0);
-      if (f.metodo === 'lote')  g.porLote++;
-      if (f.metodo === 'hora')  g.porHora++;
-      if (f.metodo === 'turno') g.porTurno++;
+      if (f.metodo === 'lote') g.porLote++;
+      if (f.metodo === 'hora') g.porHora++;
     }
   }
 
+  const sinMarcar = libres.filter((x) => !x.tomado).length;
   return {
     lotes: lotes.length,
-    sinDuenyo: libres.filter((x) => !x.tomado).length,
+    sinMarcar,
+    /* Qué parte del día tiene categoría y por tanto entra en el cálculo de
+     * margen. Es la cifra que hay que mirar todos los días. */
+    marcadoPct: lotes.length ? Math.round((lotes.length - sinMarcar) / lotes.length * 100) : null,
     sinCruzar: filas.filter((f) => f.lote == null).length,
+    turnos: turnos.length,
     porVendedora: Object.values(porVendedora).map((g) => ({ ...g, euros: Math.round(g.euros * 100) / 100 })),
     filas: filas.sort((a, b) => new Date(a.en) - new Date(b.en))
   };
