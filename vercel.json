@@ -13,6 +13,10 @@
       "destination": "/reparto.html"
     },
     {
+      "source": "/manifiesto",
+      "destination": "/manifiesto.html"
+    },
+    {
       "source": "/tiempos",
       "destination": "/tiempos.html"
     },

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manifiesto de envío</title>
+
+<!--
+  ===========================================================================
+  EL MANIFIESTO  ·  /manifiesto?d=CODIGO
+  ===========================================================================
+
+  La hoja que se le entrega al repartidor y que firma al llevarse los bultos.
+
+  QUÉ CAMBIA RESPECTO A COMO SE HACÍA
+  Antes había que leer otra vez el Centro de vendedores para saber cuántos
+  bultos había. Ya no: en cuanto se calculan las tandas se sabe exactamente
+  cuántos paquetes hay y cuál es el Order ID de cada uno, porque es lo mismo
+  que se ha impreso en las tarjetas. Esta hoja sale de ahí, sin leer nada.
+
+  UNA LÍNEA POR BULTO, NO POR PEDIDO
+  TikTok junta en un solo paquete hasta 20 artículos del mismo comprador, y en
+  la etiqueta imprime SOLO el Order ID más antiguo. Así que un comprador es un
+  bulto y la línea lleva ese Order ID: es el que el repartidor ve en la
+  etiqueta y el único con el que puede cuadrar.
+
+  EL TRACKING NO EXISTE TODAVÍA
+  El Tracking ID no lo asigna TikTok hasta que se crea la etiqueta, que pasa
+  después del directo. Por eso la columna sale vacía y se rellena cuando la
+  extensión lea la pestaña "A la espera de recogida". La hoja se puede
+  imprimir igual: con el Order ID y el número de bultos el repartidor ya puede
+  contar y firmar.
+
+  LO QUE HAYA DE MÁS EN ESA PESTAÑA NO ES NUESTRO
+  En "A la espera de recogida" pueden aparecer paquetes de otros días que
+  siguen sin recoger. Esta hoja solo cuenta lo que está en las tarjetas de hoy;
+  lo demás se ignora a propósito.
+  ===========================================================================
+-->
+
+<style>
+  :root{ --tinta:#111; --tenue:#666; --linea:#ccc; }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0E1723;color:#EDE7DB;
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    padding:22px 18px 60px}
+  .mando{max-width:900px;margin:0 auto 18px}
+  h1{font-size:24px;margin:0 0 2px}
+  .sub{color:#8A99AB;font-size:14px;margin:0 0 16px}
+  .fila{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  input[type=date]{font:inherit;color:inherit;background:#16212F;
+    border:1.5px solid #243244;border-radius:11px;padding:10px 13px}
+  button{font:inherit;background:#C8321F;color:#fff;border:0;border-radius:11px;
+    padding:11px 18px;font-weight:700;cursor:pointer}
+  button.sec{background:transparent;border:1.5px solid #243244;color:#EDE7DB;font-weight:600}
+  .aviso{max-width:900px;margin:0 auto 16px;border-radius:13px;padding:13px 16px;font-size:15px;line-height:1.55}
+  .aviso.rojo{background:#2A1512;border:1.5px solid #C8321F}
+  .aviso.ambar{background:#241C0E;border:1.5px solid #D89B2E}
+
+  /* LA HOJA. Va en blanco y negro y con tipografía de papel: esto se imprime,
+     se firma y se queda en un archivador, no se mira en una pantalla. */
+  .hoja{background:#fff;color:var(--tinta);max-width:900px;margin:0 auto;
+    padding:26px 30px;border-radius:6px;font-family:"Helvetica Neue",Arial,sans-serif}
+  .hoja h2{margin:0 0 14px;font-size:21px;letter-spacing:.06em}
+  table.meta{border-collapse:collapse;font-size:14px;margin-bottom:16px}
+  table.meta td{padding:2px 0}
+  table.meta td.k{color:var(--tenue);padding-right:14px;white-space:nowrap}
+  table.meta td b{font-size:17px}
+  table.lista{width:100%;border-collapse:collapse;font-size:13px}
+  table.lista th{text-align:left;border-bottom:1.5px solid var(--tinta);
+    padding:5px 8px 5px 0;font-size:11px;letter-spacing:.05em;text-transform:uppercase}
+  table.lista td{padding:5px 8px 5px 0;border-bottom:1px solid var(--linea)}
+  td.nums{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;white-space:nowrap}
+  td.vacio{color:#aaa}
+  .firmas{display:flex;gap:40px;margin-top:34px}
+  .firma{flex:1;font-size:13px}
+  .firma .linea{border-bottom:1px solid var(--tinta);height:44px;margin-top:4px}
+  .firma .pie{color:var(--tenue);font-size:11px;margin-top:4px}
+  .pagina{margin-top:20px;color:var(--tenue);font-size:11px}
+
+  @media print{
+    body{background:#fff;padding:0}
+    .mando,.aviso{display:none}
+    .hoja{max-width:none;border-radius:0;padding:0}
+    table.lista{font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+<div class="mando">
+  <h1>Manifiesto de envío</h1>
+  <p class="sub" id="sub">La hoja que firma el repartidor al llevarse los bultos.</p>
+  <div class="fila">
+    <input type="date" id="dia">
+    <button id="ver">Ver</button>
+    <button id="imprimir" class="sec">Imprimir o guardar en PDF</button>
+    <button id="csv" class="sec">Descargar CSV</button>
+  </div>
+</div>
+
+<div id="salida"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+const CODIGO = new URLSearchParams(location.search).get('d') || '';
+
+/* Si la extensión no manda los datos de la tienda, se usan estos. Están aquí
+   para que la hoja salga hoy sin esperar a nada; en cuanto la extensión los
+   mande, mandan los suyos, que salen de config.json. */
+const POR_DEFECTO = { nombre: "BILLY'S", almacen: 'TIENDA VALENCIA',
+                      titulo: 'SHIPEMENT MANIFEST', firmaEntrega: 'Entrega', firmaRecoge: 'Recoge' };
+
+let ULTIMO = null;
+
+/* UN BULTO POR COMPRADOR.
+ *
+ * TikTok mete hasta 20 artículos del mismo comprador en un paquete y en la
+ * etiqueta imprime solo el Order ID más antiguo. Las tandas ya vienen
+ * agrupadas por comprador —una tarjeta, un paquete— así que la lista de bultos
+ * es la lista de tarjetas, en el mismo orden en que se recogen. */
+function bultosDe(datos) {
+  const fuera = [];
+  for (const t of (datos.tandas || [])) {
+    for (const c of (t.compradores || [])) {
+      fuera.push({
+        pedido: c.pedido || '',
+        apodo: c.apodo || '',
+        usuario: c.usuario || '',
+        prendas: (c.numeros || []).length,
+        tanda: t.etiqueta || '',
+        tracking: c.tracking || ''      // lo rellena la extensión cuando exista
+      });
+    }
+  }
+  return fuera;
+}
+
+async function cargar() {
+  const dia = $('dia').value;
+  if (!CODIGO) {
+    $('salida').innerHTML = `<div class="aviso rojo"><b>Falta el código en la dirección.</b><br>
+      Esta página se abre con <code>?d=</code> y el código detrás.</div>`;
+    return;
+  }
+  $('salida').innerHTML = '<div class="aviso ambar">Cargando…</div>';
+  try {
+    const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) +
+      (dia ? '&dia=' + dia : ''), { cache: 'no-store' });
+    const j = await r.json();
+    if (!j || !j.ok) throw new Error((j && j.detalle) || 'el servidor no ha contestado');
+    if (!j.hay || !j.datos) {
+      $('salida').innerHTML = `<div class="aviso ambar">
+        <b>Todavía no hay tandas de este día.</b><br>
+        El manifiesto sale de las mismas tarjetas que se imprimen para recoger, así que
+        aparece en cuanto se calculan las tandas en el paso 2 de la extensión.</div>`;
+      return;
+    }
+    ULTIMO = j;
+    pintar(j);
+  } catch (e) {
+    $('salida').innerHTML = `<div class="aviso rojo"><b>No he podido preguntarle al servidor.</b><br>
+      ${esc(e.message)}</div>`;
+  }
+}
+
+function pintar(j) {
+  const d = j.datos || {};
+  const T = Object.assign({}, POR_DEFECTO, d.tienda || {});
+  const bultos = bultosDe(d);
+  const conTracking = bultos.filter((b) => b.tracking).length;
+  const prendas = bultos.reduce((s, b) => s + b.prendas, 0);
+  const fecha = new Date(j.generado || Date.now()).toLocaleDateString('es-ES');
+
+  let aviso = '';
+  if (!conTracking) {
+    aviso = `<div class="aviso ambar">
+      <b>Sin Tracking ID todavía.</b> TikTok no lo asigna hasta que se crean las etiquetas.
+      La hoja se puede imprimir y firmar igual: el repartidor cuadra por <b>Order ID</b>,
+      que es lo que sale en la etiqueta. La columna se rellena sola cuando la extensión
+      lea la pestaña de "A la espera de recogida".</div>`;
+  } else if (conTracking < bultos.length) {
+    aviso = `<div class="aviso ambar"><b>${conTracking} de ${bultos.length} bultos con tracking.</b>
+      A los que faltan aún no se les ha creado la etiqueta.</div>`;
+  }
+
+  $('sub').textContent = j.dia + ' · ' + bultos.length +
+    (bultos.length === 1 ? ' bulto · ' : ' bultos · ') + prendas + ' prendas';
+
+  $('salida').innerHTML = aviso + `<div class="hoja">
+    <h2>${esc(T.titulo)}</h2>
+    <table class="meta">
+      <tr><td class="k">Seller:</td><td>${esc(T.nombre)}</td></tr>
+      <tr><td class="k">Warehouse:</td><td>${esc(T.almacen)}</td></tr>
+      <tr><td class="k">Date:</td><td>${esc(fecha)}</td></tr>
+      <tr><td class="k">Courier:</td><td>${esc(T.transportista || '')}</td></tr>
+      <tr><td class="k">Paquetes:</td><td><b>${bultos.length}</b></td></tr>
+    </table>
+    <table class="lista">
+      <tr><th>#</th><th>Order ID</th><th>Tracking ID</th><th>Comprador</th><th>Prendas</th></tr>
+      ${bultos.map((b, i) => `<tr>
+        <td class="nums">${i + 1}</td>
+        <td class="nums">${esc(b.pedido)}</td>
+        <td class="nums ${b.tracking ? '' : 'vacio'}">${b.tracking ? esc(b.tracking) : '—'}</td>
+        <td>${esc(b.apodo)}</td>
+        <td class="nums">${b.prendas}</td>
+      </tr>`).join('')}
+    </table>
+    <div class="firmas">
+      <div class="firma"><div>${esc(T.firmaEntrega)} (${esc(T.nombre)})</div>
+        <div class="linea"></div><div class="pie">Nombre y hora</div></div>
+      <div class="firma"><div>${esc(T.firmaRecoge)} (${esc(T.transportista || 'transportista')})</div>
+        <div class="linea"></div><div class="pie">Nombre y hora</div></div>
+    </div>
+    <div class="pagina">${esc(d.titulo || '')} · ${bultos.length} bultos · generado ${new Date().toLocaleString('es-ES')}</div>
+  </div>`;
+}
+
+$('imprimir').onclick = () => window.print();
+
+$('csv').onclick = () => {
+  if (!ULTIMO) return;
+  const bultos = bultosDe(ULTIMO.datos || {});
+  const filas = [['bulto', 'order_id', 'tracking_id', 'comprador', 'prendas', 'tanda'].join(';')]
+    .concat(bultos.map((b, i) => [i + 1, b.pedido, b.tracking, b.apodo, b.prendas, b.tanda]
+      .map((x) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(';')));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + filas.join('\n')], { type: 'text/csv' }));
+  a.download = 'manifiesto-' + ULTIMO.dia + '.csv';
+  a.click();
+};
+
+$('ver').onclick = cargar;
+$('dia').addEventListener('change', cargar);
+$('dia').value = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+cargar();
+})();
+</script>
+</body>
+</html>
