@@ -31,6 +31,27 @@ const MARGEN_DELANTE_MS = 5000;
  * acaba de marcar nadie. */
 const VENTANA_ATRAS_MS = 10 * 60000;
 
+/* =========================================================================
+   CUÁNDO SE DA UN DIRECTO POR TERMINADO
+   =========================================================================
+   Nadie pulsa un botón de "se acabó". El panel del directo deja de mandar
+   cuando se cierra la pestaña, y las vendedoras se van sin pulsar Terminar
+   más veces de las que la pulsan. El resultado era un turno abierto para
+   siempre: sus horas seguían corriendo, su €/hora se hundía sola y el
+   beneficio de su turno no salía nunca, porque solo sale al cerrarlo.
+
+   Así que el fin se DEDUCE: veinte minutos sin vender ni una prenda y el
+   directo se da por terminado a la hora de la última venta.
+
+   SE DEDUCE AL LEER, NO SE GUARDA. Si el directo estaba parado y vuelve a
+   vender, la deducción se deshace sola en la siguiente lectura. Guardarlo
+   sería sellar a ciegas algo que solo es una sospecha razonable.
+
+   Y se dice con todas las letras QUIÉN no pulsó Terminar: su turno sale
+   marcado como "cerrado solo". Es un dato de trabajo, no un apaño escondido.
+   ========================================================================= */
+const FIN_SIN_VENTAS_MS = 20 * 60000;
+
 /* Cada toque se queda con el lote más reciente SIN RECLAMAR anterior a él.
  * "Sin reclamar" es lo que impide que dos vendedoras se lleven la misma
  * prenda; el toque que se quede sin candidato se queda sin cruce y se dice,
@@ -170,17 +191,39 @@ async function cruzar(s, dia, toques) {
   const euros = lotes.reduce((a, l) => a + eur(l.precio), 0);
   const eurosMarcados = libres.filter((x) => x.tomado).reduce((a, x) => a + eur(x.l.precio), 0);
 
+  /* EL FIN DEDUCIDO DEL DIRECTO. Null mientras siga habiendo movimiento. */
+  const ultimaVenta = lotes.length ? lotes[lotes.length - 1].vendida_en : null;
+  const finDirecto = (ultimaVenta && Date.now() - ms(ultimaVenta) > FIN_SIN_VENTAS_MS)
+    ? ultimaVenta : null;
+
+  /* Cuándo acabó de verdad un turno:
+   *   1. la hora que ella pulsó, si la pulsó;
+   *   2. si no, el fin deducido del directo;
+   *   3. y si volvió a fichar más tarde, no más allá de esa segunda entrada,
+   *      que si no un turno se comería al siguiente.
+   * Si el directo sigue vivo devuelve null, que es "sigue trabajando". */
+  const finDe = (t) => {
+    if (t.acabo) return t.acabo;
+    if (!finDirecto) return null;
+    const otra = turnos.find((o) => o.vendedora === t.vendedora && ms(o.empezo) > ms(t.empezo));
+    return (otra && ms(otra.empezo) < ms(finDirecto)) ? otra.empezo : finDirecto;
+  };
+  const hasta = (t) => { const f = finDe(t); return f ? ms(f) : Date.now(); };
+
   const enVentana = (t, cuando) => {
     const q = ms(cuando);
-    return t.empezo && q >= ms(t.empezo) && q <= ms(t.acabo || Date.now());
+    return t.empezo && q >= ms(t.empezo) && q <= hasta(t);
   };
   const porTurno = turnos.map((t) => {
     const dentro = lotes.filter((l) => enVentana(t, l.vendida_en));
     const suyas = filas.filter((f) => f.vendedora === t.vendedora && f.lote != null);
     const solapado = turnos.some((o) => o !== t && o.vendedora !== t.vendedora &&
-      ms(o.empezo) < ms(t.acabo || Date.now()) && ms(o.acabo || Date.now()) > ms(t.empezo));
+      ms(o.empezo) < hasta(t) && hasta(o) > ms(t.empezo));
     return {
-      vendedora: t.vendedora, empezo: t.empezo, acabo: t.acabo, abierto: !t.acabo, solapado,
+      vendedora: t.vendedora, empezo: t.empezo,
+      /* `acabo` es lo que hay guardado; `fin` es hasta cuándo se cuenta. */
+      acabo: t.acabo, fin: finDe(t),
+      abierto: !finDe(t), cerradoSolo: !t.acabo && !!finDe(t), solapado,
       /* Lo que se vendió mientras ella estaba. */
       vendidas: dentro.length,
       euros: Math.round(dentro.reduce((a, l) => a + eur(l.precio), 0) * 100) / 100,
@@ -226,7 +269,12 @@ async function cruzar(s, dia, toques) {
     /* Cuándo entró la última prenda. Si el envío en vivo se para, esto deja de
      * moverse y se puede cantar en pantalla. El 14 ago 2026 estuvo parado
      * horas y nadie se enteró hasta que los números no cuadraron. */
-    ultimaVenta: lotes.length ? lotes[lotes.length - 1].vendida_en : null,
+    ultimaVenta,
+    /* Cuándo se da por terminado el directo, o null si sigue en marcha. Y con
+     * él, los turnos que se cerraron solos porque nadie pulsó Terminar. */
+    finDirecto,
+    finSinVentasMin: FIN_SIN_VENTAS_MS / 60000,
+    cerradosSolos: porTurno.filter((t) => t.cerradoSolo).map((t) => t.vendedora),
     sinMarcar,
     /* Qué parte del día tiene categoría y por tanto entra en el cálculo de
      * margen. Es la cifra que hay que mirar todos los días. */
