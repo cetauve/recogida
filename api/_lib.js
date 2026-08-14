@@ -73,6 +73,11 @@ const ESQUEMA = [
      primary key (directo, cuenta, num)
    )`,
   `create index if not exists lotes_dia on lotes (dia)`,
+  /* Una prenda leída EN VIVO del panel del directo. Ahí solo se conoce el
+   * productId, no el nombre de la cuenta, así que la fila es provisional:
+   * sirve para ver el cruce mientras el directo está en marcha y la sustituye
+   * la definitiva cuando se hace la lectura del paso 2. */
+  `alter table lotes add column if not exists provisional boolean not null default false`,
   `create index if not exists lotes_vendida on lotes (vendida_en)`,
 
   /* Lo que marcan las vendedoras. El lote va sellado en el toque: el servidor

@@ -51,7 +51,11 @@ module.exports = puerta(async (req, res) => {
         sku: aTexto(x.sku),
         titulo: aTexto(x.titulo),
         parado: !!x.parado,
-        comprador: x.comprador === undefined ? null : aTexto(x.comprador)
+        comprador: x.comprador === undefined ? null : aTexto(x.comprador),
+        /* Provisional = leída en vivo del panel del directo, donde no se
+         * conoce el nombre de la cuenta (solo el productId). Vale para ver el
+         * cruce mientras se emite; la sustituye la lectura del final. */
+        provisional: !!b.provisional
       }))
       .filter((x) => x.num !== null);
 
@@ -66,7 +70,7 @@ module.exports = puerta(async (req, res) => {
       const parte = lista.slice(i, i + TROZO);
       await s`
         insert into lotes ${s(parte, 'directo', 'cuenta', 'num', 'dia', 'vendida_en',
-                              'precio', 'sku', 'titulo', 'parado', 'comprador')}
+                              'precio', 'sku', 'titulo', 'parado', 'comprador', 'provisional')}
         on conflict (directo, cuenta, num) do update set
           dia        = excluded.dia,
           vendida_en = coalesce(excluded.vendida_en, lotes.vendida_en),
@@ -74,8 +78,22 @@ module.exports = puerta(async (req, res) => {
           sku        = case when excluded.sku = '' then lotes.sku else excluded.sku end,
           titulo     = case when excluded.titulo = '' then lotes.titulo else excluded.titulo end,
           parado     = excluded.parado,
-          comprador  = coalesce(excluded.comprador, lotes.comprador)`;
+          comprador  = coalesce(excluded.comprador, lotes.comprador),
+          provisional = excluded.provisional`;
       lotes += parte.length;
+    }
+
+    /* LA LECTURA DEL FINAL MANDA SOBRE LO LEÍDO EN VIVO.
+     *
+     * En vivo solo se conoce el productId, no el nombre de la cuenta, así que
+     * esas filas van con la cuenta puesta al productId y marcadas provisional.
+     * Cuando llega la lectura del paso 2 —que sí trae billysvlc y
+     * billystourvlc— se borran las provisionales de esos mismos números, o el
+     * día tendría cada prenda dos veces y el cruce contaría el doble. */
+    if (!b.provisional && lista.length) {
+      const nums = [...new Set(lista.map((x) => x.num))];
+      await s`delete from lotes
+              where dia = ${dia} and provisional = true and num in ${s(nums)}`;
     }
 
     let regalos = 0;
