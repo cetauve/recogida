@@ -126,9 +126,11 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 #cola{display:none;flex-direction:column;min-height:100dvh;padding:18px 16px 24px}
 #cola.on{display:flex}
 #cola h1{margin:0 0 4px}
-#colaFicha{flex:1;display:flex;align-items:center;justify-content:center;padding:10px 0}
+#colaFicha{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 0}
 #colaFicha .tarjeta{position:relative;width:100%;max-width:520px}
 #colaVacia{text-align:center;opacity:.6;font-size:16px;line-height:1.6;padding:40px 10px}
+.rescate{background:#241C0E;border:1.5px solid #D89B2E;border-radius:12px;
+ padding:11px 13px;font-size:14px;line-height:1.5;margin-bottom:12px;width:100%;max-width:520px}
 #colaCabecera{display:flex;align-items:baseline;gap:10px;margin:6px 0 2px}
 #colaCabecera b{font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
 #colaCabecera span{font-size:18px;font-weight:700}
@@ -195,7 +197,8 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
     <button id="pedir">Dame el siguiente</button>
     <button id="cerrarPaq" style="display:none">Paquete cerrado</button>
     <button id="soltarPaq" style="display:none">No puedo con este · devolverlo</button>
-    <button id="colaSalir" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar rol o nombre</button>
+    <button id="colaSalir" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar rol</button>
+    <button id="colaOtro" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar trabajador</button>
   </div>
 </div>
 
@@ -213,6 +216,7 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
   <div id="cuenta"></div>
   <button id="atras" disabled>Atrás</button>
   <button id="rolBarra" class="cambiarRol">Rol</button>
+  <button id="otroBarra" class="cambiarRol">Otro</button>
 </div>
 
 <div id="pila"></div>
@@ -533,8 +537,12 @@ async function refrescarContador(){
     const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
     const j = await r.json();
     if (!j || !j.ok) return;
-    $('colaSub').textContent = j.espera + (j.espera === 1 ? ' paquete esperando · ' : ' paquetes esperando · ')
-      + j.cerrado + ' hechos hoy';
+    $('colaSub').innerHTML = j.espera + (j.espera === 1 ? ' paquete esperando · ' : ' paquetes esperando · ')
+      + j.cerrado + ' hechos hoy'
+      /* Un atascado es trabajo PARADO, no trabajo en marcha. Si no se dice,
+         nadie lo mira y el paquete se queda ahi toda la tarde. */
+      + (j.atascados ? ' · <b style="color:#E7C078">' + j.atascados +
+          (j.atascados === 1 ? ' atascado' : ' atascados') + '</b>' : '');
   } catch(e){ $('colaSub').textContent = 'Sin conexión con el servidor'; }
 }
 
@@ -552,7 +560,13 @@ function pintarCola(){
      en grande; el nombre debajo, para cantarlo al entregarlo. */
   $('colaNum').textContent = '#' + PAQ.numero;
   $('colaQuien').textContent = PAQ.apodo || '';
-  $('colaFicha').innerHTML = tarjetaHTML(PAQ.ficha);
+  /* Un rescatado puede estar a medio hacer sobre la mesa de otro. Decirlo es
+     la diferencia entre rehacerlo y meter la mitad de las prendas. */
+  $('colaFicha').innerHTML = (PAQ.rescatado
+    ? `<div class="rescate">Este paquete lo tenía <b>${esc(PAQ.rescatado.loTenia)}</b>
+        desde hace ${PAQ.rescatado.minutos} min y no lo cerró.
+        <b>Compruébalo antes de cerrarlo</b>: puede estar a medias.</div>` : '')
+    + tarjetaHTML(PAQ.ficha);
 }
 
 $('pedir').addEventListener('click', async () => {
@@ -562,6 +576,7 @@ $('pedir').addEventListener('click', async () => {
     const j = await apiCola({ accion:'siguiente', quien: QUIEN });
     if (j && j.ok && j.hay){
       PAQ = j.paquete;
+      PAQ.rescatado = j.rescatado ? { loTenia: j.loTenia, minutos: j.minutos } : null;
       try{ localStorage.setItem('billys_paq', JSON.stringify(PAQ)); }catch(e){}
       if (navigator.vibrate) navigator.vibrate(20);
     } else {
@@ -646,6 +661,30 @@ function cambiarRol(){
   $('miNombre').scrollIntoView({ block:'center', behavior:'smooth' });
 }
 $('rolBarra').addEventListener('click', cambiarRol);
+
+/* ---------------------------------------------------- cambiar de trabajador
+ * En el almacen hay tablets compartidas: uno se va a comer y otro sigue en la
+ * misma. Si no se cambia el nombre, todo lo que haga el segundo se apunta al
+ * primero y los tiempos no valen para nada.
+ *
+ * Lo importante es lo que se hace con el paquete que tenga a medias: se SUELTA
+ * a la cola. Si no, se quedaria a nombre de alguien que ya no esta y nadie
+ * podria cogerlo — que es justo el atasco que hemos tenido hoy. */
+async function cambiarTrabajador(){
+  if (PAQ) {
+    if (!confirm('Tienes el paquete #' + PAQ.numero + ' (' + (PAQ.apodo || '') + ') sin cerrar.\n\n' +
+                 'Si cambias de persona ahora, vuelve a la cola para que lo coja otro. ¿Sigo?')) return;
+    try { await apiCola({ accion:'soltar', quien: QUIEN, pedido: PAQ.pedido }); } catch(e){}
+    PAQ = null;
+    try{ localStorage.removeItem('billys_paq'); }catch(e){}
+  }
+  QUIEN = '';
+  localStorage.setItem('billys_quien', '');
+  cambiarRol();
+  $('miNombre').focus();
+}
+$('otroBarra').addEventListener('click', cambiarTrabajador);
+$('colaOtro').addEventListener('click', cambiarTrabajador);
 
 $('colaSalir').addEventListener('click', cambiarRol);
 
