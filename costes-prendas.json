@@ -1,0 +1,34 @@
+{
+  "_lee_esto": "Coste de compra por pieza y coste de hora de presentadora. Es lo que alimenta el COGS del registro de prendas de los directos. Si cambian los precios, se cambian AQUI y en los bloques CONFIG de app-vendedoras.html y cruce.html. Nada mas hay que tocar.",
+
+  "version": 2,
+  "actualizado": "2026-08-10",
+  "moneda": "EUR",
+
+  "transportePorPieza": 0.05,
+  "iva": 0.21,
+
+  "_formula": "costePieza = (euroKilo / piezasKilo + transportePorPieza) * (1 + iva)",
+
+  "_transporte": "Los 5 centimos por pieza de transporte vienen de la lista del 7 ago 2026 y se han mantenido: en la lista del 10 ago no se dijo nada de quitarlos. Si ya no aplican, se pone a 0 aqui y en los dos CONFIG.",
+
+  "_nota_iva": "Las cifras 'conIva' son las que se usan para el margen, por decision de Aaron: el precio de venta de TikTok tambien lleva IVA, asi que los dos lados van con IVA. Se guarda tambien 'sinIva' porque el margen real del negocio es ese (el IVA soportado se deduce, no es coste). Cambiar de criterio es cambiar que columna se mira, no rehacer nada.",
+
+  "_horaPresentadora": "Coste base de una hora de presentadora. NO lleva IVA: un salario no lo lleva. El 21% es solo para la compra de ropa.",
+  "horaPresentadora": 9,
+
+  "categorias": [
+    { "id": "sudaderas_a", "nombre": "Sudaderas A",    "euroKilo": 5,   "piezasKilo": 2,   "costeSinIva": 2.550, "costeConIva": 3.086 },
+    { "id": "sudaderas_b", "nombre": "Sudaderas B",    "euroKilo": 3.5, "piezasKilo": 2,   "costeSinIva": 1.800, "costeConIva": 2.178 },
+    { "id": "camisetas_a", "nombre": "Camisetas A",    "euroKilo": 7,   "piezasKilo": 6,   "costeSinIva": 1.217, "costeConIva": 1.472 },
+    { "id": "camisetas_b", "nombre": "Camisetas B",    "euroKilo": 3,   "piezasKilo": 6,   "costeSinIva": 0.550, "costeConIva": 0.666 },
+    { "id": "polos_a",     "nombre": "Polos A",        "euroKilo": 9,   "piezasKilo": 3,   "costeSinIva": 3.050, "costeConIva": 3.691 },
+    { "id": "polos_b",     "nombre": "Polos B",        "euroKilo": 4,   "piezasKilo": 3,   "costeSinIva": 1.383, "costeConIva": 1.674 },
+    { "id": "trackjacket", "nombre": "Track jacket",   "euroKilo": 9,   "piezasKilo": 2.5, "costeSinIva": 3.650, "costeConIva": 4.417 },
+    { "id": "trackpants",  "nombre": "Trackpants",     "euroKilo": 8,   "piezasKilo": 2.5, "costeSinIva": 3.250, "costeConIva": 3.933 },
+    { "id": "chaquetas",   "nombre": "Chaquetas",      "euroKilo": 7.5, "piezasKilo": 1.5, "costeSinIva": 5.050, "costeConIva": 6.111 },
+    { "id": "shorts",      "nombre": "Shorts deporte", "euroKilo": 7,   "piezasKilo": 6,   "costeSinIva": 1.217, "costeConIva": 1.472 }
+  ],
+
+  "_cambios": "v2 (10 ago 2026): lista nueva de Aaron. Aparece la division A/B en sudaderas, camisetas y polos. 'Chaquetones' pasa a llamarse 'Chaquetas' y baja de 7 a 7,5 e/kg con las mismas 1,5 piezas. Camisetas sube de 5 a 7 e/kg y baja de 7 a 6 piezas. Shorts sube de 5 a 7 e/kg y de 7 a 6 piezas. Sudaderas pasa de 3 e/kg y 2,5 piezas a dos calidades. Los ids han cambiado: lo marcado con la lista vieja conserva su id antiguo y saldra con el nombre en crudo."
+}

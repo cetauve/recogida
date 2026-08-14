@@ -64,7 +64,17 @@
   .quien{background:var(--carta);border:1.5px solid var(--borde);border-radius:15px;padding:15px 16px}
   .quien h2{margin:0 0 2px;font-size:19px}
   .quien .horas{color:var(--tenue);font-size:13px;margin-bottom:11px}
-  .cifras{display:flex;gap:14px;margin-bottom:11px}
+  .cifras{display:flex;gap:14px;margin-bottom:11px;flex-wrap:wrap}
+  .cifras div b.neg{color:#F09080}
+  .totales{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;
+    background:var(--carta);border:1.5px solid var(--borde);border-radius:15px;
+    padding:16px 18px;margin-bottom:18px}
+  .totales div b{display:block;font-size:29px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .totales div b.neg{color:#F09080}
+  .totales div b.bien{color:#7BD6AC}
+  .totales div span{font-size:11px;color:var(--tenue);text-transform:uppercase;letter-spacing:.05em}
+  .enCurso{font-size:11px;padding:3px 8px;border-radius:999px;font-weight:700;
+    background:rgba(216,155,46,.18);color:#E7C078;margin-left:6px}
   .cifras div b{display:block;font-size:27px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
   .cifras div span{font-size:11px;color:var(--tenue);text-transform:uppercase;letter-spacing:.05em}
   .via{display:flex;gap:5px;flex-wrap:wrap}
@@ -122,6 +132,56 @@ const VIAS = {
 
 let ULTIMO = null;
 
+/* =========================================================================
+   EL DINERO
+   =========================================================================
+   Los costes salen de costes-prendas.json, que es donde Aaron los mantiene.
+   NO se copian aquí: si se copiaran, el día que cambie un precio habría un
+   sitio más que actualizar y este sería el que se olvidaría.
+
+       costePieza = (euroKilo / piezasKilo + transporte) × (1 + IVA)
+
+   Se recalcula con la fórmula en vez de usar el `costeConIva` guardado, para
+   que no puedan separarse nunca.
+
+   CON IVA EN LOS DOS LADOS. El precio de venta de TikTok ya lo lleva, así que
+   el coste también. Decisión de Aaron, 7 ago 2026. El margen real del negocio
+   es el de sin IVA —el soportado se deduce— pero eso es mirar otra columna,
+   no rehacer nada.
+
+   La hora de presentadora NO lleva IVA: un salario no lo lleva.
+   ========================================================================= */
+let COSTES = null;
+async function cargarCostes() {
+  if (COSTES) return COSTES;
+  try {
+    const c = await (await fetch('/costes-prendas.json', { cache: 'no-store' })).json();
+    const porId = {};
+    for (const x of c.categorias || []) {
+      porId[x.id] = {
+        nombre: x.nombre,
+        coste: (x.euroKilo / x.piezasKilo + (c.transportePorPieza || 0)) * (1 + (c.iva || 0))
+      };
+    }
+    COSTES = { porId, hora: c.horaPresentadora || 0, actualizado: c.actualizado };
+  } catch (e) { COSTES = { porId: {}, hora: 0, error: e.message }; }
+  return COSTES;
+}
+
+/* Lo que cuesta una prenda de esa categoría. null si la categoría no está en
+   la tabla —pasa con lo marcado antes de la división A/B de agosto— y en ese
+   caso NO se inventa un coste: se cuenta aparte y se dice. */
+const costeDe = (cat) => {
+  const c = COSTES && COSTES.porId[cat];
+  return c ? c.coste : null;
+};
+const horasDe = (t) => (t && t.empezo && t.acabo)
+  ? Math.max((new Date(t.acabo) - new Date(t.empezo)) / 3600000, 0.01) : null;
+/* Mientras el turno sigue abierto, las horas se cuentan hasta AHORA: si no,
+   el €/hora de quien está trabajando saldría disparado. */
+const horasVivas = (t) => (t && t.empezo)
+  ? Math.max((new Date(t.acabo || Date.now()) - new Date(t.empezo)) / 3600000, 0.01) : null;
+
 async function cargar() {
   const dia = $('dia').value;
   $('salida').innerHTML = '<div class="cargando">Cargando…</div>';
@@ -132,6 +192,7 @@ async function cargar() {
     return;
   }
   try {
+    await cargarCostes();
     const r = await fetch('/api/toques?d=' + encodeURIComponent(CODIGO) +
       '&cruce=1' + (dia ? '&dia=' + dia : ''), { cache: 'no-store' });
     const j = await r.json();
@@ -191,26 +252,88 @@ function pintar(j) {
       o una prenda que se acabó devolviendo.</div>`;
   }
 
+  /* ----------------------------------------------------------- EL DINERO
+   *
+   *   beneficio de una prenda = lo que se vendió − lo que costó comprarla
+   *   margen neto de un turno = beneficio de sus prendas − horas × 9 €
+   *
+   * Solo entra lo MARCADO: sin categoría no hay coste, y sin coste no hay
+   * beneficio. Lo que nadie marcó se cuenta arriba y se queda fuera. */
+  const cuentas = {};
+  let sinTarifa = 0;
+  for (const f of c.filas) {
+    if (f.lote == null) continue;
+    const q = cuentas[f.vendedora] = cuentas[f.vendedora] ||
+      { prendas: 0, venta: 0, coste: 0, sinTarifa: 0 };
+    q.prendas++;
+    q.venta += Number(f.precio || 0);
+    const cp = costeDe(f.categoria);
+    if (cp == null) { q.sinTarifa++; sinTarifa++; } else q.coste += cp;
+  }
+
+  let tVenta = 0, tCoste = 0, tHoras = 0, tPrendas = 0;
+  for (const g of c.porVendedora) {
+    const q = cuentas[g.vendedora] || { venta: 0, coste: 0, prendas: 0 };
+    const t = (j.turnos || []).find((x) => x.vendedora === g.vendedora);
+    tVenta += q.venta; tCoste += q.coste; tPrendas += q.prendas;
+    tHoras += horasVivas(t) || 0;
+  }
+  const tPersonal = tHoras * (COSTES ? COSTES.hora : 0);
+  const tNeto = tVenta - tCoste - tPersonal;
+
+  if (tPrendas) {
+    html += `<div class="totales">
+      <div><b>${eur(tVenta)}</b><span>vendido</span></div>
+      <div><b>${eur(tCoste)}</b><span>coste ropa</span></div>
+      <div><b>${eur(tPersonal)}</b><span>coste presentadoras</span></div>
+      <div><b class="${tNeto < 0 ? 'neg' : 'bien'}">${eur(tNeto)}</b><span>beneficio del directo</span></div>
+      <div><b>${eur(tPrendas ? (tVenta - tCoste) / tPrendas : 0)}</b><span>beneficio por prenda</span></div>
+      <div><b class="${tNeto < 0 ? 'neg' : ''}">${eur(tHoras ? tNeto / tHoras : 0)}</b><span>beneficio por hora</span></div>
+    </div>`;
+    if (sinTarifa) {
+      html += `<div class="aviso ambar"><b>${sinTarifa} prendas sin tarifa.</b>
+        Se marcaron con una categoría que no está en <code>costes-prendas.json</code>
+        —normalmente de antes de la división A/B— así que cuentan como venta pero
+        no tienen coste. El beneficio sale más alto de lo real en esa parte.</div>`;
+    }
+  }
+
   // --------------------------------------------------------------- la gente
   html += '<div class="gente">';
   for (const g of c.porVendedora.slice().sort((a, b) => b.cruzadas - a.cruzadas)) {
     const t = (j.turnos || []).find((x) => x.vendedora === g.vendedora);
+    const q = cuentas[g.vendedora] || { prendas: 0, venta: 0, coste: 0, sinTarifa: 0 };
+    const abierto = !(t && t.acabo);
     const horas = t && t.empezo
       ? hhmm(t.empezo) + '–' + (t.acabo ? hhmm(t.acabo) : 'sigue')
       : 'sin turno apuntado';
-    const trabajadas = t && t.empezo && t.acabo
-      ? Math.max((new Date(t.acabo) - new Date(t.empezo)) / 3600000, 0.01) : null;
+    const hv = horasVivas(t);
+    const bruto = q.venta - q.coste;
+    const neto = bruto - (hv || 0) * (COSTES ? COSTES.hora : 0);
+
     html += `<div class="quien">
-      <h2>${esc(g.vendedora)}</h2>
-      <div class="horas">${horas}${trabajadas ? ' · ' + trabajadas.toFixed(1).replace('.', ',') + ' h' : ''}</div>
+      <h2>${esc(g.vendedora)}${abierto ? '<span class="enCurso">en curso</span>' : ''}</h2>
+      <div class="horas">${horas}${hv ? ' · ' + hv.toFixed(1).replace('.', ',') + ' h' : ''}</div>
       <div class="cifras">
         <div><b>${g.cruzadas}</b><span>prendas</span></div>
-        <div><b>${eur(g.euros)}</b><span>vendido</span></div>
-        ${trabajadas ? `<div><b>${eur(g.euros / trabajadas)}</b><span>por hora</span></div>` : ''}
+        <div><b>${eur(q.venta)}</b><span>vendido</span></div>
+        <div><b>${eur(q.coste)}</b><span>coste ropa</span></div>
       </div>
+      <div class="cifras">
+        <div><b>${eur(q.prendas ? bruto / q.prendas : 0)}</b><span>benef. por prenda</span></div>
+        ${hv ? `<div><b class="${neto < 0 ? 'neg' : ''}">${eur(neto / hv)}</b><span>benef. por hora</span></div>` : ''}
+      </div>
+      ${/* EL BENEFICIO DEL TURNO SOLO CUANDO EL TURNO HA ACABADO. Mientras
+           sigue trabajando la cifra cambia cada minuto y no significa nada:
+           enseñarla invita a juzgar a alguien por media hora suelta. */''}
+      ${abierto
+        ? `<div class="horas" style="margin:6px 0 10px">El beneficio del turno sale al terminarlo.</div>`
+        : `<div class="cifras"><div><b class="${neto < 0 ? 'neg' : 'bien'}">${eur(neto)}</b>
+             <span>beneficio del turno</span></div></div>`}
       <div class="via">
         ${g.porLote ? `<span class="et lote">${g.porLote} número leído</span>` : ''}
         ${g.porHora ? `<span class="et hora">${g.porHora} por la hora</span>` : ''}
+        ${q.sinTarifa ? `<span class="et no">${q.sinTarifa} sin tarifa</span>` : ''}
         ${g.prendas - g.cruzadas ? `<span class="et no">${g.prendas - g.cruzadas} sin prenda</span>` : ''}
       </div>
     </div>`;
@@ -228,7 +351,7 @@ function pintar(j) {
     html += `<h2 style="font-size:19px;margin:26px 0 10px">Prenda a prenda</h2>
       <table><thead><tr>
         <th>Hora</th><th>Vendedora</th><th>Ficha</th><th>Rack</th>
-        <th>Categoría</th><th>Precio</th><th>Cómo se ha sabido</th>
+        <th>Categoría</th><th>Precio</th><th>Coste</th><th>Beneficio</th><th>Cómo se ha sabido</th>
       </tr></thead><tbody>`;
     for (const f of c.filas) {
       const v = VIAS[f.metodo];
@@ -237,8 +360,10 @@ function pintar(j) {
         <td>${esc(f.vendedora)}</td>
         <td class="n">${f.lote == null ? '—' : '#' + f.lote}</td>
         <td>${esc(f.cuenta || '')}</td>
-        <td>${esc(f.categoria || '')}</td>
+        <td>${esc((COSTES && COSTES.porId[f.categoria] && COSTES.porId[f.categoria].nombre) || f.categoria || '')}</td>
         <td class="n">${f.precio == null ? '' : eur(f.precio)}</td>
+        <td class="n">${costeDe(f.categoria) == null ? '—' : eur(costeDe(f.categoria))}</td>
+        <td class="n">${(f.precio == null || costeDe(f.categoria) == null) ? '' : eur(Number(f.precio) - costeDe(f.categoria))}</td>
         <td>${v ? `<span class="et ${v.et}">${v.txt}</span>` : '<span class="et no">sin cruzar</span>'}</td>
       </tr>`;
     }
@@ -252,10 +377,13 @@ function pintar(j) {
    español sin tener que tocar nada al importarla. */
 $('csv').onclick = () => {
   if (!ULTIMO || !ULTIMO.cruce) return;
-  const cab = ['hora','vendedora','ficha','rack','categoria','precio','como_se_ha_sabido'];
+  const cab = ['hora','vendedora','ficha','rack','categoria','precio','coste','beneficio','como_se_ha_sabido'];
   const lineas = [cab.join(';')].concat(ULTIMO.cruce.filas.map((f) => [
     hhmm(f.en), f.vendedora, f.lote == null ? '' : f.lote, f.cuenta || '',
     f.categoria || '', f.precio == null ? '' : String(f.precio).replace('.', ','),
+    costeDe(f.categoria) == null ? '' : costeDe(f.categoria).toFixed(3).replace('.', ','),
+    (f.precio == null || costeDe(f.categoria) == null) ? ''
+      : (Number(f.precio) - costeDe(f.categoria)).toFixed(3).replace('.', ','),
     (VIAS[f.metodo] || {}).txt || 'sin cruzar'
   ].map((x) => '"' + String(x).replace(/"/g, '""') + '"').join(';')));
   const a = document.createElement('a');
