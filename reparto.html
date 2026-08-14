@@ -209,10 +209,19 @@ const costeDe = (cat) => {
 };
 const horasDe = (t) => (t && t.empezo && t.acabo)
   ? Math.max((new Date(t.acabo) - new Date(t.empezo)) / 3600000, 0.01) : null;
-/* Mientras el turno sigue abierto, las horas se cuentan hasta AHORA: si no,
-   el €/hora de quien está trabajando saldría disparado. */
-const horasVivas = (t) => (t && t.empezo)
-  ? Math.max((new Date(t.acabo || Date.now()) - new Date(t.empezo)) / 3600000, 0.01) : null;
+
+/* HASTA CUÁNDO CUENTA UN TURNO.
+   Si ella pulsó Terminar, hasta ahí. Si no la pulsó pero el directo ya se ha
+   dado por terminado —veinte minutos sin vender ni una prenda—, hasta el fin
+   del directo. Y si el directo sigue vivo, hasta ahora: mientras trabaja, sus
+   horas corren, que si no el €/hora de quien está currando sale disparado.
+
+   Antes esto era solo `t.acabo || ahora`, y un turno sin cerrar seguía sumando
+   horas toda la noche: a las tres de la mañana la presentadora del directo de
+   la tarde llevaba doce horas de coste y beneficio por hora negativo. */
+const finTurno = (t, c) => (t && (t.acabo || (c && c.finDirecto))) || null;
+const horasVivas = (t, c) => (t && t.empezo)
+  ? Math.max((new Date(finTurno(t, c) || Date.now()) - new Date(t.empezo)) / 3600000, 0.01) : null;
 
 /* =========================================================================
    ANÁLISIS POR TIPO DE PRENDA
@@ -506,11 +515,27 @@ function pintar(j) {
   if (c.ultimaVenta) {
     const min = Math.round((Date.now() - new Date(c.ultimaVenta)) / 60000);
     const hayTurnoAbierto = (j.turnos || []).some((t) => !t.acabo);
-    if (hayTurnoAbierto && min >= 15) {
+    if (!c.finDirecto && hayTurnoAbierto && min >= 15) {
       html += `<div class="aviso rojo">
         <b>La última prenda entró hace ${min} minutos</b> y hay un turno abierto.
         Si el directo sigue vendiendo, es que <b>han dejado de llegar</b>.
         Mira que el PC del almacén siga encendido y con el panel del directo abierto.</div>`;
+    }
+    /* PASADOS LOS VEINTE MINUTOS ya no se puede saber si el directo terminó o
+     * si se paró el envío, así que se deja de gritar y se cuenta lo que se ha
+     * dado por hecho. Un aviso rojo que sale todas las noches al acabar deja
+     * de leerse, y entonces no sirve el día que la avería es de verdad. */
+    if (c.finDirecto) {
+      const cs = c.cerradosSolos || [];
+      html += `<div class="aviso ambar">
+        <b>Directo dado por terminado a las ${hhmm(c.finDirecto)}.</b>
+        Es la hora de la última prenda vendida, y desde entonces han pasado
+        ${min} minutos sin ninguna más.
+        ${cs.length ? `<br>Se han cerrado a esa hora ${pl(cs.length, 'turno que se quedó', 'turnos que se quedaron')}
+            sin cerrar: <b>${cs.map(esc).join(', ')}</b>. Sus horas cuentan hasta las
+            ${hhmm(c.finDirecto)}, no hasta ahora.` : ''}
+        ${min < 60 ? '' : '<br>Si el directo siguiera en marcha, mira el PC del almacén: querría decir que el panel ha dejado de mandar.'}
+        </div>`;
     }
   }
 
@@ -579,7 +604,7 @@ function pintar(j) {
     const q = cuentas[g.vendedora] || { venta: 0, coste: 0, prendas: 0 };
     const t = (j.turnos || []).find((x) => x.vendedora === g.vendedora);
     tVenta += q.venta; tCoste += q.coste; tPrendas += q.prendas;
-    tHoras += horasVivas(t) || 0;
+    tHoras += horasVivas(t, c) || 0;
   }
   const tPersonal = tHoras * (COSTES ? COSTES.hora : 0);
   const tNeto = tVenta - tCoste - tPersonal;
@@ -613,16 +638,21 @@ function pintar(j) {
   for (const g of c.porVendedora.slice().sort((a, b) => b.cruzadas - a.cruzadas)) {
     const t = (j.turnos || []).find((x) => x.vendedora === g.vendedora);
     const q = cuentas[g.vendedora] || { prendas: 0, venta: 0, coste: 0, sinTarifa: 0 };
-    const abierto = !(t && t.acabo);
+    /* El turno de verdad acabado, o el que se ha dado por acabado con el
+       directo. Solo sigue "en curso" si el directo sigue vivo. */
+    const fin = finTurno(t, c);
+    const abierto = !(t && fin);
+    const solo = !!(t && !t.acabo && fin);
     const horas = t && t.empezo
-      ? hhmm(t.empezo) + '–' + (t.acabo ? hhmm(t.acabo) : 'sigue')
+      ? hhmm(t.empezo) + '–' + (fin ? hhmm(fin) : 'sigue')
       : 'sin turno apuntado';
-    const hv = horasVivas(t);
+    const hv = horasVivas(t, c);
     const bruto = q.venta - q.coste;
     const neto = bruto - (hv || 0) * (COSTES ? COSTES.hora : 0);
 
     html += `<div class="quien">
       <h2>${esc(g.vendedora)}${abierto ? '<span class="enCurso">en curso</span>' : ''}</h2>
+      ${solo ? '<div class="horas" style="color:#E7C078;margin-bottom:6px">cerrado solo · no pulsó Terminar</div>' : ''}
       <div class="horas">${horas}${hv ? ' · ' + hv.toFixed(1).replace('.', ',') + ' h' : ''}</div>
       <div class="cifras">
         <div><b>${g.cruzadas}</b><span>prendas</span></div>
@@ -680,7 +710,8 @@ function pintar(j) {
       const clase = t.pct == null ? '' : (t.pct >= 90 ? '' : (t.pct >= 70 ? 'flojo' : 'malo'));
       html += `<tr>
         <td>${esc(t.vendedora)}${t.abierto ? '<span class="enCurso">en curso</span>' : ''}</td>
-        <td class="n">${hhmm(t.empezo)}–${t.acabo ? hhmm(t.acabo) : 'sigue'}${
+        <td class="n">${hhmm(t.empezo)}–${t.fin ? hhmm(t.fin) : 'sigue'}${
+          t.cerradoSolo ? '<br><span class="et hora">cerrado solo</span>' : ''}${
           t.solapado ? '<br><span class="et no">solapado con otra</span>' : ''}</td>
         <td class="n">${t.vendidas}</td>
         <td class="n">${t.marcadas}</td>
