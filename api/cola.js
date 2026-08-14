@@ -36,6 +36,12 @@ const {
   db, puerta, puedeLeer, noAutorizado, diaDe, aFecha, aEntero, aTexto, cuerpo
 } = require('./_lib');
 
+/* A partir de cuántos minutos un paquete cogido y no cerrado se considera
+ * atascado. Doce: los paquetes que se cierran bien tardan de uno a cinco
+ * minutos, así que doce es holgado de sobra para uno difícil y corto para
+ * que nadie espere media hora por un móvil que se apagó. */
+const ATASCO_MIN = 12;
+
 /* Los dos extremos del reloj de un paquete se guardan además en `tiempos`, que
  * es de donde tira la página /tiempos. Así la cola no obliga a reescribir esa
  * página ni parte el histórico en dos sitios. */
@@ -147,14 +153,46 @@ module.exports = puerta(async (req, res) => {
           from elegido e
          where c.dia = ${dia} and c.pedido = e.pedido
         returning c.*`;
-      if (!dado.length) {
-        const [c] = await s`
-          select count(*) filter (where estado = 'haciendo')::int as haciendo,
-                 count(*) filter (where estado = 'cerrado')::int  as cerrado
-          from cola where dia = ${dia}`;
-        return res.status(200).json({ ok: true, dia, hay: false, ...c });
+      if (dado.length) return res.status(200).json({ ok: true, dia, hay: true, paquete: dado[0] });
+
+      /* --------------------------------------------------- LOS ATASCADOS
+       * Un paquete que alguien cogió y nunca cerró se queda fuera de la
+       * circulación para siempre: nadie más puede pedirlo. Pasa el primer
+       * día —se va a comer, cierra la pestaña, cambia de móvil— y el paquete
+       * no vuelve solo.
+       *
+       * No se sueltan solos cada X minutos: eso se lo quitaría de las manos
+       * a quien está con uno difícil de verdad. Se rescatan solo cuando NO
+       * QUEDA NADA MÁS QUE HACER, que es cuando el rescate no le quita el
+       * trabajo a nadie y sí desatasca el día. Y se avisa de quién lo tenía,
+       * para que lo compruebe antes de cerrarlo. */
+      const rescatado = await s`
+        with elegido as (
+          select pedido, quien_cierra as antes, tomado_en as desde from cola
+          where dia = ${dia} and estado = 'haciendo'
+            and quien_cierra <> ${quien}
+            and tomado_en < now() - ${ATASCO_MIN + ' minutes'}::interval
+          order by tomado_en
+          for update skip locked
+          limit 1
+        )
+        update cola c
+           set quien_cierra = ${quien}, tomado_en = now()
+          from elegido e
+         where c.dia = ${dia} and c.pedido = e.pedido
+        returning c.*, e.antes, e.desde`;
+      if (rescatado.length) {
+        return res.status(200).json({ ok: true, dia, hay: true, rescatado: true,
+          loTenia: rescatado[0].antes,
+          minutos: Math.round((Date.now() - new Date(rescatado[0].desde)) / 60000),
+          paquete: rescatado[0] });
       }
-      return res.status(200).json({ ok: true, dia, hay: true, paquete: dado[0] });
+
+      const [c] = await s`
+        select count(*) filter (where estado = 'haciendo')::int as haciendo,
+               count(*) filter (where estado = 'cerrado')::int  as cerrado
+        from cola where dia = ${dia}`;
+      return res.status(200).json({ ok: true, dia, hay: false, ...c });
     }
 
     /* ------------------------------------------------------------ CERRAR */
@@ -262,9 +300,14 @@ module.exports = puerta(async (req, res) => {
              (actualizado < now() - interval '20 minutes') as fria
       from tandas_toma where dia = ${dia} order by tanda`;
 
+    /* "Haciendo" y "atascado" no son lo mismo y confundirlos hace que nadie
+     * mire: uno es trabajo en marcha y el otro es trabajo parado. */
+    const limite = Date.now() - ATASCO_MIN * 60000;
     return res.status(200).json({
       ok: true, dia, tandas,
       espera:   filas.filter((f) => f.estado === 'espera').length,
+      atascados: filas.filter((f) => f.estado === 'haciendo' &&
+                   f.tomado_en && new Date(f.tomado_en).getTime() < limite).length,
       haciendo: filas.filter((f) => f.estado === 'haciendo').length,
       cerrado:  filas.filter((f) => f.estado === 'cerrado').length,
       gente: Object.values(gente),
