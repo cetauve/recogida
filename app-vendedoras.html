@@ -79,6 +79,20 @@
     background:transparent;border:1.5px solid var(--borde);color:var(--tinta);
   }
 
+  /* DESDE QUÉ CUENTA SE EMITE. Dos botones grandes, del tamaño de los de la
+     rejilla: se pulsa de pie y una sola vez al día. */
+  .cuentas{display:flex;gap:10px;margin:14px 0 6px}
+  .cuentas button{
+    flex:1;padding:16px 10px;border-radius:14px;border:2px solid var(--borde);
+    background:var(--carta);color:var(--tinta);font:inherit;font-size:16px;font-weight:800;
+  }
+  .cuentas button.on{border-color:var(--acento);background:rgba(200,50,31,.16)}
+  .cuentas button small{display:block;font-size:12px;font-weight:600;color:var(--tenue);margin-top:3px}
+  #cuentaHoy{font-size:13px;color:var(--tenue);margin:0 0 18px}
+  #cuentaHoy b{color:var(--tinta)}
+  #cuentaHoy button{background:none;border:0;color:var(--tenue);font:inherit;
+    font-size:13px;text-decoration:underline;padding:0;margin-left:6px}
+
   .recientes{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 24px}
   .recientes button{
     padding:10px 15px;border-radius:999px;background:var(--carta);
@@ -162,6 +176,16 @@
        extension desde el panel del directo, en el mismo gesto. Preguntarselo
        de memoria a alguien que esta de pie con una prenda en la mano era pedir
        a mano el dato que ya tenemos mejor. Quitado el 15 ago 2026. -->
+  <!-- DESDE QUÉ CUENTA SE EMITE HOY. Se pregunta una vez por directo: la
+       primera que entra lo elige y a las demás ya les sale puesto, con un
+       enlace pequeño por si se equivocó. Sin esto, los toques de un directo de
+       la cuenta tour se cruzaban con las prendas de la otra. -->
+  <div id="elegirCuenta">
+    <p class="sub" style="margin:18px 0 0">¿Desde qué cuenta se emite hoy?</p>
+    <div class="cuentas" id="cuentas"></div>
+  </div>
+  <p id="cuentaHoy" hidden></p>
+
   <div class="recientes" id="recientes"></div>
   <div style="margin-top:auto">
     <div id="estadoServidor" class="sub" style="margin-bottom:10px"></div>
@@ -243,6 +267,13 @@
    quedarse vieja. El único sitio donde están es costes-prendas.json. */
 const CONFIG = {
   marca: 'Registro de prendas',
+  /* Las cuentas desde las que se emite. El nombre tiene que ser EXACTAMENTE el
+     que sale en el Centro de vendedores, porque es con el que llegan marcadas
+     las prendas y es lo que permite no mezclar los dos directos. */
+  cuentas: [
+    { id: 'billysvlc',     nombre: 'billysvlc',     pie: 'la de siempre' },
+    { id: 'billystourvlc', nombre: 'billystourvlc', pie: 'la del tour' }
+  ],
   categorias: [
     { id:'camisetas_a', nombre:'Camisetas A'    },
     { id:'camisetas_b', nombre:'Camisetas B'    },
@@ -259,6 +290,9 @@ const CONFIG = {
 
 const LLAVE_SESION     = 'billys_vend_sesion';
 const LLAVE_NOMBRES    = 'billys_vend_nombres';
+/* La cuenta se guarda con el día pegado: mañana vuelve a preguntar sola, que
+   es justo lo que hace falta para que nadie herede la de ayer sin mirar. */
+const LLAVE_CUENTA     = 'billys_vend_cuenta';
 const ANTIRREBOTE_MS   = 350;   // dos toques mas juntos que esto = uno solo
 
 /* =========================================================================
@@ -268,6 +302,11 @@ const $ = (id) => document.getElementById(id);
 const guardar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
 const leer = (k, x) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : x; } catch (_) { return x; } };
 const borrar = (k) => { try { localStorage.removeItem(k); } catch (_) {} };
+/* Los nombres de cuenta y de vendedora se pintan dentro de HTML: se escapan.
+   Nadie va a llamarse "<script>", pero el día que un nombre lleve un & la
+   pantalla no se puede romper por eso. */
+const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g, (c) =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
 const hhmm = (ts) => {
   const d = new Date(ts);
@@ -318,7 +357,10 @@ async function subir(cual) {
            esos dos campos por si un día vuelven, pero la tablet no los manda. */
         turno: {
           empezo: new Date(ses.inicio).toISOString(),
-          acabo: ses.fin ? new Date(ses.fin).toISOString() : null
+          acabo: ses.fin ? new Date(ses.fin).toISOString() : null,
+          /* Desde qué cuenta se emite. Es lo que usa el servidor para no
+             cruzar sus toques con prendas del otro directo. */
+          cuenta: ses.cuenta || ''
         },
         /* Las horas de los toques deshechos, para que el servidor los borre. */
         quitar: ses.quitados || [],
@@ -367,8 +409,53 @@ let cronometro = null;
 /* =========================================================================
    1 · ENTRADA
    ========================================================================= */
+/* =========================================================================
+   DESDE QUÉ CUENTA SE EMITE HOY
+   =========================================================================
+   Se pregunta una vez por directo. La primera vendedora que entra la elige y
+   a las siguientes ya les sale puesta, con un enlace pequeño para cambiarla
+   si se equivocó.
+
+   No es un adorno: el servidor cruza cada toque con las prendas de SU cuenta.
+   Sin esto, en un directo de la cuenta tour los toques se llevaban por la hora
+   la prenda que acababa de vender la otra cuenta.
+   ========================================================================= */
+const hoyValencia = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+
+function cuentaDeHoy() {
+  const g = leer(LLAVE_CUENTA, null);
+  return (g && g.dia === hoyValencia() && g.cuenta) ? g.cuenta : '';
+}
+function ponerCuenta(id) {
+  guardar(LLAVE_CUENTA, { dia: hoyValencia(), cuenta: id });
+  if (sesion) { sesion.cuenta = id; guardar(LLAVE_SESION, sesion); subir(); }
+  pintarCuenta();
+  validar();
+}
+function pintarCuenta() {
+  const elegida = cuentaDeHoy();
+  const caja = $('elegirCuenta'), linea = $('cuentaHoy');
+  if (!caja || !linea) return;
+  caja.hidden = !!elegida;
+  linea.hidden = !elegida;
+  if (elegida) {
+    const c = CONFIG.cuentas.find((x) => x.id === elegida);
+    linea.innerHTML = `Directo de <b>${esc((c && c.nombre) || elegida)}</b>` +
+      `<button id="cambiarCuenta">cambiar</button>`;
+    const b = $('cambiarCuenta');
+    if (b) b.onclick = () => { borrar(LLAVE_CUENTA); pintarCuenta(); validar(); };
+    return;
+  }
+  $('cuentas').innerHTML = CONFIG.cuentas.map((c) =>
+    `<button data-c="${c.id}">${esc(c.nombre)}<small>${esc(c.pie || '')}</small></button>`).join('');
+  for (const b of $('cuentas').querySelectorAll('button')) {
+    b.onclick = () => ponerCuenta(b.dataset.c);
+  }
+}
+
 function pintarEntrada() {
   $('tituloEntrada').textContent = CONFIG.marca;
+  pintarCuenta();
 
   const nombres = leer(LLAVE_NOMBRES, []);
   $('recientes').innerHTML = '';
@@ -414,7 +501,9 @@ async function mirarServidor(){
   }
 }
 
-function validar() { $('empezar').disabled = !$('nombre').value.trim(); }
+function validar() {
+  $('empezar').disabled = !$('nombre').value.trim() || !cuentaDeHoy();
+}
 $('nombre').addEventListener('input', validar);
 $('nombre').addEventListener('keydown', (e) => { if (e.key === 'Enter' && $('nombre').value.trim()) arrancar(); });
 $('empezar').onclick = arrancar;
@@ -426,7 +515,7 @@ function arrancar() {
   nombres.unshift(v);
   guardar(LLAVE_NOMBRES, nombres.slice(0, 8));
 
-  sesion = { v: 1, vendedora: v, inicio: Date.now(), toques: [] };
+  sesion = { v: 1, vendedora: v, inicio: Date.now(), toques: [], cuenta: cuentaDeHoy() };
   guardar(LLAVE_SESION, sesion);
   /* Se avisa al PC de que empieza el turno. La pantalla en vivo necesita la
      HORA DE ENTRADA para calcular las horas trabajadas: si las sacara del hueco

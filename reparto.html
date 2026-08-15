@@ -161,6 +161,7 @@ const VIAS = {
 };
 
 let ULTIMO = null;
+let PRENDAS = [];          // las prendas del día en crudo, para el desglose por cuenta
 let TIPOS = null;          // el análisis por categoría ya hecho, para reordenarlo sin recargar
 let ORDEN = 'margen';      // por qué columna se ordena la tabla de tipos
 
@@ -439,6 +440,55 @@ function bloqueTipos(t) {
   return h;
 }
 
+/* =========================================================================
+   QUÉ HA TRAÍDO CADA CUENTA
+   =========================================================================
+   Billy's emite desde dos cuentas y solo una tiene panel de directo:
+   billysvlc llega sola y en vivo; billystourvlc no manda nada hasta que se
+   lee el Centro de vendedores.
+
+   Sin este bloque, un directo de tour se veía como "no ha vendido nada" o
+   como un porcentaje de marcado ridículo, y no había forma de saber si es que
+   no se había vendido o es que faltaba la lectura. Aquí se dice cuál es.
+
+   El número que sale como cuenta —1729895654391191721— es el identificador
+   interno del producto: es lo que manda el panel en vivo, que no sabe el
+   nombre. Aparece cuando esas prendas todavía no tienen su lectura buena.
+   ========================================================================= */
+/* El identificador interno del producto no le dice nada a nadie: cuando una
+   prenda todavía no tiene su lectura buena, en la columna del rack sale eso en
+   vez de un número de veinte cifras. */
+const soloNumero = (c) => /^\d+$/.test(String(c || ''));
+const rotuloCuenta = (c) => soloNumero(c) ? 'sin leer' : (c || '');
+
+function bloqueCuentas() {
+  if (!PRENDAS.length) return '';
+  const m = {};
+  for (const l of PRENDAS) {
+    const id = String(l.cuenta || '').trim() || '(sin cuenta)';
+    const g = m[id] = m[id] || { id, prendas: 0, euros: 0 };
+    g.prendas++; g.euros += Number(l.precio || 0);
+  }
+  const lista = Object.values(m).sort((a, b) => b.prendas - a.prendas);
+  if (lista.length < 2 && !lista.some((g) => /^\d+$/.test(g.id))) return '';
+
+  const enVivo = soloNumero;
+  return `<h2 style="font-size:19px;margin:22px 0 4px">Por cuenta</h2>
+    <p class="sub" style="margin-bottom:10px">Solo <b>billysvlc</b> manda sus ventas en vivo.
+      Las de <b>billystourvlc</b> aparecen cuando se lee el Centro de vendedores, con el botón
+      de su cuenta en el panel de la extensión.</p>
+    <table><thead><tr><th>Cuenta</th><th>Prendas</th><th>Vendido</th><th></th></tr></thead><tbody>
+    ${lista.map((g) => `<tr>
+      <td>${enVivo(g.id) ? 'Pendiente de leer' : esc(g.id)}</td>
+      <td class="n">${g.prendas}</td>
+      <td class="n">${eur(g.euros)}</td>
+      <td>${enVivo(g.id)
+        ? '<span class="et hora">leídas en vivo, sin la lectura buena</span>'
+        : '<span class="et lote">leídas del Centro de vendedores</span>'}</td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
 /* Qué tipo de prenda vendió cada una. No es para señalar: sirve para ver si
    una está atascada en lo barato mientras otra saca las chaquetas. */
 function bloqueMix(c) {
@@ -493,6 +543,14 @@ async function cargar() {
       '&cruce=1' + (dia ? '&dia=' + dia : ''), { cache: 'no-store' });
     const j = await r.json();
     if (!j || !j.ok) throw new Error((j && j.detalle) || 'el servidor no ha contestado bien');
+    /* Las prendas en crudo, para poder decir cuántas ha traído cada cuenta.
+       Si falla, la página sigue: es información de más, no el plato. */
+    try {
+      const rp = await fetch('/api/directo?d=' + encodeURIComponent(CODIGO) +
+        (dia ? '&dia=' + dia : ''), { cache: 'no-store' });
+      const jp = await rp.json();
+      PRENDAS = (jp && jp.ok && jp.lotes) ? jp.lotes : [];
+    } catch (e) { PRENDAS = []; }
     ULTIMO = j;
     pintar(j);
   } catch (e) {
@@ -648,6 +706,8 @@ function pintar(j) {
         así que suman venta pero no coste: el beneficio sale más alto de lo real.</div>`;
     }
   }
+
+  html += bloqueCuentas();
 
   // --------------------------------------------------------------- la gente
   html += '<div class="gente">';
@@ -815,7 +875,7 @@ function pintar(j) {
         <td class="n">${hhmm(f.en)}</td>
         <td>${esc(f.vendedora)}</td>
         <td class="n">${f.lote == null ? '—' : '#' + f.lote}</td>
-        <td>${esc(f.cuenta || '')}</td>
+        <td>${esc(rotuloCuenta(f.cuenta))}</td>
         <td>${esc((COSTES && COSTES.porId[f.categoria] && COSTES.porId[f.categoria].nombre) || f.categoria || '')}</td>
         <td class="n">${f.precio == null ? '' : eur(f.precio)}</td>
         <td class="n">${costeDe(f.categoria) == null ? '—' : eur(costeDe(f.categoria))}</td>
@@ -847,7 +907,7 @@ $('csv').onclick = () => {
   if (!ULTIMO || !ULTIMO.cruce) return;
   const cab = ['hora','vendedora','ficha','rack','categoria','precio','coste','beneficio','como_se_ha_sabido'];
   const lineas = [cab.join(';')].concat(ULTIMO.cruce.filas.map((f) => [
-    hhmm(f.en), f.vendedora, f.lote == null ? '' : f.lote, f.cuenta || '',
+    hhmm(f.en), f.vendedora, f.lote == null ? '' : f.lote, rotuloCuenta(f.cuenta),
     f.categoria || '', f.precio == null ? '' : String(f.precio).replace('.', ','),
     costeDe(f.categoria) == null ? '' : costeDe(f.categoria).toFixed(3).replace('.', ','),
     (f.precio == null || costeDe(f.categoria) == null) ? ''
