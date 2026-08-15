@@ -91,12 +91,46 @@ async function cruzar(s, dia, toques) {
       )
     order by l.vendida_en`;
   const turnos = await s`
-    select vendedora, empezo, acabo, lote_inicio, lote_fin
+    select vendedora, empezo, acabo, lote_inicio, lote_fin, cuenta
     from turnos where dia = ${dia} order by empezo`;
 
   const libres = lotes.map((l) => ({ l, tomado: false }));
   const ms = (x) => new Date(x).getTime();
   const filas = [];
+
+  /* =========================================================================
+     CADA TOQUE, CON LAS PRENDAS DE SU CUENTA
+     =========================================================================
+     Billy's emite desde dos cuentas: billysvlc y billystourvlc. La tablet
+     pregunta al empezar desde cuál se emite y eso queda en el turno.
+
+     Sin esto, un toque dado en un directo de la cuenta tour se cruzaba por
+     hora con la prenda que acabara de vender la OTRA cuenta, porque las dos
+     venden a la vez y el reloj no las distingue.
+
+     LA RESTRICCIÓN SOLO SE APLICA CUANDO SE PUEDE. Las prendas que llegan en
+     vivo del panel no traen el nombre de la cuenta —traen el identificador
+     interno del producto—, así que exigirles el nombre dejaría a la vendedora
+     sin cruzar nada. Regla: si la prenda lleva un nombre de cuenta de verdad y
+     no es la suya, no es suya. Si no lleva nombre, no se descarta.
+     ======================================================================= */
+  const esNombreDeCuenta = (c) => !!c && !/^\d+$/.test(String(c));
+  const cuentaDelToque = (t) => {
+    const suyos = turnos.filter((x) => x.vendedora === t.vendedora && x.cuenta);
+    if (!suyos.length) return '';
+    const q = ms(t.en);
+    /* El turno que lo contiene; si ninguno lo contiene, el último que empezó
+       antes: un toque dado dos minutos después de cerrar sigue siendo suyo. */
+    const dentro = suyos.find((x) => q >= ms(x.empezo) && q <= ms(x.acabo || Date.now()));
+    if (dentro) return dentro.cuenta;
+    const antes = suyos.filter((x) => ms(x.empezo) <= q).pop();
+    return antes ? antes.cuenta : '';
+  };
+  const compatible = (t, l) => {
+    const suya = cuentaDelToque(t);
+    if (!suya || !esNombreDeCuenta(l.cuenta)) return true;
+    return String(l.cuenta) === String(suya);
+  };
 
   /* ---------------------------------------------------------- 1 · EL LOTE
    * Si la tablet tenía el panel abierto, el toque lleva pegado el número de
@@ -108,7 +142,7 @@ async function cruzar(s, dia, toques) {
   const sinLote = [];
   for (const t of toques) {
     const sellado = t.lote == null ? null : (porNumero.get((t.cuenta || '') + '#' + t.lote) ||
-      libres.find((x) => !x.tomado && x.l.num === t.lote));
+      libres.find((x) => !x.tomado && x.l.num === t.lote && compatible(t, x.l)));
     if (sellado && !sellado.tomado) {
       sellado.tomado = true;
       filas.push(hacerFila(t, sellado.l, 'lote'));
@@ -129,6 +163,7 @@ async function cruzar(s, dia, toques) {
       const lt = ms(libres[k].l.vendida_en);
       if (lt > tt + MARGEN_DELANTE_MS) continue;
       if (tt - lt > VENTANA_ATRAS_MS) break;
+      if (!compatible(t, libres[k].l)) continue;   // es de la otra cuenta
       elegido = libres[k];
       break;
     }
@@ -220,7 +255,7 @@ async function cruzar(s, dia, toques) {
     const solapado = turnos.some((o) => o !== t && o.vendedora !== t.vendedora &&
       ms(o.empezo) < hasta(t) && hasta(o) > ms(t.empezo));
     return {
-      vendedora: t.vendedora, empezo: t.empezo,
+      vendedora: t.vendedora, empezo: t.empezo, cuenta: t.cuenta || '',
       /* `acabo` es lo que hay guardado; `fin` es hasta cuándo se cuenta. */
       acabo: t.acabo, fin: finDe(t),
       abierto: !finDe(t), cerradoSolo: !t.acabo && !!finDe(t), solapado,
@@ -366,15 +401,18 @@ module.exports = puerta(async (req, res) => {
       const empezo = aFecha(t.empezo || t.inicio);
       if (empezo) {
         const [f] = await s`
-          insert into turnos (dia, vendedora, empezo, acabo, lote_inicio, lote_fin, directo)
+          insert into turnos (dia, vendedora, empezo, acabo, lote_inicio, lote_fin, directo, cuenta)
           values (${dia}, ${vendedora}, ${empezo}, ${aFecha(t.acabo || t.fin)},
-                  ${aEntero(t.loteInicio)}, ${aEntero(t.loteFin)}, ${directo})
+                  ${aEntero(t.loteInicio)}, ${aEntero(t.loteFin)}, ${directo}, ${aTexto(t.cuenta)})
           on conflict (dia, vendedora, empezo) do update set
             acabo       = coalesce(excluded.acabo, turnos.acabo),
             lote_inicio = coalesce(excluded.lote_inicio, turnos.lote_inicio),
             lote_fin    = coalesce(excluded.lote_fin, turnos.lote_fin),
+            /* La cuenta solo se pisa si viene puesta: un reenvío sin ella no
+               puede borrar la que ya se eligió. */
+            cuenta      = case when excluded.cuenta = '' then turnos.cuenta else excluded.cuenta end,
             actualizado = now()
-          returning empezo, acabo`;
+          returning empezo, acabo, cuenta`;
         turno = f;
       }
     }
@@ -396,7 +434,7 @@ module.exports = puerta(async (req, res) => {
                 where dia = ${dia} order by vendedora, en`;
 
     const turnos = await s`
-      select vendedora, empezo, acabo, lote_inicio, lote_fin
+      select vendedora, empezo, acabo, lote_inicio, lote_fin, cuenta
       from turnos where dia = ${dia} order by empezo`;
 
     const porVendedora = {};

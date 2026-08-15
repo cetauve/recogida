@@ -120,6 +120,11 @@ const ESQUEMA = [
      actualizado timestamptz not null default now(),
      primary key (dia, vendedora, empezo)
    )`,
+  /* DESDE QUE CUENTA EMITE ESE TURNO. billysvlc o billystourvlc.
+   * La tablet lo pregunta una vez al empezar el directo. Sin esto, un toque
+   * dado durante un directo de la cuenta tour se cruzaba por hora con una
+   * prenda de la otra cuenta, que es justo lo que no puede pasar. */
+  `alter table turnos add column if not exists cuenta text not null default ''`,
   `create index if not exists turnos_dia on turnos (dia)`,
 
   /* LA COLA DE EMPAQUETADO.
