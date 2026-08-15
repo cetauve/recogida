@@ -269,6 +269,37 @@ module.exports = puerta(async (req, res) => {
       return res.status(200).json({ ok: true, dia, soltado: fila.length > 0 });
     }
 
+    /* ----------------------------------------------------------- RETIRAR
+     * El recogedor se equivocó de deslice y da a "Atrás".
+     *
+     * Solo se retira lo que sigue ESPERANDO. Si alguien ya lo tiene en la mesa
+     * o ya lo cerró, no se toca y se dice en qué estado está: quitarle un
+     * paquete de las manos a otro por un botón de deshacer sería peor que el
+     * error que se quería arreglar.
+     *
+     * Se borra también la marca de tiempo de "abierto", que si no quedaría una
+     * hora de apertura de un paquete que ya no existe. */
+    if (accion === 'retirar') {
+      const pedido = aTexto(b.pedido).trim();
+      if (!pedido) return res.status(400).json({ ok: false, error: 'sin-pedido' });
+      const fila = await s`
+        delete from cola
+         where dia = ${dia} and pedido = ${pedido} and estado = 'espera'
+        returning pedido, numero`;
+      if (fila.length) {
+        await s`delete from tiempos
+                 where dia = ${dia} and pedido = ${pedido} and modo = 'recoge'`;
+        return res.status(200).json({ ok: true, dia, retirado: true, estado: null, quien: '' });
+      }
+      const [ahora] = await s`
+        select estado, quien_cierra from cola where dia = ${dia} and pedido = ${pedido}`;
+      return res.status(200).json({
+        ok: true, dia, retirado: false,
+        estado: ahora ? ahora.estado : null,
+        quien: ahora ? ahora.quien_cierra : ''
+      });
+    }
+
     return res.status(400).json({ ok: false, error: 'accion-desconocida' });
   }
 

@@ -338,6 +338,25 @@ module.exports = puerta(async (req, res) => {
       guardados += parte.length;
     }
 
+    /* ------------------------------------------------------ LOS DESHECHOS
+     * Cuando alguien pulsa "Deshacer" en la tablet, el toque desaparece de su
+     * pantalla. Antes se quedaba en el servidor para siempre: la vendedora
+     * veía 40 prendas y el reparto le contaba 41, y esa de más se llevaba una
+     * venta que no era suya.
+     *
+     * Se borra por hora exacta y solo lo suyo, de su día. Es idempotente:
+     * repetir el envío no borra nada de nadie más. */
+    let quitados = 0;
+    const fuera = (Array.isArray(b.quitar) ? b.quitar : [])
+      .map((x) => aFecha(x)).filter(Boolean);
+    if (fuera.length) {
+      const r = await s`
+        delete from toques
+         where dia = ${dia} and vendedora = ${vendedora} and en in ${s(fuera)}
+        returning en`;
+      quitados = r.length;
+    }
+
     /* EL TURNO, si viene. Se manda dos veces: al entrar (solo `empezo`) y al
      * terminar (con `acabo`). La clave lleva `empezo`, así que el segundo
      * envío completa el mismo turno en vez de abrir otro. */
@@ -361,7 +380,7 @@ module.exports = puerta(async (req, res) => {
     }
 
     const total = await s`select count(*)::int as n from toques where dia = ${dia} and vendedora = ${vendedora}`;
-    return res.status(200).json({ ok: true, dia, vendedora, guardados, turno, total: total[0].n });
+    return res.status(200).json({ ok: true, dia, vendedora, guardados, quitados, turno, total: total[0].n });
   }
 
   if (req.method === 'GET') {
