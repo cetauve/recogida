@@ -72,6 +72,12 @@
 <div class="caja">
   <h1>Tiempos de empaquetado</h1>
   <p class="sub" id="cabecera">Cargando…</p>
+  <!-- El servidor guarda todos los días y esta página solo sabía enseñar el de
+       hoy: los tiempos de ayer no había forma de mirarlos. -->
+  <div class="fila" id="mandoDia" style="margin:0 0 16px">
+    <input type="date" id="dia" style="background:var(--fondo);color:var(--tinta);
+      border:1.5px solid var(--borde);border-radius:10px;padding:10px 12px;font:inherit">
+  </div>
   <div id="entrada"></div>
   <div id="salida"></div>
 </div>
@@ -172,7 +178,7 @@ function pintar() {
     html += `<div class="panel ojo"><b>Falta uno de los dos.</b> Tengo
       ${modos.has('recoge') ? 'al que coge prendas' : 'al que cierra paquetes'} pero no al otro,
       así que puedo contar paquetes pero no puedo medir cuánto tarda ninguno.
-      Pega también el enlace del otro móvil.</div>`;
+      Que el otro pulse <b>Mandar mis tiempos</b> en su móvil.</div>`;
   }
 
   if (negativas.length) {
@@ -253,24 +259,15 @@ function pintar() {
       <td>${esc(f.recoge || '—')}</td><td>${esc(f.empaqueta || '—')}</td></tr>`).join('') +
     '</tbody></table></div>';
 
-  html += `<div class="fila">
-    <button id="csv">Descargar CSV</button>
-    <button id="otro" class="sec">Pegar otro enlace</button>
-    <button id="vaciar" class="sec">Empezar de cero</button>
-  </div>
-  <div id="pegarOtro" style="display:none;margin-top:12px">
-    <textarea id="txt2" placeholder="Pega aquí el enlace del otro móvil"></textarea>
-    <div class="fila"><button id="cargar2" class="sec">Cargar</button></div>
-  </div>`;
+  /* Aquí había un "Pegar otro enlace" sin etiquetar, como si fuera lo normal, y
+     un "Empezar de cero" que no vaciaba nada: a los treinta segundos volvía
+     todo del servidor y el aviso de "descarga antes el CSV" prometía algo que
+     no pasaba. Los dos fuera. Pegar a mano sigue estando, arriba y con su
+     nombre: es el plan B del día sin internet en el almacén. */
+  html += `<div class="fila"><button id="csv">Descargar CSV</button></div>`;
 
   $('salida').innerHTML = html;
   $('csv').onclick = () => descargar(filas);
-  $('otro').onclick = () => { const p = $('pegarOtro'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; };
-  $('cargar2').onclick = () => cargarTexto($('txt2').value);
-  $('vaciar').onclick = () => {
-    if (!confirm('¿Vaciar lo cargado? Descarga antes el CSV si lo necesitas.')) return;
-    entregas = []; guardar(); location.hash = ''; pintar(); pintarEntrada();
-  };
 }
 
 function descargar(filas) {
@@ -331,14 +328,12 @@ function pintarEntrada() {
     return;
   }
 
+  /* Sin código no hay datos que enseñar, y decirle a alguien que pegue enlaces
+     es mandarle a buscar algo que ya no manda nadie. */
   $('entrada').innerHTML = `<div class="panel">
-    <b>Cómo funciona.</b> Los dos del almacén abren la misma app de recogida con el mismo
-    enlace. El que <b>coge prendas</b> marca cuando entrega el paquete; el que
-    <b>cierra paquetes</b> marca cuando lo termina. Al acabar, cada uno pulsa
-    <b>Mandar mis tiempos</b> y esos dos enlaces se pegan aquí.
-    <div style="margin-top:12px"><textarea id="txt1" placeholder="Pega aquí el primer enlace"></textarea>
-    <div class="fila"><button id="cargar1">Cargar</button></div></div></div>`;
-  $('cargar1').onclick = () => cargarTexto($('txt1').value);
+    <b>A esta dirección le falta el código.</b><br>
+    Esta página se abre con <code>?d=</code> y el código detrás. Pídeselo a quien
+    te pasó el enlace del equipo.</div>`;
 }
 
 /* DESDE EL SERVIDOR.
@@ -355,9 +350,13 @@ function pintarEntrada() {
  */
 const CODIGO = new URLSearchParams(location.search).get('d') || '';
 
+const diaElegido = () => (document.getElementById('dia') || {}).value || '';
+
 async function desdeApi() {
   if (!CODIGO) return [];
-  const r = await fetch('/api/tiempos?d=' + encodeURIComponent(CODIGO), { cache: 'no-store' });
+  const d = diaElegido();
+  const r = await fetch('/api/tiempos?d=' + encodeURIComponent(CODIGO) +
+    (d ? '&dia=' + d : ''), { cache: 'no-store' });
   if (!r.ok) return [];
   const j = await r.json();
   if (!j || !j.ok) return [];
@@ -390,7 +389,21 @@ async function refrescar() {
   return true;
 }
 
+/* El día del negocio en hora de Valencia, que es el que usa el servidor. */
+const hoyValencia = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+
 (async () => {
+  const campo = document.getElementById('dia');
+  if (campo) {
+    campo.value = new URLSearchParams(location.search).get('dia') || hoyValencia();
+    campo.addEventListener('change', async () => {
+      /* Al cambiar de día se tira lo que había cargado: si no, se mezclarían
+         los paquetes de ayer con los de hoy y las medias no valdrían nada. */
+      entregas = entregas.filter((x) => !x.delServidor);
+      try { await refrescar(); } catch (_) {}
+      pintarEntrada(); pintar();
+    });
+  }
   const h = (location.hash || '').slice(1);
   if (h.length > 8) { try { meter(await desempaquetar(h)); location.hash = ''; } catch (_) {} }
   if (CODIGO) { try { await refrescar(); } catch (e) { console.warn('sin servidor', e); } }

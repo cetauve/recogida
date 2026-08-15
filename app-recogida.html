@@ -6,7 +6,12 @@
 <meta name="theme-color" content="#0E1723">
 <title>Billy's — Recogida</title>
 <style>
-:root{--bone:#EDE7DB;--navy:#1B2A3D;--red:#C8321F;--verde:#2E9E6B;--ambar:#E8B84B}
+:root{--bone:#EDE7DB;--navy:#1B2A3D;--red:#C8321F;--verde:#2E9E6B;--ambar:#E8B84B;
+ /* Estos dos faltaban y por eso el boton del rol elegido no se marcaba y el
+    boton grande de la cola salia transparente: el CSS los llamaba --rojo y
+    --linea y en :root solo estaba --red. Se anaden como alias para no tener
+    que tocar las quince reglas que ya los usan. */
+ --rojo:#C8321F;--linea:#2A3B52}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
  font:16px/1.4 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
@@ -322,6 +327,10 @@ async function desdeApi(){
     const j = await r.json();
     if (!j || !j.hay || !j.datos || !(j.datos.tandas || []).length) return null;
     j.datos.generado = j.datos.generado || j.generado;
+    /* EL DÍA AL QUE PERTENECEN ESTAS TANDAS. Es lo que separa el avance de hoy
+       del de ayer; sin esto, el móvil abría las tandas de hoy con las palomitas
+       verdes del día anterior puestas. */
+    j.datos.dia = j.dia || j.datos.dia || '';
     return j.datos;
   } catch(e){ console.warn('sin servidor', e); return null; }
 }
@@ -341,15 +350,55 @@ async function mirarSiHayNuevo(){
   if ($('menu').classList.contains('on')) verMenu();   // el menú se sirve solo
 }
 
-// El avance se guarda por tanda. Cada móvil tiene el suyo.
-const claveDe = (ti) => 'billys_rec_' + DATOS.titulo + '_t' + ti;
+/* ===========================================================================
+ * EL AVANCE SE GUARDA POR DÍA, NO POR TÍTULO
+ * ===========================================================================
+ * Cada móvil guarda por dónde va en su propia tanda. La clave llevaba el
+ * TÍTULO del día, y el título se repite —"Recogida", el nombre del directo—,
+ * así que el 15 ago 2026 el almacén abrió las tandas de hoy y le salieron
+ * todas con el ✓ verde y la barra llena: era el avance de ayer.
+ *
+ * Ahora la clave lleva el DÍA. Y al arrancar se tira lo de los días
+ * anteriores, que además no cabe eternamente en un móvil.
+ * ========================================================================= */
+const diaDatos = () => DATOS.dia || (DATOS.generado || '').slice(0, 10) || 'suelto';
+const claveDe = (ti) => 'billys_rec_' + diaDatos() + '_t' + ti;
+/* LAS MARCAS SON DE LA PERSONA, NO DEL MÓVIL.
+   La clave llevaba solo día y rol, así que en una tablet compartida el que
+   entraba después heredaba las marcas del anterior, y al pulsar "Mandar mis
+   tiempos" se apuntaban todas a su nombre. Justo lo contrario de para lo que
+   existe el botón de cambiar trabajador. */
+const claveMarcas = () => 'billys_marcas_' + diaDatos() + '_' + MODO + '_' + (QUIEN || '').trim().toLowerCase();
+const cargarMarcas = () => {
+  try{ MARCAS = JSON.parse(localStorage.getItem(claveMarcas()) || '[]'); }catch(e){ MARCAS = []; }
+};
+
 function guardar(){
   if (tandaActual === null) return;
   try{ localStorage.setItem(claveDe(tandaActual), JSON.stringify({i,historial,incidencias})); }catch(e){}
-  try{ localStorage.setItem('billys_marcas_' + DATOS.titulo + '_' + MODO, JSON.stringify(MARCAS)); }catch(e){}
+  try{ localStorage.setItem(claveMarcas(), JSON.stringify(MARCAS)); }catch(e){}
 }
 function leer(ti){
   try{ return JSON.parse(localStorage.getItem(claveDe(ti)) || 'null'); }catch(e){ return null; }
+}
+
+/* Fuera lo de días que ya no son. Se hace una vez al arrancar y en silencio:
+   si falla, no pasa nada, es basura que ocupa sitio. */
+function tirarLoViejo(){
+  const hoy = diaDatos();
+  try {
+    const fuera = [];
+    for (let k = 0; k < localStorage.length; k++) {
+      const clave = localStorage.key(k);
+      if (!clave) continue;
+      const esAvance = clave.startsWith('billys_rec_');
+      const esMarcas = clave.startsWith('billys_marcas_');
+      if (!esAvance && !esMarcas) continue;
+      if (clave.indexOf('_' + hoy + '_') === -1 && !clave.startsWith('billys_rec_' + hoy + '_')
+          && !clave.startsWith('billys_marcas_' + hoy + '_')) fuera.push(clave);
+    }
+    for (const k of fuera) localStorage.removeItem(k);
+  } catch(e){}
 }
 
 // ------------------------------------------------------------------ menú
@@ -363,8 +412,22 @@ function verMenu(){
   $('menu').classList.add('on');
   $('menuTitulo').textContent = DATOS.titulo || 'Recogida';
   const total = DATOS.tandas.reduce((s,t) => s + t.compradores.length, 0);
-  $('menuSub').textContent = total + ' paquetes · elige tu tanda';
-  $('menuPie').innerHTML = (DATOS.generado ? 'Generado ' + DATOS.generado : '') +
+  /* El "elige tu tanda" se le decía también a quien empaqueta, que no ve las
+     tandas: se le esconden a propósito para que no haga el paquete de otro. */
+  $('menuSub').textContent = total + ' paquetes' +
+    (MODO === 'empaqueta' && CODIGO ? ' hoy' : ' · elige tu tanda');
+  /* La fecha se enseñaba en crudo, tipo 2026-08-15T16:15:59.924Z. Lo que hace
+     falta saber es de cuándo son estas tandas, y eso se lee mejor en hora. */
+  const cuandoSalio = (() => {
+    if (!DATOS.generado) return '';
+    const d = new Date(DATOS.generado);
+    if (isNaN(d)) return 'Generado ' + DATOS.generado;
+    const hoyEs = new Date().toDateString() === d.toDateString();
+    const hora = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    return hoyEs ? 'Tandas de hoy, calculadas a las ' + hora
+                 : 'Tandas del ' + d.toLocaleDateString('es-ES') + ', ' + hora;
+  })();
+  $('menuPie').innerHTML = cuandoSalio +
     (MARCAS.length ? '<br><button id="mandarTiempos" style="margin-top:14px;width:100%;padding:14px;' +
       'border-radius:12px;border:0;background:var(--rojo);color:#fff;font:inherit;font-weight:800;' +
       'font-size:15px;cursor:pointer">Mandar mis tiempos (' + MARCAS.length + ')</button>' : '');
@@ -490,9 +553,7 @@ function pintarQuienSoy(){
     ? 'Pon tu nombre y elige qué haces. Sin eso no puedo medir a nadie.'
     : (MODO === 'recoge'
         ? 'Tu <b>Listo</b> significa: <b>paquete entregado</b> al que empaqueta. Ahí arranca su reloj.'
-        : (CODIGO
-            ? 'Vas a la <b>cola</b>: pides paquete y el servidor te lo da. Nadie hará el tuyo.'
-            : 'Tu <b>Listo</b> significa: <b>paquete cerrado</b>. Ahí para el reloj.'));
+        : 'Vas a la <b>cola</b>: pides paquete y el servidor te lo da. Nadie hará el tuyo.');
 }
 
 /* =========================================================================
@@ -524,6 +585,40 @@ function verCola(){
   $('cola').classList.add('on');
   pintarCola();
   refrescarContador();
+  comprobarMio();
+}
+
+/* ===========================================================================
+ * ¿EL PAQUETE QUE TENGO EN PANTALLA SIGUE SIENDO MÍO?
+ * ===========================================================================
+ * El móvil se guarda el paquete para que bloquear la pantalla no cueste
+ * perderlo. Pero si estuvo doce minutos parado, el servidor se lo dio a otro
+ * —eso es lo que hace el rescate de atascos— y este móvil seguía enseñándolo
+ * como suyo. Dos personas haciendo el mismo paquete es exactamente lo que la
+ * cola existe para evitar.
+ *
+ * Así que al entrar se pregunta. Y si ya no es suyo, se le dice quién lo
+ * tiene: no se le quita de la pantalla en silencio.
+ * ========================================================================= */
+async function comprobarMio(){
+  if (!PAQ || !PAQ.pedido || !CODIGO) return;
+  try {
+    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
+    const j = await r.json();
+    if (!j || !j.ok || !Array.isArray(j.paquetes)) return;
+    const mio = j.paquetes.find((x) => x.pedido === PAQ.pedido);
+    if (!mio) return;                                   // raro: mejor no tocar nada
+    const sigueSiendoMio = mio.estado === 'haciendo' && mio.quien_cierra === QUIEN;
+    if (sigueSiendoMio) return;
+    const num = '#' + (mio.numero || PAQ.numero);
+    PAQ = null;
+    try{ localStorage.removeItem('billys_paq'); }catch(e){}
+    pintarCola();
+    alert(mio.estado === 'cerrado'
+      ? 'El paquete ' + num + ' ya lo cerró ' + (mio.quien_cierra || 'otra persona') + '. Pide el siguiente.'
+      : 'El paquete ' + num + ' ha pasado a ' + (mio.quien_cierra || 'la cola') +
+        ': llevaba mucho rato abierto. Pide el siguiente.');
+  } catch(e){ /* sin red: se queda como estaba, que es lo menos malo */ }
 }
 
 /* Cuantos quedan. Se mira al entrar y cada quince segundos: es lo que le dice
@@ -652,7 +747,20 @@ setInterval(mirarVersion, 90000);
  * Se cambia varias veces por turno: si se acumulan paquetes sin cerrar, uno
  * de los que recogen se pasa a empaquetar, y al reves. Tiene que estar a un
  * toque desde donde esten, no escondido. */
-function cambiarRol(){
+async function cambiarRol(){
+  /* Si se va a recoger con un paquete a medias, ese paquete se queda a su
+     nombre y bloquea la mesa hasta que el rescate lo libere a los doce
+     minutos. Mejor preguntarlo ahora que descubrirlo luego. */
+  if (PAQ && MODO === 'empaqueta') {
+    const suelto = confirm('Tienes el paquete #' + PAQ.numero + ' (' + (PAQ.apodo || '') + ') sin cerrar.\n\n' +
+      'Aceptar: lo devuelvo a la cola para que lo coja otro.\n' +
+      'Cancelar: me lo guardo para cuando vuelva.');
+    if (suelto) {
+      try { await apiCola({ accion:'soltar', quien: QUIEN, pedido: PAQ.pedido }); } catch(e){}
+      PAQ = null;
+      try{ localStorage.removeItem('billys_paq'); }catch(e){}
+    }
+  }
   clearInterval(relojTandas); clearInterval(relojCola);
   tandaActual = null;
   ['barra','pila','pie','fin','cola'].forEach(x => $(x).classList.remove('on'));
@@ -697,13 +805,15 @@ try {
 $('miNombre').addEventListener('input', () => {
   QUIEN = $('miNombre').value;
   localStorage.setItem('billys_quien', QUIEN);
+  /* Al cambiar de persona, las marcas que se ven pasan a ser las suyas. */
+  cargarMarcas();
   pintarQuienSoy();
 });
 document.querySelector('.modos').addEventListener('click', (e) => {
   const b = e.target.closest('.modoBtn'); if (!b) return;
   MODO = b.dataset.m;
   localStorage.setItem('billys_modo', MODO);
-  try{ MARCAS = JSON.parse(localStorage.getItem('billys_marcas_' + DATOS.titulo + '_' + MODO) || '[]'); }catch(e){ MARCAS = []; }
+  cargarMarcas();
   pintarQuienSoy();
   /* Al ELEGIR el rol si se entra derecho, que es lo que se espera al pulsar. */
   if (MODO === 'empaqueta' && CODIGO && QUIEN.trim()) verCola();
@@ -863,6 +973,10 @@ function aLaCola(f, cuando){
   PENDCOLA.push({
     pedido: f.pedido, apodo: f.apodo, prendas: f.numeros.length,
     tanda: (DATOS.tandas[tandaActual] || {}).etiqueta || '',
+    /* QUIÉN LO DESLIZÓ, sellado aquí. Si el envío se queda esperando cobertura
+       y mientras tanto se cambia de trabajador en la tablet, esos paquetes son
+       del que los recogió, no del que estaba cuando volvió el wifi. */
+    quien: QUIEN,
     ficha: f, en: new Date(cuando).toISOString()
   });
   guardarPend();
@@ -873,11 +987,14 @@ let vaciando = false;
 async function vaciarCola(){
   if (vaciando || !PENDCOLA.length || !CODIGO) return;
   vaciando = true;
-  const iban = PENDCOLA.slice();
+  /* Se manda una tanda por persona: el servidor apunta un solo nombre por
+     envío, así que mezclarlos le colgaría a uno el trabajo del otro. */
+  const dueno = PENDCOLA[0].quien || QUIEN;
+  const iban = PENDCOLA.filter((x) => (x.quien || QUIEN) === dueno);
   try {
     const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
-      body: JSON.stringify({ accion:'meter', quien: QUIEN, paquetes: iban })
+      body: JSON.stringify({ accion:'meter', quien: dueno, paquetes: iban })
     });
     const j = await r.json();
     if (j && j.ok) {
@@ -915,11 +1032,34 @@ function avanzar(estado){
   if (tv) apuntarTanda(tv.etiqueta, i, FICHAS.length, false);
   if (navigator.vibrate) navigator.vibrate(estado==='inc' ? [12,40,12] : 18);
 }
-function atras(){
+async function atras(){
   const h = historial.pop(); if (!h) return;
   if (h.estado === 'inc') incidencias.pop();
-  MARCAS.pop();
+  const marca = MARCAS.pop();
   i = h.i; guardar(); pintar();
+
+  /* DESHACER TIENE QUE LLEGAR A LA COLA.
+     Antes esto solo borraba en el móvil: el paquete ya estaba empujado y quien
+     empaqueta lo recibía igual, aunque aquí pusiera que no. Ahora se retira.
+     Si ya se lo llevó alguien no se le quita de las manos: se avisa. */
+  if (h.estado === 'inc' || !marca || !CODIGO || MODO !== 'recoge') return;
+  const pedido = marca.pedido;
+  /* Si aún no había salido del móvil, basta con sacarlo de la lista de espera. */
+  const antes = PENDCOLA.length;
+  PENDCOLA = PENDCOLA.filter((x) => x.pedido !== pedido);
+  if (PENDCOLA.length !== antes) { guardarPend(); return; }
+  try {
+    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+      method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
+      body: JSON.stringify({ accion:'retirar', quien: QUIEN, pedido })
+    });
+    const j = await r.json();
+    if (j && j.ok && !j.retirado && j.estado) {
+      alert(j.estado === 'cerrado'
+        ? 'Ese paquete ya lo ha cerrado ' + (j.quien || 'otra persona') + '. No se puede deshacer.'
+        : 'Ese paquete ya lo tiene ' + (j.quien || 'otra persona') + ' en la mesa. No se lo quito.');
+    }
+  } catch(e){ alert('Sin conexión: el paquete sigue en la cola. Avisa a quien empaqueta.'); }
 }
 
 /* ---------------------------------------------------------- mandar tiempos
@@ -929,52 +1069,37 @@ function atras(){
  * Se manda tambien el desfase del reloj de este movil para poder detectar si
  * uno de los dos va desajustado: sin eso saldrian minutos negativos y nadie
  * sabria por que. */
-function b64url(bytes){
-  let bin = '';
-  for (let k=0; k<bytes.length; k+=8192) bin += String.fromCharCode.apply(null, bytes.subarray(k, k+8192));
-  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-}
-async function empaquetar(o){
-  const bytes = new TextEncoder().encode(JSON.stringify(o));
-  if (typeof CompressionStream === 'undefined') return 'r' + b64url(bytes);
-  const cs = new CompressionStream('gzip');
-  const w = cs.writable.getWriter(); w.write(bytes); w.close();
-  return 'z' + b64url(new Uint8Array(await new Response(cs.readable).arrayBuffer()));
-}
+/* ------------------------------------------------------------ mis tiempos
+ * Las horas ya viajan solas: cada deslice mete el paquete en la cola con su
+ * hora y cada cierre manda la suya. Este botón es solo el "por si acaso":
+ * reenvía TODAS las marcas de este móvil de una vez.
+ *
+ * Se puede pulsar veinte veces sin miedo: la clave es (día, quien, pedido,
+ * estado), así que repetir un envío no inventa paquetes.
+ *
+ * AQUÍ HABÍA UNA SALIDA POR WHATSAPP. Si el servidor no contestaba, esto abría
+ * WhatsApp con un enlace y los datos dentro, en silencio. Era de cuando no
+ * había servidor, y hacía algo peor que fallar: disimulaba el fallo. Un envío
+ * que no llega tiene que verse. Quitado el 15 ago 2026.
+ */
 async function mandarTiempos(){
   if (!MARCAS.length) { alert('Todavía no has marcado nada.'); return; }
-
-  /* Con servidor, esto deja de ser un WhatsApp. Se puede pulsar veinte veces
-   * sin miedo: la clave es (día, quien, pedido, estado), así que reenviar lo
-   * mismo no inventa paquetes. Por eso también se manda TODO cada vez y no
-   * solo lo nuevo — si un envío se perdió, el siguiente lo arregla solo. */
-  if (CODIGO && QUIEN) {
-    try {
-      const r = await fetch('/api/tiempos?d=' + encodeURIComponent(CODIGO), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quien: QUIEN, modo: MODO, marcas: MARCAS })
-      });
-      const j = await r.json();
-      if (r.ok && j.ok) {
-        alert('Mandado. ' + j.total + ' ' + (j.total === 1 ? 'marca guardada' : 'marcas guardadas') +
-              ' a tu nombre.\n\nSe ven en /tiempos junto a las de todos.');
-        return;
-      }
-    } catch(e){ console.warn('no he podido mandarlo al servidor', e); }
-    /* Si el servidor no contesta seguimos por WhatsApp, que es como se hacía
-     * hasta ahora: mejor un rodeo que perder los tiempos de una tarde. */
+  if (!CODIGO || !QUIEN) { alert('Falta tu nombre o el enlace del equipo.'); return; }
+  try {
+    const r = await fetch('/api/tiempos?d=' + encodeURIComponent(CODIGO), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quien: QUIEN, modo: MODO, marcas: MARCAS })
+    });
+    const j = await r.json();
+    if (r.ok && j && j.ok) {
+      alert('Mandado. ' + j.total + ' ' + (j.total === 1 ? 'marca guardada' : 'marcas guardadas') +
+            ' a tu nombre.\n\nSe ven en /tiempos junto a las de todos.');
+      return;
+    }
+    alert('El servidor no lo ha aceptado. Vuelve a intentarlo en un momento.');
+  } catch(e){
+    alert('Sin conexión con el servidor.\n\nTus marcas siguen guardadas en este móvil:\nvuelve a pulsar cuando haya cobertura.');
   }
-
-  const carga = await empaquetar({
-    v: 1, tipo: 'tiempos', modo: MODO, quien: QUIEN,
-    titulo: DATOS.titulo, desfaseHuso: new Date().getTimezoneOffset(),
-    marcas: MARCAS
-  });
-  const url = location.origin + location.pathname.replace(/[^/]*$/, 'tiempos.html') + '#' + carga;
-  const txt = (MODO === 'recoge' ? 'Prendas cogidas' : 'Paquetes cerrados') +
-    ' — ' + QUIEN + ' (' + MARCAS.length + ')\n' + url;
-  if (navigator.share) { try { await navigator.share({ text: txt }); return; } catch(e){} }
-  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 
 function arrastrable(el){
@@ -1056,15 +1181,16 @@ async function arrancar(){
     ['barra','pila','pie'].forEach(x => $(x).classList.remove('on'));
     $('fin').classList.add('on');
     $('finTitulo').textContent = 'No hay nada que recoger';
-    $('finTexto').textContent = hash.length > 8
-      ? 'El enlace trae algo que no consigo leer. Vuelve a generarlo desde el panel.'
-      : CODIGO
-        ? 'Todavía no hay tandas de hoy. Deja esto abierto: en cuanto se imprima la primera, aparece sola.'
-        : 'Este enlace no trae datos. Genera uno nuevo desde el panel.';
+    $('finTexto').textContent = CODIGO
+      ? 'Todavía no hay tandas de hoy. Deja esto abierto: en cuanto se imprima la primera, aparece sola.'
+      : 'A este enlace le falta el código del equipo. Pídeselo a quien te lo pasó: tiene que acabar en ?d= y el código.';
     $('alMenu').style.display = 'none'; $('reiniciar').style.display = 'none';
     return;
   }
   $('alMenu').style.display = ''; $('reiniciar').style.display = '';
+  /* Ya se sabe de qué día son las tandas: fuera el avance de los días
+     anteriores, que es lo que pintaba las tandas de hoy como hechas. */
+  tirarLoViejo();
   document.title = 'Recogida · ' + DATOS.titulo;
   verMenu();
 

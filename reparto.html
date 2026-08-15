@@ -401,8 +401,6 @@ function bloqueTipos(t) {
       <b>Margen ud.</b> es lo que deja una prenda de ese tipo de media: precio de venta
       menos lo que costó comprarla. <b>% del precio</b> es cuánto de cada euro vendido
       se queda, y es lo que compara bien una chaqueta de 20 € con una camiseta de 3 €.<br>
-      Aquí <b>no</b> se reparte el coste de presentadora: ese es del rato, no de la prenda.
-      El beneficio de arriba sí lo lleva descontado.
       ${t.sinTarifa ? `<br><b>${pl(t.sinTarifa, 'prenda', 'prendas')}</b> ${t.sinTarifa === 1 ? 'lleva' : 'llevan'}
         una categoría que no está en la tabla de costes: ${t.sinTarifa === 1 ? 'suma' : 'suman'} venta pero no coste.` : ''}
     </p>`;
@@ -434,6 +432,9 @@ function bloqueTipos(t) {
             Están todas en la hoja de cálculo.</p>` : ''}`;
   }
 
+  /* Va aquí y no en el otro desplegable: es análisis por tipo de prenda, solo
+     que cruzado con quién la marcó. */
+  h += bloqueMix(t.c || {});
   h += '</details>';
   return h;
 }
@@ -441,6 +442,7 @@ function bloqueTipos(t) {
 /* Qué tipo de prenda vendió cada una. No es para señalar: sirve para ver si
    una está atascada en lo barato mientras otra saca las chaquetas. */
 function bloqueMix(c) {
+  if (!c || !Array.isArray(c.filas)) return '';
   const m = {};
   for (const f of c.filas) {
     if (f.lote == null || !f.categoria) continue;
@@ -565,9 +567,14 @@ function pintar(j) {
     /* LA CIFRA DEL DÍA. Sin categoría no hay coste ni margen, así que una
        prenda sin marcar no entra en el cálculo — da igual de quién fuera.
        Y como el incentivo cuelga de esto, va arriba y en grande. */
-    html += `<div class="aviso ${c.marcadoPct < 75 ? 'rojo' : 'ambar'}">
-      <b>Marcado el ${c.marcadoPct}%</b> · ${c.lotes - c.sinMarcar} de ${c.lotes} prendas.
-      <br>Las <b>${c.sinMarcar}</b> que nadie marcó se quedan fuera del cálculo: sin
+    /* EL QUE MANDA ES EL DEL DINERO, no el de unidades: diez camisetas de 1 €
+       sin marcar no son lo mismo que dos chaquetas de 30. Antes el grande y en
+       rojo era el de unidades y el de euros iba abajo y en pequeño. */
+    const pctDinero = c.marcadoEurosPct == null ? c.marcadoPct : c.marcadoEurosPct;
+    html += `<div class="aviso ${pctDinero < 75 ? 'rojo' : 'ambar'}">
+      <b>Marcado el ${pctDinero}% del dinero</b> · ${eur(c.eurosMarcados)} de ${eur(c.euros)}.
+      <br>En prendas es el ${c.marcadoPct}%: ${c.lotes - c.sinMarcar} de ${c.lotes}.
+      Las <b>${c.sinMarcar}</b> que nadie marcó se quedan fuera del cálculo: sin
       categoría no hay coste ni margen. No se reparten ni se rellenan.</div>`;
   } else {
     html += `<div class="aviso verde"><b>Marcado el 100%.</b> Todas las prendas del día
@@ -592,11 +599,18 @@ function pintar(j) {
   for (const f of c.filas) {
     if (f.lote == null) continue;
     const q = cuentas[f.vendedora] = cuentas[f.vendedora] ||
-      { prendas: 0, venta: 0, coste: 0, sinTarifa: 0 };
+      { prendas: 0, venta: 0, coste: 0, sinTarifa: 0, conTarifa: 0, ventaConTarifa: 0 };
     q.prendas++;
     q.venta += Number(f.precio || 0);
     const cp = costeDe(f.categoria);
-    if (cp == null) { q.sinTarifa++; sinTarifa++; } else q.coste += cp;
+    /* EL MARGEN SOLO SE HACE CON LO QUE TIENE TARIFA.
+       Antes el beneficio por prenda de la ficha se calculaba con TODAS sus
+       prendas —incluidas las de categoría sin precio de compra, que suman
+       venta y no suman coste— mientras la tabla de "qué vende cada una" lo
+       hacía solo con las que sí lo tienen. Dos números distintos para lo
+       mismo, en la misma página. Manda este: sin coste no hay margen. */
+    if (cp == null) { q.sinTarifa++; sinTarifa++; }
+    else { q.coste += cp; q.conTarifa++; q.ventaConTarifa += Number(f.precio || 0); }
   }
 
   let tVenta = 0, tCoste = 0, tHoras = 0, tPrendas = 0;
@@ -625,11 +639,13 @@ function pintar(j) {
       <div><b>${eur(tPrendas ? (tVenta - tCoste) / tPrendas : 0)}</b><span>beneficio por prenda</span></div>
       <div><b class="${tNeto < 0 ? 'neg' : ''}">${eur(tHoras ? tNeto / tHoras : 0)}</b><span>beneficio por hora</span></div>
     </div>`;
-    if (sinTarifa) {
-      html += `<div class="aviso ambar"><b>${sinTarifa} prendas sin tarifa.</b>
-        Se marcaron con una categoría que no está en <code>costes-prendas.json</code>
-        —normalmente de antes de la división A/B— así que cuentan como venta pero
-        no tienen coste. El beneficio sale más alto de lo real en esa parte.</div>`;
+    /* Lo de "sin tarifa" se decía aquí, en la ficha de cada vendedora, en la
+       tabla de tipos y en su nota: cuatro veces lo mismo. Se queda donde sirve
+       para hacer algo —la ficha y el análisis— y aquí solo si es gordo. */
+    if (sinTarifa && tPrendas && sinTarifa / tPrendas > 0.1) {
+      html += `<div class="aviso ambar"><b>${pl(sinTarifa, 'prenda', 'prendas')} sin tarifa</b>
+        de ${tPrendas}. Llevan una categoría que no está en <code>costes-prendas.json</code>,
+        así que suman venta pero no coste: el beneficio sale más alto de lo real.</div>`;
     }
   }
 
@@ -647,7 +663,7 @@ function pintar(j) {
       ? hhmm(t.empezo) + '–' + (fin ? hhmm(fin) : 'sigue')
       : 'sin turno apuntado';
     const hv = horasVivas(t, c);
-    const bruto = q.venta - q.coste;
+    const bruto = q.ventaConTarifa - q.coste;        // solo lo que tiene coste conocido
     const neto = bruto - (hv || 0) * (COSTES ? COSTES.hora : 0);
 
     html += `<div class="quien">
@@ -660,7 +676,7 @@ function pintar(j) {
         <div><b>${eur(q.coste)}</b><span>coste ropa</span></div>
       </div>
       <div class="cifras">
-        <div><b>${eur(q.prendas ? bruto / q.prendas : 0)}</b><span>benef. por prenda</span></div>
+        <div><b>${eur(q.conTarifa ? bruto / q.conTarifa : 0)}</b><span>benef. por prenda</span></div>
         ${hv ? `<div><b class="${neto < 0 ? 'neg' : ''}">${eur(neto / hv)}</b><span>benef. por hora</span></div>` : ''}
       </div>
       ${/* EL BENEFICIO DEL TURNO SOLO CUANDO EL TURNO HA ACABADO. Mientras
@@ -725,6 +741,7 @@ function pintar(j) {
 
   // -------------------------------------------- analizar por tipo de prenda
   TIPOS = analizarTipos(c);
+  TIPOS.c = c;
   html += bloqueTipos(TIPOS);
 
   // ------------------------------------------------------ ver más estadísticas
@@ -745,14 +762,25 @@ function pintar(j) {
         </tr>`; }).join('')}
     </tbody></table>
 
-    ${bloqueMix(c)}
-
     <h3>El directo en números</h3>
     <table><tbody>
       <tr><td>Prendas vendidas</td><td class="n">${c.lotes}</td></tr>
       <tr><td>Precio medio de venta</td><td class="n">${eur(c.lotes ? c.euros / c.lotes : 0)}</td></tr>
       <tr><td>Prenda más cara</td><td class="n">${eur(Math.max(0, ...c.filas.map((f) => Number(f.precio || 0))))}</td></tr>
-      <tr><td>Ritmo de venta</td><td class="n">${pl(tHoras ? Math.round(c.lotes / tHoras) : 0, 'prenda', 'prendas')}/hora</td></tr>
+      ${(() => {
+        /* EL RITMO VA CONTRA EL RELOJ DEL DIRECTO, no contra la suma de horas
+           de las presentadoras: con dos a la vez dos horas, aquello sumaba 4 y
+           el ritmo salía a la mitad del real. */
+        const desde = c.filas.length ? Math.min(...c.filas.filter((f) => f.lote != null)
+          .map((f) => new Date(f.en).getTime())) : null;
+        const hasta = c.finDirecto ? new Date(c.finDirecto).getTime()
+          : (c.ultimaVenta ? new Date(c.ultimaVenta).getTime() : null);
+        const h = (desde && hasta && hasta > desde) ? (hasta - desde) / 3600000 : null;
+        return `<tr><td>Ritmo de venta</td><td class="n">${h
+          ? pl(Math.round(c.lotes / h), 'prenda', 'prendas') + '/hora · ' +
+            h.toFixed(1).replace('.', ',') + ' h de directo'
+          : '—'}</td></tr>`;
+      })()}
       <tr><td>Coste medio de la ropa marcada</td><td class="n">${eur(tPrendas ? tCoste / tPrendas : 0)}</td></tr>
       <tr><td>Horas de presentadora</td><td class="n">${tHoras.toFixed(1).replace('.', ',')} h · ${eur(tPersonal)}</td></tr>
       <tr><td>Toques que no cuadraron con ninguna prenda</td><td class="n">${c.sinCruzar}</td></tr>

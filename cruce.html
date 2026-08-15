@@ -6,7 +6,7 @@
 <!-- La extension inyecta el puente en las paginas que llevan esta etiqueta.
      Sin ella no llega ningun dato. No la quites. -->
 <meta name="billys-datos" content="1">
-<title>Cruce de prendas y lotes</title>
+<title>Cruce de emergencia · sin servidor</title>
 
 <!--
   ===========================================================================
@@ -74,10 +74,22 @@
 </head>
 <body>
 <div class="caja">
-  <h1>Cruce de prendas y lotes</h1>
-  <p class="sub" id="cabecera">Abre aqui el enlace que manda la app de las vendedoras.</p>
-  <div id="estado"></div>
+  <h1>Cruce de emergencia · sin servidor</h1>
+  <!-- Aviso arriba del todo y en rojo A PROPOSITO: esta pagina es el plan B, y
+       si alguien la usa teniendo /reparto delante sacara cifras peores sin
+       enterarse. Que se vea antes que nada. -->
+  <div class="panel aviso">
+    <b>Esto es el plan B.</b> Usa esta pagina <b>solo si <a href="/reparto" style="color:inherit">/reparto</a>
+    no tiene datos.</b> Aqui se cruza a mano y con menos informacion; el reparto normal es mejor siempre
+    que funcione.
+  </div>
+  <!-- Aqui habia un subtitulo que decia "Abre aqui el enlace que manda la app de
+       las vendedoras". Se fue con el flujo de WhatsApp: ya no se pegan enlaces a
+       mano. El id se queda porque arrancar() sigue escribiendo el resumen del
+       turno cuando alguien abre un enlace antiguo. -->
+  <p class="sub" id="cabecera"></p>
   <div id="cajaCsv"></div>
+  <div id="estado"></div>
   <div id="salida"></div>
 </div>
 
@@ -85,6 +97,17 @@
 (() => {
 'use strict';
 
+/* LOS PRECIOS DE AQUI ABAJO SON UN RESPALDO, NO LA FUENTE.
+ *
+ * La fuente es /costes-prendas.json, que es donde Aaron mantiene los precios.
+ * Al arrancar se lee de ahi (ver cargarCostes) y se pisa lo de abajo. Esta copia
+ * solo entra en juego si el fetch falla, que en esta pagina puede pasar de
+ * verdad: es la pagina de emergencia y a veces se abre desde un archivo local,
+ * sin servidor que sirva el JSON. Mejor cifras de la ultima lista conocida que
+ * ninguna cifra.
+ *
+ * Si cambian los precios se cambian en el JSON. Tocar solo esta copia no cambia
+ * nada mientras el fetch funcione. */
 const CONFIG = {
   transportePorPieza: 0.05,
   iva: 0.21,
@@ -127,6 +150,31 @@ const CONFIG = {
 
 const $ = (id) => document.getElementById(id);
 const cat = (id) => CONFIG.categorias.find((c) => c.id === id) || { id, nombre: id, euroKilo: 0, piezasKilo: 1 };
+
+/* Trae los precios de verdad y pisa la copia de respaldo de CONFIG.
+ *
+ * Se pide con cache 'no-store' porque el dia que Aaron cambia un precio la
+ * pagina tiene que salir con el precio nuevo a la primera; una copia cacheada
+ * daria un COGS equivocado sin avisar de nada.
+ *
+ * Solo se pisa lo que llega completo. Si el JSON no responde, o viene sin
+ * categorias, se deja la copia local tal cual: preferible la lista de la ultima
+ * vez que costes a cero, que pintarian todo al 100 % de margen. */
+async function cargarCostes() {
+  try {
+    const c = await (await fetch('/costes-prendas.json', { cache: 'no-store' })).json();
+    if (!Array.isArray(c.categorias) || !c.categorias.length) return;
+    CONFIG.categorias = c.categorias.map((x) => ({
+      id: x.id, nombre: x.nombre, euroKilo: Number(x.euroKilo), piezasKilo: Number(x.piezasKilo)
+    }));
+    if (Number.isFinite(Number(c.transportePorPieza))) CONFIG.transportePorPieza = Number(c.transportePorPieza);
+    if (Number.isFinite(Number(c.iva))) CONFIG.iva = Number(c.iva);
+    if (Number.isFinite(Number(c.horaPresentadora))) CONFIG.horaPresentadora = Number(c.horaPresentadora);
+  } catch (err) {
+    /* Sin servidor (archivo local) o JSON caido. No es motivo para parar: se
+       sigue con la copia de respaldo, que es justo para lo que esta. */
+  }
+}
 
 function costes(c) {
   const sinIva = c.euroKilo / c.piezasKilo + CONFIG.transportePorPieza;
@@ -531,6 +579,18 @@ function cruzar() {
   return { filas, sinCruce, loteSinToque, porOrden, porHora, sellados, huecos };
 }
 
+/* Los cuatro metodos, con su nombre de verdad, porque la columna "Cruce" es lo
+ * unico que dice cuanto hay que fiarse de cada fila y no valen todos lo mismo.
+ * Antes solo distinguia 'orden' y etiquetaba de "por hora" a todo lo demas: un
+ * toque sellado por la tablet, que es el dato mas fiable que existe aqui, salia
+ * marcado como si se hubiera adivinado por la hora mala. */
+const NOMBRE_METODO = {
+  sellado: 'sellado en la tablet',
+  tiempo:  'por hora real',
+  orden:   'por orden',
+  hora:    'por hora aproximada'
+};
+
 /* Una fila del detalle, con su dinero ya calculado. El precio de venta de
    TikTok YA lleva IVA, asi que el margen va con IVA en los dos lados. */
 function fila(q, lote, metodo) {
@@ -554,7 +614,47 @@ function fila(q, lote, metodo) {
 /* -------------------------------------------------------------- pintar */
 let ultimo = null;
 
+/* SUBIR LOS LOTES A MANO. El camino de la extensión falla cuando el registro
+ * del directo no se levantó, y entonces falla ENTERO — el 12 ago 2026 fueron
+ * 168 toques sin cruzar. Con el CSV de pedidos que saca el panel, el cruce no
+ * depende de nada de eso: los pedidos ya traen la hora real y el precio.
+ *
+ * VA LO PRIMERO Y SE PINTA SIEMPRE, aunque no haya ningún turno cargado. Con el
+ * flujo de enlaces retirado es la única forma real de que entren datos aquí, y
+ * antes estaba enterrado dentro de pintar(), que no llega a ejecutarse mientras
+ * no haya sesiones: quedaba escondido justo cuando más falta hace. */
+function pintarCajaCsv() {
+  const cajaCsv = document.getElementById('cajaCsv');
+  if (!cajaCsv) return;
+  cajaCsv.innerHTML = `<div class="panel">
+    <b>Empieza aquí: sube el CSV de lotes.</b><br>
+    <span class="sub">En el panel de almacén, pestaña <b>Recogida</b>, botón
+    <b>"Descargar lotes para el cruce (CSV)"</b>.<br>
+    <b>También vale el export de TikTok</b>: en el Centro de vendedores, botón <b>Exportar</b>.
+    Los dos traen la hora real de venta y el precio, que es lo que hace falta aquí.</span>
+    <div style="margin-top:10px"><input type="file" id="csvLotes" accept=".csv,text/csv"></div>
+    <div id="csvAviso" class="sub" style="margin-top:6px">${lotes
+      ? (horaFiable ? 'Ahora mismo hay ' + lotes.length + ' lotes con hora real.'
+                    : 'Ahora mismo hay ' + lotes.length + ' lotes con hora aproximada.')
+      : 'Ahora mismo no hay ningún lote.'}</div></div>`;
+  const inp = document.getElementById('csvLotes');
+  if (inp) inp.addEventListener('change', async (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    try {
+      const n = cargarCsvLotes(await f.text());
+      pintar();
+      document.getElementById('csvAviso').innerHTML =
+        '<b style="color:#2E9E6B">' + n + ' lotes cargados del CSV.</b> Cruzando con su hora real.';
+    } catch (err) {
+      document.getElementById('csvAviso').innerHTML =
+        '<b style="color:#C8321F">No he podido leerlo: ' + esc(err.message) + '</b>';
+    }
+  });
+}
+
 function pintar() {
+  pintarCajaCsv();
   if (!sesiones) return;
 
   if (!lotes) {
@@ -566,39 +666,6 @@ function pintar() {
       Sin eso solo puedo contar prendas, no cruzarlas con lo que se vendio.</div>`;
   } else {
     $('estado').innerHTML = '';
-  }
-
-  /* SUBIR LOS LOTES A MANO. El camino de la extensión falla cuando el registro
-   * del directo no se levantó, y entonces falla ENTERO — el 12 ago 2026 fueron
-   * 168 toques sin cruzar. Con el CSV de pedidos que saca el panel, el cruce no
-   * depende de nada de eso: los pedidos ya traen la hora real y el precio. */
-  const cajaCsv = document.getElementById('cajaCsv');
-  if (cajaCsv) {
-    cajaCsv.innerHTML = `<div class="panel">
-      <b>¿Sin lotes, o los lotes no cuadran?</b> Sube el CSV.<br>
-      <span class="sub">En el panel de almacén, pestaña <b>Recogida</b>, botón
-      <b>"Descargar lotes para el cruce (CSV)"</b>.<br>
-      <b>También vale el export de TikTok</b>: en el Centro de vendedores, botón <b>Exportar</b>.
-      Los dos traen la hora real de venta y el precio, que es lo que hace falta aquí.</span>
-      <div style="margin-top:10px"><input type="file" id="csvLotes" accept=".csv,text/csv"></div>
-      <div id="csvAviso" class="sub" style="margin-top:6px">${lotes
-        ? (horaFiable ? 'Ahora mismo hay ' + lotes.length + ' lotes con hora real.'
-                      : 'Ahora mismo hay ' + lotes.length + ' lotes con hora aproximada.')
-        : 'Ahora mismo no hay ningún lote.'}</div></div>`;
-    const inp = document.getElementById('csvLotes');
-    if (inp) inp.addEventListener('change', async (ev) => {
-      const f = ev.target.files && ev.target.files[0];
-      if (!f) return;
-      try {
-        const n = cargarCsvLotes(await f.text());
-        document.getElementById('csvAviso').innerHTML =
-          '<b style="color:#2E9E6B">' + n + ' lotes cargados del CSV.</b> Cruzando con su hora real.';
-        pintar();
-      } catch (err) {
-        document.getElementById('csvAviso').innerHTML =
-          '<b style="color:#C8321F">No he podido leerlo: ' + esc(err.message) + '</b>';
-      }
-    });
   }
 
   const r = ultimo = cruzar();
@@ -654,8 +721,7 @@ function pintar() {
       La hora sale de <code>orderCreatedTime</code>, del propio panel del directo, al segundo.
       Cada toque se lleva la última prenda vendida antes de él que no tuviera dueño, así que
       <b>si a alguien se le pasa marcar una, se pierde esa y solo esa</b>: lo de detrás no se
-      corre. Las prendas que nadie marcó salen abajo, en lotes sin marcar.
-      ${r.huecos.length ? '' : ''}</div>` : ''}
+      corre. Las prendas que nadie marcó salen abajo, en lotes sin marcar.</div>` : ''}
     ${!horaFiable && lotes ? `<div class="panel aviso">
       <b>Las horas de los lotes son aproximadas</b>, vienen de leer "hace 1 minuto" del panel y
       tienen precisión de minuto. Con eso el cruce por tiempo no es de fiar, así que se ha ido
@@ -713,7 +779,7 @@ function pintar() {
         <tr class="${f.lote == null ? 'dudoso' : ''}">
           <td>${hhmm(f.t)}</td><td>${esc(f.vendedora)}</td><td>${esc(f.categoria)}</td>
           <td class="n">${f.lote != null ? '#' + f.lote : 'sin cruce'}</td>
-          <td>${f.metodo === 'orden' ? 'por orden' : 'por hora'}</td>
+          <td>${NOMBRE_METODO[f.metodo] || esc(f.metodo)}</td>
           <td class="n">${eur(f.ventaConIva)}</td><td class="n">${eur(f.costeConIva)}</td>
           <td class="n">${eur(f.margenConIva)}</td>
         </tr>`).join('')}</tbody>
@@ -725,24 +791,14 @@ function pintar() {
       <br><br>${r.loteSinToque.slice(0, 60).map((l) => '#' + l.num).join(' · ')}
       ${r.loteSinToque.length > 60 ? ' …' : ''}</div>` : ''}
 
+    <!-- Aqui habia un boton "Pegar otro enlace" con su textarea para el enlace de
+         WhatsApp. Se fue: los turnos ya no viajan en un enlace pegado a mano. Si
+         hace falta cambiar de turno se abre otro enlace, no se pega aqui. -->
     <div class="fila">
       <button id="csv">Descargar CSV para el registro</button>
-      <button id="verPegar" class="sec">Pegar otro enlace</button>
-    </div>
-    <div id="pegar" style="display:none;margin-top:12px">
-      <textarea id="txt" placeholder="Pega aqui el enlace que llego por WhatsApp"></textarea>
-      <div class="fila"><button id="cargarTxt" class="sec">Cargar</button></div>
     </div>`;
 
   $('csv').onclick = descargarCsv;
-  $('verPegar').onclick = () => { const p = $('pegar'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; };
-  $('cargarTxt').onclick = () => {
-    const v = ($('txt').value || '').trim();
-    const i = v.indexOf('#');
-    if (i < 0) { alert('Ese enlace no lleva datos dentro.'); return; }
-    location.hash = v.slice(i + 1);
-    location.reload();
-  };
 }
 
 function descargarCsv() {
@@ -774,22 +830,22 @@ function descargarCsv() {
 
 /* ------------------------------------------------------------- arranque */
 async function arrancar() {
+  // Los precios primero: si se pintan cifras antes de tenerlos, salen las de la
+  // copia de respaldo y nadie se entera de que no eran las buenas.
+  await cargarCostes();
+
+  /* El CSV se ofrece desde el primer momento, haya turno o no: es por donde
+     entran los datos hoy. */
+  pintarCajaCsv();
+
+  /* SE SIGUE LEYENDO EL # DE LA DIRECCION. El flujo de mandar el enlace por
+     WhatsApp esta retirado, pero los enlaces ya repartidos siguen por ahi y
+     tienen que abrir bien. Lo que se ha quitado es OFRECER pegarlos: aqui habia
+     un panel con un textarea (#txt0) y un boton "Cargar" para pegar el enlace a
+     mano. Sin turno en el #, esta pagina se queda solo con el CSV. */
   const carga = location.hash.slice(1);
-  if (!carga) {
-    $('estado').innerHTML = `<div class="panel">
-      <b>No hay ningun turno cargado.</b><br>
-      Abre el enlace que manda la app de las vendedoras al pulsar "Terminar",
-      o pega el enlace aqui abajo.
-      <div style="margin-top:12px"><textarea id="txt0" placeholder="Pega aqui el enlace"></textarea>
-      <div class="fila"><button id="cargar0">Cargar</button></div></div></div>`;
-    $('cargar0').onclick = () => {
-      const v = ($('txt0').value || '').trim();
-      const i = v.indexOf('#');
-      if (i < 0) { alert('Ese enlace no lleva datos dentro.'); return; }
-      location.hash = v.slice(i + 1); location.reload();
-    };
-    return;
-  }
+  if (!carga) return;
+
   try {
     const d = await desempaquetar(carga);
     sesiones = d.sesiones || [];
@@ -799,8 +855,12 @@ async function arrancar() {
       + sesiones.map((s) => s.vendedora).join(', ');
     pintar();
   } catch (err) {
-    $('estado').innerHTML = `<div class="panel aviso"><b>No he podido leer el enlace.</b><br>${esc(err.message)}
-      <br><br>Suele ser que se corto al copiarlo. Que lo vuelvan a mandar desde el movil.</div>`;
+    /* Antes esto decia "que lo vuelvan a mandar desde el movil", y ya no hay
+       nadie mandando nada: el enlace es viejo y no se va a rehacer. Se dice lo
+       que ha pasado y se deja el CSV, que es la salida que si existe. */
+    $('estado').innerHTML = `<div class="panel aviso"><b>No he podido leer el turno de este enlace.</b><br>${esc(err.message)}
+      <br><br>Es un enlace del flujo antiguo y puede estar cortado. Sube el CSV de lotes de aqui arriba,
+      o mira si <a href="/reparto" style="color:inherit">/reparto</a> ya tiene los datos.</div>`;
   }
 }
 

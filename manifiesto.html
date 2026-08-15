@@ -114,7 +114,7 @@ const CODIGO = new URLSearchParams(location.search).get('d') || '';
    para que la hoja salga hoy sin esperar a nada; en cuanto la extensión los
    mande, mandan los suyos, que salen de config.json. */
 const POR_DEFECTO = { nombre: "BILLY'S", almacen: 'TIENDA VALENCIA',
-                      titulo: 'SHIPEMENT MANIFEST', firmaEntrega: 'Entrega', firmaRecoge: 'Recoge' };
+                      titulo: 'SHIPMENT MANIFEST', firmaEntrega: 'Entrega', firmaRecoge: 'Recoge' };
 
 let ULTIMO = null;
 
@@ -177,14 +177,13 @@ function pintar(j) {
   const prendas = bultos.reduce((s, b) => s + b.prendas, 0);
   const fecha = new Date(j.generado || Date.now()).toLocaleDateString('es-ES');
 
+  /* EL AVISO DE "SIN TRACKING" SALIA SIEMPRE, porque todavía no hay nada que
+     rellene esa columna. Un aviso que sale todos los días deja de leerse, y
+     entonces no sirve el día que diga algo. Ahora, mientras no haya ninguno,
+     no se avisa: se explica en pequeño debajo de la tabla, que es donde se
+     mira si a alguien le extraña la columna vacía. */
   let aviso = '';
-  if (!conTracking) {
-    aviso = `<div class="aviso ambar">
-      <b>Sin Tracking ID todavía.</b> TikTok no lo asigna hasta que se crean las etiquetas.
-      La hoja se puede imprimir y firmar igual: el repartidor cuadra por <b>Order ID</b>,
-      que es lo que sale en la etiqueta. La columna se rellena sola cuando la extensión
-      lea la pestaña de "A la espera de recogida".</div>`;
-  } else if (conTracking < bultos.length) {
+  if (conTracking && conTracking < bultos.length) {
     aviso = `<div class="aviso ambar"><b>${conTracking} de ${bultos.length} bultos con tracking.</b>
       A los que faltan aún no se les ha creado la etiqueta.</div>`;
   }
@@ -193,13 +192,20 @@ function pintar(j) {
     (bultos.length === 1 ? ' bulto · ' : ' bultos · ') + prendas + ' prendas';
 
   $('salida').innerHTML = aviso + `<div class="hoja">
-    <h2>${esc(T.titulo)}</h2>
+    <!-- La errata "SHIPEMENT" venia en config.json de la extension y llego a
+         imprimirse en papeles que firma un transportista. Se corrige aqui
+         tambien, para que un PC con la config vieja no la vuelva a sacar. -->
+    <h2>${esc(String(T.titulo || '').replace(/SHIPEMENT/i, 'SHIPMENT'))}</h2>
     <table class="meta">
       <tr><td class="k">Seller:</td><td>${esc(T.nombre)}</td></tr>
       <tr><td class="k">Warehouse:</td><td>${esc(T.almacen)}</td></tr>
       <tr><td class="k">Date:</td><td>${esc(fecha)}</td></tr>
       <tr><td class="k">Courier:</td><td>${esc(T.transportista || '')}</td></tr>
       <tr><td class="k">Paquetes:</td><td><b>${bultos.length}</b></td></tr>
+      <!-- El total de prendas salía solo en el subtítulo de la pantalla, y el
+           subtítulo no se imprime: el repartidor firmaba un papel que no decía
+           cuántas prendas se llevaba. -->
+      <tr><td class="k">Prendas:</td><td><b>${prendas}</b></td></tr>
     </table>
     <table class="lista">
       <tr><th>#</th><th>Order ID</th><th>Tracking ID</th><th>Comprador</th><th>Prendas</th></tr>
@@ -211,6 +217,9 @@ function pintar(j) {
         <td class="nums">${b.prendas}</td>
       </tr>`).join('')}
     </table>
+    ${conTracking ? '' : `<p style="font-size:11px;color:#666;margin:8px 0 0">
+      Tracking ID sin asignar: TikTok lo da al crear las etiquetas. La entrega se
+      cuadra por Order ID, que es lo que sale impreso en cada etiqueta.</p>`}
     <div class="firmas">
       <div class="firma"><div>${esc(T.firmaEntrega)} (${esc(T.nombre)})</div>
         <div class="linea"></div><div class="pie">Nombre y hora</div></div>
