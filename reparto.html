@@ -179,6 +179,12 @@ const VIAS = {
 
 let ULTIMO = null;
 let PRENDAS = [];          // las prendas del día en crudo, para el desglose por cuenta
+/* LO QUE DICE LA CONSOLA DE TIKTOK: { gmv, items, cuando }.
+   Lo manda el puente del directo con cada latido. No es lo mismo que lo nuestro
+   —su GMV suma los portes— y por eso se enseñan los dos: el 17 ago 2026 la
+   consola decía 1493,06 € y esta página 1353 €, y con un solo número delante eso
+   parece un fallo en vez de dos formas de contar. */
+let PANEL = null;
 let TIPOS = null;          // el análisis por categoría ya hecho, para reordenarlo sin recargar
 let ORDEN = 'margen';      // por qué columna se ordena la tabla de tipos
 
@@ -614,7 +620,8 @@ async function cargar() {
         (dia ? '&dia=' + dia : ''), { cache: 'no-store' });
       const jp = await rp.json();
       PRENDAS = (jp && jp.ok && jp.lotes) ? jp.lotes : [];
-    } catch (e) { PRENDAS = []; }
+      PANEL = (jp && jp.ok && jp.panel) ? jp.panel : null;
+    } catch (e) { PRENDAS = []; PANEL = null; }
     ULTIMO = j;
     pintar(j);
   } catch (e) {
@@ -781,7 +788,20 @@ function pintar(j) {
      * Contar prendas no basta: diez camisetas de 1 € sin marcar no son lo
      * mismo que dos chaquetas de 30. Lo que decide es el dinero, así que el
      * % que manda es el de euros, no el de unidades. */
+    /* EL NÚMERO DE LA CONSOLA DE TIKTOK, EL PRIMERO Y EN GRANDE.
+     *
+     * Aaron, 17 ago 2026: "lo que quiero ver en directo es el total que se está
+     * registrando como vendido en directo, que se puede ver en la consola del
+     * live". Ese número es el GMV, y ya lo lee el lector del panel: aquí se
+     * enseña tal cual, sin mezclarlo con el nuestro. Al lado va lo que se pagó
+     * por la ropa, que es lo que sirve para el coste y el margen, y la
+     * diferencia —portes y lo que aún no ha entrado— se dice debajo. */
+    const gmv = PANEL && PANEL.gmv != null ? Number(PANEL.gmv) : null;
+    const frescoPanel = PANEL && PANEL.cuando
+      ? Math.round((Date.now() - new Date(PANEL.cuando)) / 60000) : null;
     html += `<div class="totales">
+      ${gmv != null ? `<div><b>${eur(gmv)}</b><span>en la consola de TikTok${
+        PANEL.items != null ? ' · ' + PANEL.items + ' art.' : ''}</span></div>` : ''}
       <div><b>${eur(c.euros)}</b><span>vendido en el directo</span></div>
       <div><b>${eur(c.eurosMarcados)}</b><span>vendido y marcado</span></div>
       <div><b class="${c.marcadoEurosPct < 75 ? 'neg' : 'bien'}">${c.marcadoEurosPct}%</b><span>del dinero, marcado</span></div>
@@ -791,6 +811,30 @@ function pintar(j) {
       <div><b>${eur(tPrendas ? (tVenta - tCoste) / tPrendas : 0)}</b><span>beneficio por prenda</span></div>
       <div><b class="${tNeto < 0 ? 'neg' : ''}">${eur(tHoras ? tNeto / tHoras : 0)}</b><span>beneficio por hora</span></div>
     </div>`;
+    /* LA DIFERENCIA ENTRE LOS DOS NÚMEROS, EXPLICADA Y NO ESCONDIDA.
+       Con esto se contesta en un vistazo lo que hoy costó media hora: cuánto de
+       la diferencia son portes y cuánto son prendas que aún no han entrado. */
+    if (gmv != null) {
+      const hueco = Math.round((gmv - c.euros) * 100) / 100;
+      const faltanArt = PANEL.items != null ? PANEL.items - c.lotes : null;
+      html += `<div class="aviso ${Math.abs(hueco) > 0 && faltanArt > 5 ? 'ambar' : ''}">
+        <b>La consola dice ${eur(gmv)} y aquí hay ${eur(c.euros)}: ${eur(Math.abs(hueco))}
+        de diferencia.</b> El GMV de TikTok suma <b>los portes</b> que paga cada comprador;
+        esto suma solo <b>la ropa</b>, que es lo que cuenta para coste y margen.
+        ${faltanArt != null ? (faltanArt > 0
+          ? `Y de artículos: la consola lleva <b>${PANEL.items}</b> y aquí hay <b>${c.lotes}</b>,
+             así que <b>${faltanArt}</b> ${faltanArt === 1 ? 'está' : 'están'} sin registrar todavía
+             —el panel las manda con unos segundos de retraso, y las que no se han pagado no entran—.`
+          : (faltanArt < 0
+            ? `De artículos vamos por delante: aquí hay <b>${c.lotes}</b> y la consola atribuye
+               <b>${PANEL.items}</b>. TikTok tarda en atribuir, no falta nada.`
+            : 'En artículos cuadran exactamente.')) : ''}
+        ${frescoPanel != null && frescoPanel > 3
+          ? `<br><b>Ojo:</b> el número de la consola es de hace ${frescoPanel} min. Si no se mueve,
+             mira que la pestaña del panel de TikTok siga abierta y leída.` : ''}
+      </div>`;
+    }
+
     /* Lo de "sin tarifa" se decía aquí, en la ficha de cada vendedora, en la
        tabla de tipos y en su nota: cuatro veces lo mismo. Se queda donde sirve
        para hacer algo —la ficha y el análisis— y aquí solo si es gordo. */
