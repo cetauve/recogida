@@ -90,9 +90,91 @@ async function cruzar(s, dia, toquesTodos, soloCuenta) {
         )
       )
     order by l.vendida_en`;
-  const turnosTodos = await s`
+  const turnosCrudos = await s`
     select vendedora, empezo, acabo, lote_inicio, lote_fin, cuenta
     from turnos where dia = ${dia} order by empezo`;
+
+  /* =========================================================================
+     DOS TURNOS CON EL MISMO NOMBRE SON UN TURNO
+     =========================================================================
+     Lo pidió Aaron el 17 ago 2026: "si se registran dos turnos con exactamente
+     el mismo nombre, que se junten, porque muy probablemente es porque se ha
+     tenido que cambiar de dispositivo".
+
+     Y es así: la tablet se queda sin batería, o se cambia de móvil, y al poner
+     el nombre otra vez se abre un turno nuevo. Sin juntarlos, esa persona sale
+     dos veces en la tabla, su rato se parte en dos y las horas trabajadas —de
+     las que cuelga el coste— salen mal.
+
+     PERO NO SE JUNTA TODO A CIEGAS. Alguien puede hacer dos turnos de verdad en
+     un día: mañana y tarde. Juntar esos dos le colgaría todo lo que se vendió
+     mientras no estaba. Así que se juntan los que se SOLAPAN o los que están
+     pegados —menos de media hora entre que uno acaba y el siguiente empieza—,
+     que es lo que pasa cuando se cambia de aparato. Con un hueco mayor son dos
+     turnos y se dejan como dos.
+
+     El nombre se compara sin mayúsculas ni espacios de sobra, por lo mismo que
+     en la cola: "yasmin" y "Yasmin " son la misma persona.
+     ======================================================================= */
+  const HUECO_MISMO_TURNO_MS = 30 * 60000;
+  const turnosTodos = (() => {
+    const ms0 = (x) => new Date(x).getTime();
+    /* La última vez que se supo de esa persona antes de `tope`: su último toque
+       dentro del turno abierto. Es la señal de vida que dice si el turno nuevo
+       es una continuación o algo aparte. */
+    const ultimaSenal = (lista, abierto, tope) => {
+      const nombre = String(abierto.vendedora || '').trim().toLowerCase();
+      const desde = ms0(abierto.empezo);
+      let max = 0;
+      for (const q of toquesTodos) {
+        if (String(q.vendedora || '').trim().toLowerCase() !== nombre) continue;
+        const c = ms0(q.en);
+        if (c >= desde && c <= tope && c > max) max = c;
+      }
+      return max || null;
+    };
+    const porNombre = new Map();
+    for (const t of turnosCrudos) {
+      const k = String(t.vendedora || '').trim().toLowerCase();
+      if (!porNombre.has(k)) porNombre.set(k, []);
+      porNombre.get(k).push({ ...t });
+    }
+    const fuera = [];
+    for (const lista of porNombre.values()) {
+      lista.sort((a, b) => ms0(a.empezo) - ms0(b.empezo));
+      let actual = null;
+      for (const t of lista) {
+        if (!actual) { actual = { ...t, unidos: 1 }; continue; }
+        /* ¿CUÁNDO SE LE PERDIÓ LA PISTA AL TURNO DE ANTES?
+         *
+         * Si lo cerró, ahí. Y si se quedó abierto —que es lo normal cuando la
+         * tablet se apaga— la última señal de vida es su último toque: si el
+         * turno nuevo empieza justo después, cambió de aparato; si empieza tres
+         * horas después de su última marca, es otro turno del día y NO se junta.
+         *
+         * Sin esto, un turno abierto se tragaba cualquier turno posterior de la
+         * misma persona, y a alguien que hace mañana y tarde se le colgaba todo
+         * lo vendido mientras no estaba. */
+        const finActual = actual.acabo ? ms0(actual.acabo)
+          : (ultimaSenal(lista, actual, ms0(t.empezo)) || ms0(actual.empezo));
+        if (ms0(t.empezo) - finActual <= HUECO_MISMO_TURNO_MS) {
+          /* Se junta: empieza cuando empezó el primero y acaba cuando acabe el
+             último. Si alguno sigue abierto, el junto sigue abierto. */
+          actual.acabo = (!actual.acabo || !t.acabo) ? null
+            : (ms0(t.acabo) > ms0(actual.acabo) ? t.acabo : actual.acabo);
+          actual.lote_inicio = actual.lote_inicio != null ? actual.lote_inicio : t.lote_inicio;
+          actual.lote_fin = t.lote_fin != null ? t.lote_fin : actual.lote_fin;
+          if (!actual.cuenta && t.cuenta) actual.cuenta = t.cuenta;
+          actual.unidos++;
+        } else {
+          fuera.push(actual);
+          actual = { ...t, unidos: 1 };
+        }
+      }
+      if (actual) fuera.push(actual);
+    }
+    return fuera.sort((a, b) => ms0(a.empezo) - ms0(b.empezo));
+  })();
 
   const ms = (x) => new Date(x).getTime();
 
@@ -345,6 +427,9 @@ async function cruzar(s, dia, toquesTodos, soloCuenta) {
       abierto: !finDe(t), cerradoSolo: !t.acabo && !!finDe(t), solapado,
       /* true = de esta cuenta no hay datos de venta y no se puede saber. */
       sinDatos: ciega,
+      /* Cuántos turnos sueltos se han juntado en este. Más de uno = cambió de
+         aparato a mitad, y en pantalla se dice para que no parezca un error. */
+      unidos: t.unidos || 1,
       /* Lo que se vendió mientras ella estaba, en SU cuenta. */
       vendidas: ciega ? null : dentro.length,
       euros: ciega ? null : Math.round(dentro.reduce((a, l) => a + eur(l.precio), 0) * 100) / 100,
