@@ -56,6 +56,18 @@ const ESQUEMA = [
      actualizado  timestamptz not null default now()
    )`,
   `create index if not exists directos_dia on directos (dia)`,
+  /* LO QUE DICE EL PROPIO PANEL DE TIKTOK, TAL CUAL.
+   *
+   * El 17 ago 2026, en directo: la consola de TikTok decía 1493,06 € y 292
+   * artículos; nosotros teníamos 1353 € y 266 prendas. Con los dos números
+   * delante la diferencia se mira y se explica en diez segundos —portes,
+   * prendas sin registrar—; con uno solo, parece que el programa miente.
+   *
+   * Se guarda lo que TikTok dice, sin tocarlo y sin mezclarlo con lo nuestro:
+   * son dos medidas distintas y las dos hacen falta. */
+  `alter table directos add column if not exists panel_gmv numeric`,
+  `alter table directos add column if not exists panel_items integer`,
+  `alter table directos add column if not exists panel_en timestamptz`,
 
   /* Una fila por prenda vendida. La clave lleva la cuenta porque billysvlc y
    * billystourvlc repiten los números: el 47 existe en las dos. */

@@ -26,10 +26,21 @@ module.exports = puerta(async (req, res) => {
       detalle: 'Hace falta un identificador de directo (sesionId).' });
     const dia = diaDe(b.dia);
 
+    /* LO QUE DICE EL PANEL DE TIKTOK, GUARDADO TAL CUAL.
+     * Su GMV suma los portes y cuenta lo atribuido a su manera, así que no es
+     * nuestro número ni lo sustituye: se guarda al lado para poder mirar los dos
+     * y ver la diferencia en vez de sospechar de la lectura. */
+    const panel = b.panel && typeof b.panel === 'object' ? b.panel : null;
+    const pgmv = panel ? aNumero(panel.gmv) : null;
+    const pitems = panel ? aEntero(panel.items != null ? panel.items : panel.itemsSold) : null;
+
     await s`
-      insert into directos (id, dia, cuenta, empezo, acabo, lote_actual, lote_en, actualizado)
+      insert into directos (id, dia, cuenta, empezo, acabo, lote_actual, lote_en,
+                            panel_gmv, panel_items, panel_en, actualizado)
       values (${directo}, ${dia}, ${aTexto(b.cuenta)}, ${aFecha(b.empezo)}, ${aFecha(b.acabo)},
-              ${aEntero(b.loteActual)}, ${aFecha(b.loteEn)}, now())
+              ${aEntero(b.loteActual)}, ${aFecha(b.loteEn)},
+              ${pgmv}, ${pitems},
+              ${(pgmv != null || pitems != null) ? new Date() : null}, now())
       on conflict (id) do update set
         dia         = excluded.dia,
         cuenta      = excluded.cuenta,
@@ -37,6 +48,10 @@ module.exports = puerta(async (req, res) => {
         acabo       = coalesce(excluded.acabo, directos.acabo),
         lote_actual = coalesce(excluded.lote_actual, directos.lote_actual),
         lote_en     = coalesce(excluded.lote_en, directos.lote_en),
+        /* Solo se pisa si viene: un envío que no lo traiga no puede borrarlo. */
+        panel_gmv   = coalesce(excluded.panel_gmv, directos.panel_gmv),
+        panel_items = coalesce(excluded.panel_items, directos.panel_items),
+        panel_en    = coalesce(excluded.panel_en, directos.panel_en),
         actualizado = now()`;
 
     let lotes = 0;
@@ -115,17 +130,28 @@ module.exports = puerta(async (req, res) => {
 
     /* El más reciente del día: si hubo dos, manda el que se tocó al final. */
     const ds = await s`
-      select id, dia, cuenta, empezo, acabo, lote_actual, lote_en, actualizado
+      select id, dia, cuenta, empezo, acabo, lote_actual, lote_en, actualizado,
+             panel_gmv, panel_items, panel_en
       from directos where dia = ${dia} order by actualizado desc limit 1`;
     if (!ds.length) return res.status(200).json({ ok: true, hay: false, dia, directo: null });
     const d = ds[0];
+
+    /* Lo que dice el panel de TikTok del día, del directo que sea: durante el
+       directo hay uno solo, y si hubo dos manda el último que se tocó. */
+    const [p] = await s`
+      select panel_gmv, panel_items, panel_en from directos
+      where dia = ${dia} and panel_en is not null order by panel_en desc limit 1`;
 
     const cabecera = {
       ok: true, hay: true, dia,
       directo: d.id, cuenta: d.cuenta,
       empezo: d.empezo, acabo: d.acabo,
       loteActual: d.lote_actual, loteEn: d.lote_en,
-      actualizado: d.actualizado
+      actualizado: d.actualizado,
+      /* EL NÚMERO DE TIKTOK, PARA PODER MIRAR LOS DOS.
+         Su GMV suma los portes; el nuestro es lo que se pagó por la ropa. */
+      panel: p ? { gmv: p.panel_gmv == null ? null : Number(p.panel_gmv),
+                   items: p.panel_items, cuando: p.panel_en } : null
     };
     /* La app de las vendedoras pregunta esto cada pocos segundos y solo
      * necesita el número: no le mandamos cientos de filas por gusto. */
