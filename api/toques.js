@@ -312,6 +312,11 @@ async function cruzar(s, dia, toques) {
       euros: ciega ? null : Math.round(dentro.reduce((a, l) => a + eur(l.precio), 0) * 100) / 100,
       /* Lo que ella marcó y cruzó. Esto se sabe siempre. */
       marcadas: suyas.length,
+      /* Y lo que marcó, cruce o no. Para un turno del que no hay datos de venta
+         es LO ÚNICO que se sabe de su trabajo: sus marcas están, lo que no está
+         es la prenda a la que van, y llegará cuando se lean los pedidos de su
+         cuenta. Sin esto su fila decía "0 marcadas" y parecía que no hizo nada. */
+      marcas: filas.filter((f) => f.vendedora === t.vendedora).length,
       eurosMarcados: Math.round(suyas.reduce((a, f) => a + eur(f.precio), 0) * 100) / 100,
       pct: (ciega || !dentro.length) ? null : Math.round(suyas.length / dentro.length * 100)
     };
