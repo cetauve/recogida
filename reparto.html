@@ -719,11 +719,15 @@ function pintar(j) {
       <br>En prendas es el ${c.marcadoPct}%: ${c.lotes - c.sinMarcar} de ${c.lotes}.
       Las <b>${c.sinMarcar}</b> que nadie marcó se quedan fuera del cálculo: sin
       categoría no hay coste ni margen. No se reparten ni se rellenan.
-      <br><span class="sub">Ese <b>${eur(c.euros)}</b> es lo que ha llegado
-      ${c.cuenta ? 'de <b>' + esc(c.cuenta) + '</b>' : ''}: ${c.cuentaConPanel && c.cuenta === c.cuentaConPanel
+      <br><span class="sub">Ese <b>${eur(c.euros)}</b> es <b>lo que se ha pagado por la ropa</b>
+      ${c.cuenta ? 'en <b>' + esc(c.cuenta) + '</b>' : ''}: ${c.cuentaConPanel && c.cuenta === c.cuentaConPanel
         ? 'lo que el panel del directo ha mandado hasta ahora'
-        : 'lo leído del Centro de vendedores'}. Si el total del día que ves en TikTok es mayor,
-      la diferencia es la otra cuenta${c.ultimaVenta ? ' o prendas que el panel aún no ha mandado' : ''}.</span></div>`;
+        : 'lo leído del Centro de vendedores'}.
+      <b>No es el GMV de TikTok</b>, que sale más alto porque suma los portes que paga cada
+      comprador — el 17 ago 2026 eran 549,12 € de GMV contra 511 € de ropa: 38,12 € de ocho
+      envíos, con 111 prendas leídas contra las 109 que TikTok atribuía—. Para el coste y el
+      margen el bueno es este: el porte no es tuyo.
+      ${c.cuentas && c.cuentas.length > 1 ? 'Y si comparas con el total del día, ahí están las dos cuentas juntas.' : ''}</span></div>`;
   } else {
     html += `<div class="aviso verde"><b>Marcado el 100%.</b> Todas las prendas del día
       llevan categoría y entran en el cálculo.</div>`;
