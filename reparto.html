@@ -933,6 +933,9 @@ function pintar(j) {
         <td class="n">${hhmm(t.empezo)}–${t.fin ? hhmm(t.fin) : 'sigue'}${
           t.cerradoSolo ? '<br><span class="et hora">cerrado solo</span>' : ''}${
           t.solapado ? '<br><span class="et no">solapado con otra</span>' : ''}${
+          /* Dos turnos con el mismo nombre son un turno: cambió de aparato. Se
+             dice, para que ver un rato largo no parezca un error. */
+          t.unidos > 1 ? `<br><span class="et lote">${t.unidos} turnos juntados · cambió de aparato</span>` : ''}${
           ciega ? `<br><span class="et hora">${esc(t.cuenta || 'su cuenta')} · sin datos de venta</span>` : ''}</td>
         <td class="n">${ciega ? '—' : t.vendidas}</td>
         <td class="n">${ciega
