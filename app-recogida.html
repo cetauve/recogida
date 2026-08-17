@@ -22,6 +22,10 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 #miNombre{width:100%;padding:14px;font-size:17px;border-radius:12px;border:2px solid var(--linea);
   background:var(--navy);color:var(--bone);margin-bottom:10px}
 #miNombre:focus{outline:none;border-color:var(--rojo)}
+#nombresHoy{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
+#nombresHoy button{background:transparent;border:1.5px solid var(--linea,rgba(237,231,219,.2));
+ color:inherit;border-radius:999px;padding:7px 13px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+#nombresHoy button.yo{border-color:var(--rojo);background:rgba(200,50,31,.14)}
 .modos{display:flex;gap:10px}
 .modoBtn{flex:1;padding:14px 10px;border-radius:12px;border:2px solid var(--linea);
   background:var(--navy);color:var(--bone);font:inherit;font-size:15px;font-weight:700;cursor:pointer}
@@ -139,6 +143,28 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 #colaCabecera{display:flex;align-items:baseline;gap:10px;margin:6px 0 2px}
 #colaCabecera b{font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
 #colaCabecera span{font-size:18px;font-weight:700}
+/* LO QUE QUEDA POR CERRAR. Una lista corta y sin adornos: número, nombre y
+   por qué sigue ahí. Es la pantalla que no existía el 17 ago 2026, cuando
+   quedaban veintiún paquetes parados y uno abierto y los móviles decían que no
+   había nada. */
+#colaQueda{width:100%;max-width:520px;margin:2px auto 0}
+#colaQueda h3{font-size:13px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+ opacity:.55;margin:14px 0 8px}
+.qLinea{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;
+ background:rgba(237,231,219,.05);border:1px solid rgba(237,231,219,.08);margin-bottom:6px}
+.qLinea b{font-size:19px;font-variant-numeric:tabular-nums;min-width:38px}
+.qLinea .qq{flex:1;min-width:0;font-size:14px;line-height:1.35}
+.qLinea .qq small{display:block;opacity:.6;font-size:12px}
+.qLinea button{border:0;border-radius:9px;padding:9px 12px;font:inherit;font-weight:800;
+ font-size:13px;background:var(--red);color:#fff;cursor:pointer;white-space:nowrap}
+.qLinea.parado{border-color:rgba(216,155,46,.45)}
+.qLinea.parado button{background:#D89B2E;color:#1A1208}
+.qLinea.retirado{opacity:.45}
+.qLinea.retirado button{display:none}
+/* Quién lo recogió y a qué hora, encima de la ficha del que empaqueta. */
+.deQuien{width:100%;max-width:520px;font-size:13px;opacity:.75;margin-bottom:8px}
+.deQuien b{opacity:1}
+
 #colaBotones{display:flex;flex-direction:column;gap:10px;margin-top:auto}
 #colaBotones button{border:0;border-radius:14px;padding:16px;font:inherit;font-weight:800;font-size:17px}
 #pedir{background:var(--red);color:#fff}
@@ -158,6 +184,12 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 #versionNueva button{margin-left:auto;background:#2E9E6B;color:#fff;border:0;border-radius:10px;
  padding:10px 16px;font:inherit;font-weight:800;cursor:pointer}
 
+/* --- un aviso que no para el trabajo --- */
+#avisoSuave{position:fixed;left:12px;right:12px;bottom:12px;z-index:120;display:none;
+ background:#241C0E;border:1.5px solid #D89B2E;border-radius:14px;padding:13px 15px;
+ font-size:14px;line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#avisoSuave.on{display:block}
+
 /* --- cambiar rol --- */
 .cambiarRol{background:transparent;border:1.5px solid var(--linea,rgba(237,231,219,.2));
  color:inherit;border-radius:10px;padding:8px 12px;font:inherit;font-weight:600;font-size:13px;cursor:pointer}
@@ -174,6 +206,10 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
        se recuerda. -->
   <div id="quienSoy">
     <input id="miNombre" type="text" placeholder="Tu nombre" autocomplete="off" autocapitalize="words">
+    <!-- Los que ya andan por aquí hoy. Un toque en su nombre y no hay forma de
+         escribirlo de otra manera, que es como acabaron "yasmin" y "Yasmine"
+         siendo dos trabajadoras distintas el 17 ago 2026. -->
+    <div id="nombresHoy"></div>
     <div class="modos">
       <button class="modoBtn" data-m="recoge">Cojo prendas</button>
       <button class="modoBtn" data-m="empaqueta">Cierro paquetes</button>
@@ -198,6 +234,7 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
   <div class="sub" id="colaSub"></div>
   <div id="colaCabecera" style="display:none"><b id="colaNum"></b><span id="colaQuien"></span></div>
   <div id="colaFicha"><div id="colaVacia">Pulsa <b>Dame el siguiente</b> cuando estés libre.</div></div>
+  <div id="colaQueda"></div>
   <div id="colaBotones">
     <button id="pedir">Dame el siguiente</button>
     <button id="cerrarPaq" style="display:none">Paquete cerrado</button>
@@ -430,9 +467,24 @@ function verMenu(){
   $('menuPie').innerHTML = cuandoSalio +
     (MARCAS.length ? '<br><button id="mandarTiempos" style="margin-top:14px;width:100%;padding:14px;' +
       'border-radius:12px;border:0;background:var(--rojo);color:#fff;font:inherit;font-weight:800;' +
-      'font-size:15px;cursor:pointer">Mandar mis tiempos (' + MARCAS.length + ')</button>' : '');
+      'font-size:15px;cursor:pointer">Mandar mis tiempos (' + MARCAS.length + ')</button>' : '') +
+    /* EL SEGURO. Comprueba paquete a paquete que todo lo que has deslizado está
+       de verdad en la cola, y mete lo que falte. Existe porque un paquete que no
+       llegó no deja ni rastro en el móvil: sin esto, la única forma de
+       enterarse era que alguien lo echara de menos al final del día. */
+    (MARCAS.length && MODO === 'recoge'
+      ? '<button id="comprobarCola" style="margin-top:8px;width:100%;padding:12px;' +
+        'border-radius:12px;border:1.5px solid var(--linea,rgba(237,231,219,.2));background:transparent;' +
+        'color:inherit;font:inherit;font-weight:700;font-size:14px;cursor:pointer">' +
+        'Comprobar que están todos en la cola</button>' : '');
   const mt = $('mandarTiempos');
   if (mt) mt.addEventListener('click', mandarTiempos);
+  const cc = $('comprobarCola');
+  if (cc) cc.addEventListener('click', async () => {
+    cc.disabled = true; cc.textContent = 'Comprobando…';
+    await reenviarTodo(true);
+    cc.disabled = false; cc.textContent = 'Comprobar que están todos en la cola';
+  });
   pintarQuienSoy();
 
   pintarTandas();
@@ -488,7 +540,15 @@ async function mirarTandas(){
   try {
     const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
     const j = await r.json();
-    if (j && j.ok) { TANDAS_TOMA = j.tandas || []; pintarTandas(); }
+    if (j && j.ok) {
+      TANDAS_TOMA = j.tandas || [];
+      apuntarNombres(j);
+      pintarTandas();
+      /* Los nombres llegan del servidor, así que las fichas de nombres hay que
+         volver a pintarlas cuando llegan: si no, no aparecen hasta que algo
+         más repinte la pantalla. */
+      pintarQuienSoy();
+    }
   } catch(e){ /* sin red: se ve como siempre y a trabajar */ }
 }
 
@@ -541,6 +601,11 @@ function racksDeTanda(t){
 /* ---------------------------------------------------- quien soy y que hago */
 function pintarQuienSoy(){
   $('miNombre').value = QUIEN;
+  /* Quién anda hoy por aquí: un toque en tu nombre en vez de escribirlo. */
+  $('nombresHoy').innerHTML = NOMBRES_HOY.length
+    ? NOMBRES_HOY.map((n) => '<button data-n="' + esc(n) + '"' +
+        (sinAdornos(n) === sinAdornos(QUIEN) ? ' class="yo"' : '') + '>' + esc(n) + '</button>').join('')
+    : '';
   for (const b of document.querySelectorAll('.modoBtn')) b.classList.toggle('on', b.dataset.m === MODO);
   const listo = !!(QUIEN.trim() && MODO);
   $('tandas').classList.toggle('bloqueado', !listo);
@@ -571,6 +636,10 @@ function pintarQuienSoy(){
    moviles que pulsan a la vez se lleven paquetes distintos.
    ========================================================================= */
 let PAQ = null;               // el paquete que tengo ahora mismo en la mesa
+/* Lo que contestó el servidor la última vez que pedí y no había nada: cuántos
+   están abiertos en otros móviles y cuántos parados por incidencia. Sin esto la
+   pantalla dice "no hay paquetes esperando" con trabajo sin hacer delante. */
+let NADA = null;
 
 async function apiCola(cuerpo){
   const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
@@ -632,14 +701,113 @@ async function refrescarContador(){
     const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
     const j = await r.json();
     if (!j || !j.ok) return;
+    apuntarNombres(j);
     $('colaSub').innerHTML = j.espera + (j.espera === 1 ? ' paquete esperando · ' : ' paquetes esperando · ')
       + j.cerrado + ' hechos hoy'
       /* Un atascado es trabajo PARADO, no trabajo en marcha. Si no se dice,
          nadie lo mira y el paquete se queda ahi toda la tarde. */
       + (j.atascados ? ' · <b style="color:#E7C078">' + j.atascados +
-          (j.atascados === 1 ? ' atascado' : ' atascados') + '</b>' : '');
+          (j.atascados === 1 ? ' atascado' : ' atascados') + '</b>' : '')
+      + (j.parado ? ' · <b style="color:#E7C078">' + j.parado +
+          (j.parado === 1 ? ' parado' : ' parados') + '</b>' : '');
+    pintarQueda(j.queda || []);
   } catch(e){ $('colaSub').textContent = 'Sin conexión con el servidor'; }
 }
+
+/* ===========================================================================
+ * LO QUE QUEDA POR CERRAR
+ * ===========================================================================
+ * El 17 ago 2026 acabó el turno con 0 paquetes en espera, uno abierto desde
+ * hacía media hora en un móvil que ya no estaba en el almacén y 21 paquetes
+ * parados por incidencia. Y las pantallas decían "no hay paquetes esperando".
+ * Nadie estaba escondiendo nada: simplemente no había ningún sitio donde
+ * mirarlo.
+ *
+ * Esta lista es ese sitio. Todo lo que no está cerrado, con su número, en qué
+ * estado está, quién lo tiene y desde cuándo. Y con el botón que hace falta en
+ * cada caso: coger el que nadie cierra, o mandar a la cola la incidencia que ya
+ * está resuelta. Nada de esto se hace solo: lo decide una persona que está
+ * mirando el almacén.
+ * ======================================================================== */
+const hace = (t) => {
+  if (!t) return '';
+  const m = Math.round((Date.now() - new Date(t)) / 60000);
+  return m < 1 ? 'ahora mismo' : (m < 60 ? 'hace ' + m + ' min' : 'hace ' + Math.floor(m / 60) + ' h ' + (m % 60) + ' min');
+};
+const laHora = (t) => {
+  try { return new Intl.DateTimeFormat('es-ES', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Madrid' }).format(new Date(t)); }
+  catch(e){ return ''; }
+};
+
+function pintarQueda(queda){
+  const caja = $('colaQueda');
+  /* El que tengo en la mesa no sale en la lista: ya lo estoy viendo arriba. */
+  const otros = queda.filter((q) => !(PAQ && q.pedido === PAQ.pedido));
+  if (!otros.length) { caja.innerHTML = ''; return; }
+  const linea = (q) => {
+    const quienTiene = q.estado === 'haciendo'
+      ? 'lo tiene <b>' + esc(q.quien_cierra || '¿?') + '</b> ' + hace(q.tomado_en)
+      : (q.estado === 'espera' ? 'esperando desde ' + laHora(q.abierto_en)
+        : (q.estado === 'parado' ? (q.motivo ? esc(q.motivo) : 'incidencia sin resolver')
+          : 'lo retiró ' + esc(q.quien_abrio || 'el recogedor')));
+    const boton = q.estado === 'parado'
+      ? '<button class="qResolver" data-p="' + esc(q.pedido) + '" data-n="' + q.numero + '">Ya está</button>'
+      : (q.estado === 'retirado' ? ''
+        : '<button class="qCoger" data-p="' + esc(q.pedido) + '" data-n="' + q.numero + '">Lo hago yo</button>');
+    return '<div class="qLinea ' + q.estado + (q.atascado ? ' atascado' : '') + '">' +
+      '<b>' + q.numero + '</b>' +
+      '<span class="qq">' + esc(q.apodo || '') +
+      '<small>' + quienTiene + ' · recogió ' + esc(q.quien_abrio || '¿?') + '</small></span>' +
+      boton + '</div>';
+  };
+  const grupo = (titulo, lista) => lista.length
+    ? '<h3>' + titulo + '</h3>' + lista.map(linea).join('') : '';
+  caja.innerHTML =
+    grupo('Sin cerrar', otros.filter((q) => q.estado === 'haciendo' || q.estado === 'espera')) +
+    grupo('Parados por incidencia', otros.filter((q) => q.estado === 'parado')) +
+    grupo('Retirados por el recogedor', otros.filter((q) => q.estado === 'retirado'));
+}
+
+/* Coger uno concreto: el que nadie cierra. Se avisa de quién lo tenía, porque
+   puede estar a medio hacer encima de otra mesa. */
+$('colaQueda').addEventListener('click', async (e) => {
+  const bC = e.target.closest('.qCoger');
+  const bR = e.target.closest('.qResolver');
+  if (!bC && !bR) return;
+  const pedido = (bC || bR).dataset.p, num = (bC || bR).dataset.n;
+  (bC || bR).disabled = true;
+
+  if (bR) {
+    if (!confirm('¿El paquete #' + num + ' ya está resuelto?\n\nVuelve a la cola y se lo dará a quien pida el siguiente.')) {
+      bR.disabled = false; return;
+    }
+    try {
+      const j = await apiCola({ accion:'resolver', quien: QUIEN, pedido });
+      if (!j || !j.ok || !j.resuelto) alert('No he podido: puede que ya lo haya movido otra persona.');
+    } catch(err){ alert('Sin conexión. Prueba otra vez.'); }
+    refrescarContador();
+    return;
+  }
+
+  if (PAQ && !confirm('Tienes el #' + PAQ.numero + ' sin cerrar.\n\n¿Coger el #' + num + ' de todas formas?')) {
+    bC.disabled = false; return;
+  }
+  try {
+    const j = await apiCola({ accion:'coger', quien: QUIEN, pedido });
+    if (j && j.ok && j.cogido) {
+      PAQ = j.paquete;
+      PAQ.rescatado = j.rescatado ? { loTenia: j.loTenia, minutos: j.minutos } : null;
+      try{ localStorage.setItem('billys_paq', JSON.stringify(PAQ)); }catch(err){}
+      if (navigator.vibrate) navigator.vibrate(20);
+      pintarCola();
+    } else {
+      alert(j && j.estado === 'cerrado'
+        ? 'Ese ya lo ha cerrado ' + (j.loTenia || 'otra persona') + '.'
+        : 'No he podido cogerlo. Refresca y mira cómo está.');
+    }
+  } catch(err){ alert('Sin conexión. Prueba otra vez.'); }
+  refrescarContador();
+});
 
 function pintarCola(){
   const hay = !!PAQ;
@@ -648,7 +816,16 @@ function pintarCola(){
   $('soltarPaq').style.display  = hay ? '' : 'none';
   $('colaCabecera').style.display = hay ? 'flex' : 'none';
   if (!hay){
-    $('colaFicha').innerHTML = '<div id="colaVacia">Pulsa <b>Dame el siguiente</b> cuando estés libre.</div>';
+    $('colaFicha').innerHTML = '<div id="colaVacia">' + (NADA
+      ? (NADA.haciendo || NADA.parado
+          ? 'Nadie tiene paquetes esperando, pero <b>todavía queda trabajo</b>:' +
+            (NADA.haciendo ? '<br>' + NADA.haciendo +
+              (NADA.haciendo === 1 ? ' abierto en otro móvil' : ' abiertos en otros móviles') : '') +
+            (NADA.parado ? '<br>' + NADA.parado +
+              (NADA.parado === 1 ? ' parado por incidencia' : ' parados por incidencia') : '') +
+            '<br><br>Lo tienes aquí abajo.'
+          : 'No hay paquetes esperando.<br>Vuelve a pulsar en un momento.')
+      : 'Pulsa <b>Dame el siguiente</b> cuando estés libre.') + '</div>';
     return;
   }
   /* El numero de paquete es lo que se dicen en voz alta ("voy con el 12") y va
@@ -657,10 +834,22 @@ function pintarCola(){
   $('colaQuien').textContent = PAQ.apodo || '';
   /* Un rescatado puede estar a medio hacer sobre la mesa de otro. Decirlo es
      la diferencia entre rehacerlo y meter la mitad de las prendas. */
-  $('colaFicha').innerHTML = (PAQ.rescatado
+  /* QUIÉN TE LO HA MANDADO Y CUÁNDO. Lo pidió Aaron el 17 ago 2026 y tiene todo
+     el sentido: si en el paquete falta algo, hay que saber a quién preguntarle
+     sin tener que gritar "¿de quién es el 12?" por el almacén. Y la hora dice si
+     ese paquete lleva ahí cinco minutos o lleva una hora. */
+  const de = PAQ.quien_abrio
+    ? `<div class="deQuien">Lo recogió <b>${esc(PAQ.quien_abrio)}</b>` +
+      (PAQ.abierto_en ? ` · ${laHora(PAQ.abierto_en)} (${hace(PAQ.abierto_en)})` : '') +
+      (PAQ.tanda ? ` · ${esc(PAQ.tanda)}` : '') + '</div>'
+    : '';
+  $('colaFicha').innerHTML = de + (PAQ.rescatado
     ? `<div class="rescate">Este paquete lo tenía <b>${esc(PAQ.rescatado.loTenia)}</b>
         desde hace ${PAQ.rescatado.minutos} min y no lo cerró.
         <b>Compruébalo antes de cerrarlo</b>: puede estar a medias.</div>` : '')
+    + (PAQ.motivo
+      ? `<div class="rescate">Venía con incidencia: <b>${esc(PAQ.motivo)}</b>.
+          Si sigue sin arreglarse, devuélvelo.</div>` : '')
     + tarjetaHTML(PAQ.ficha);
 }
 
@@ -676,7 +865,14 @@ $('pedir').addEventListener('click', async () => {
       if (navigator.vibrate) navigator.vibrate(20);
     } else {
       PAQ = null;
-      $('colaFicha').innerHTML = '<div id="colaVacia">No hay paquetes esperando.<br>Vuelve a pulsar en un momento.</div>';
+      /* "No hay" a secas es lo que hizo que el 17 ago se acabara el turno con un
+         paquete abierto y veintiuno parados y todos pensando que ya estaba. Si
+         queda algo, se dice qué queda y se enseña debajo para poder cogerlo.
+         Se guarda en NADA y lo pinta pintarCola: escribirlo aquí directamente no
+         servía de nada, porque pintarCola corre justo después y lo borraba. Ese
+         era el motivo de que ni el mensaje viejo se llegara a ver nunca. */
+      NADA = (j && (j.haciendo || j.parado))
+        ? { haciendo: j.haciendo || 0, parado: j.parado || 0 } : { haciendo: 0, parado: 0 };
     }
   } catch(e){
     $('colaFicha').innerHTML = '<div id="colaVacia">No he podido hablar con el servidor.<br>Prueba otra vez.</div>';
@@ -802,12 +998,108 @@ try {
   const g = JSON.parse(localStorage.getItem('billys_paq') || 'null');
   if (g && g.pedido) PAQ = g;
 } catch(e){}
+/* ===========================================================================
+ * UN NOMBRE POR PERSONA
+ * ===========================================================================
+ * El 17 ago 2026 la misma chica trabajó como "yasmin" (8 paquetes) y "Yasmine"
+ * (26). Para el programa eran dos: "¿este paquete es mío?" decía que no, el
+ * rescate de atascos se lo quitaba a ella misma y los recuentos del día salían
+ * partidos en dos personas que no existen.
+ *
+ * Se arregla por los dos lados. El servidor compara sin mayúsculas. Y aquí, al
+ * escribir el nombre, si ya hay alguien trabajando hoy que se llama igual
+ * —da igual cómo lo escribiera—, se adopta SU forma de escribirlo. Sin
+ * preguntar nada: quien está poniendo su nombre en una tablet a media mañana no
+ * quiere un diálogo, quiere ponerse a trabajar.
+ * ======================================================================== */
+let NOMBRES_HOY = [];                    // los que ya han tocado algo hoy
+
+/* ¿ESTO ES LA MISMA PERSONA ESCRITA DE OTRA MANERA?
+ *
+ * "yasmin" y "Yasmine" no son el mismo texto ni quitando mayúsculas: sobra una
+ * letra. Así que se mira si uno empieza como el otro (yasmin / yasmine, ana /
+ * anna no) o si se diferencian en una sola letra cambiada, y se PREGUNTA. No se
+ * decide solo: "Ana" y "Anna" pueden ser dos personas de verdad, y fusionar a
+ * dos trabajadoras por su cuenta sería peor que tener dos nombres.
+ *
+ * Se comparan sin acentos, porque "Belén" y "Belen" son la misma sin discusión.
+ */
+function sinAdornos(s){
+  return String(s || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+function pareceElMismo(a, b){
+  const x = sinAdornos(a), y = sinAdornos(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (x.length < 3 || y.length < 3) return false;
+  /* Uno es el principio del otro y lo que sobra son una o dos letras: yasmin /
+     yasmine, anny / annye. Con más de dos letras de diferencia ya no. */
+  const largo = x.length > y.length ? x : y, corto = x.length > y.length ? y : x;
+  if (largo.startsWith(corto) && largo.length - corto.length <= 2) return true;
+  /* Una sola letra distinta en el mismo sitio: heikelin / heikelyn. */
+  if (x.length === y.length) {
+    let d = 0;
+    for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) d++;
+    if (d === 1) return true;
+  }
+  return false;
+}
+/* Se rellena con cualquier respuesta de /api/cola, que ya se pide cada quince
+   segundos en las dos pantallas. No hace falta preguntar nada aparte. */
+function apuntarNombres(j){
+  const vistos = new Map(NOMBRES_HOY.map((n) => [n.trim().toLowerCase(), n]));
+  for (const n of [...(j.tandas || []).map((t) => t.quien),
+                   ...(j.gente || []).map((g) => g.quien),
+                   ...(j.paquetes || []).flatMap((p) => [p.quien_abrio, p.quien_cierra])]) {
+    const k = String(n || '').trim().toLowerCase();
+    if (k && !vistos.has(k)) vistos.set(k, String(n).trim());
+  }
+  NOMBRES_HOY = [...vistos.values()];
+}
+const comoSeEscribe = (n) => {
+  const puesto = String(n || '').trim();
+  if (!puesto) return '';
+  /* Igual salvo mayúsculas o acentos: se adopta sin preguntar. */
+  const clavado = NOMBRES_HOY.find((x) => sinAdornos(x) === sinAdornos(puesto));
+  if (clavado) return clavado.trim();
+  /* Parecido: se pregunta una vez. Un toque y se acabó el "yasmin" y
+     "Yasmine" trabajando por separado el mismo día. */
+  const parecido = NOMBRES_HOY.find((x) => pareceElMismo(x, puesto));
+  if (parecido && confirm('Hoy ya está trabajando ' + parecido + '.\n\n¿Eres tú?\n\n' +
+      'Si le das a Aceptar, tus paquetes van con los de ' + parecido + '. ' +
+      'Si eres otra persona, dale a Cancelar y déjalo como "' + puesto + '".')) {
+    return parecido.trim();
+  }
+  return puesto;
+};
+
 $('miNombre').addEventListener('input', () => {
   QUIEN = $('miNombre').value;
   localStorage.setItem('billys_quien', QUIEN);
   /* Al cambiar de persona, las marcas que se ven pasan a ser las suyas. */
   cargarMarcas();
   pintarQuienSoy();
+});
+$('nombresHoy').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  QUIEN = b.dataset.n;
+  $('miNombre').value = QUIEN;
+  localStorage.setItem('billys_quien', QUIEN);
+  cargarMarcas();
+  pintarQuienSoy();
+});
+/* Al salir del campo ya no se está escribiendo a medias: es el momento de
+   unificarlo con el nombre que esa persona ya usó hoy. */
+$('miNombre').addEventListener('change', () => {
+  const bueno = comoSeEscribe($('miNombre').value);
+  if (bueno && bueno !== QUIEN.trim()) {
+    QUIEN = bueno;
+    $('miNombre').value = bueno;
+    localStorage.setItem('billys_quien', QUIEN);
+    cargarMarcas();
+    pintarQuienSoy();
+  }
 });
 document.querySelector('.modos').addEventListener('click', (e) => {
   const b = e.target.closest('.modoBtn'); if (!b) return;
@@ -945,8 +1237,13 @@ function terminar(){
         const g = (f.porCuenta || []).filter(x => x.numeros && x.numeros.length);
         return f.apodo + ' — ' + (g.length && DATOS.variasCuentas
           ? g.map(x => (x.cuenta || 'sin cuenta') + ': ' + x.numeros.join(', ')).join(' · ')
-          : f.numeros.join(', '));
-      }).join('<br>')
+          : f.numeros.join(', ')) +
+          /* El motivo, aquí también: es la lista que se lee en voz alta al
+             acabar la tanda para repartirse lo que falta. */
+          (f.motivo ? ' <b>· ' + esc(f.motivo) + '</b>' : '');
+      }).join('<br>') +
+      '<br><br>Están en la cola <b>parados</b>, con su número. Cuando se arreglen, ' +
+      'desde la pantalla de paquetes se les da a <b>Ya está</b> y vuelven a la cola.'
     : 'Los ' + FICHAS.length + ' paquetes de esta tanda están hechos.';
   guardar();
 }
@@ -963,13 +1260,26 @@ function terminar(){
  * sabe nada de tandas: pide un paquete y tiene que recibir todo lo que
  * necesita para hacerlo.
  * ======================================================================== */
+/* EL DÍA DE UNA MARCA ES EL DÍA EN QUE SE HIZO, NO EL DÍA EN QUE SE MANDÓ.
+ *
+ * El servidor, si no se le dice nada, apunta las cosas en SU hoy. Y eso está
+ * mal para lo que se manda tarde: un paquete deslizado a las 23:50 que sale del
+ * móvil a las 00:10 —porque volvió la cobertura, o porque alguien reabrió la
+ * app— se guardaba en el día siguiente, en una cola vacía que nadie mira, y por
+ * tanto no se empaquetaba nunca. Se manda el día de cada marca, calculado con la
+ * hora de Valencia igual que lo hace el servidor. */
+const diaMadrid = (t) => {
+  try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date(t)); }
+  catch(e){ return null; }
+};
+
 const LLAVE_COLA = 'billys_cola_pend';
 let PENDCOLA = [];
 try { PENDCOLA = JSON.parse(localStorage.getItem(LLAVE_COLA) || '[]'); } catch(e){ PENDCOLA = []; }
 const guardarPend = () => { try{ localStorage.setItem(LLAVE_COLA, JSON.stringify(PENDCOLA)); }catch(e){} };
 
-function aLaCola(f, cuando){
-  if (!CODIGO || MODO !== 'recoge') return;
+function aLaCola(f, cuando, incidencia, motivo){
+  if (MODO !== 'recoge') return;
   PENDCOLA.push({
     pedido: f.pedido, apodo: f.apodo, prendas: f.numeros.length,
     tanda: (DATOS.tandas[tandaActual] || {}).etiqueta || '',
@@ -977,24 +1287,77 @@ function aLaCola(f, cuando){
        y mientras tanto se cambia de trabajador en la tablet, esos paquetes son
        del que los recogió, no del que estaba cuando volvió el wifi. */
     quien: QUIEN,
+    /* UNA INCIDENCIA TAMBIÉN VA. Antes se quedaba en este móvil y en la
+       pantalla de fin de tanda, y ahí se acababa: el 17 ago 2026 eso dejó 21
+       paquetes recogidos que no existían para nadie más —ni cola, ni número, ni
+       forma de saber que estaban ahí—. Ahora entra en la cola PARADA: no se le
+       da a nadie para empaquetar, pero se ve y se puede resolver. */
+    incidencia: !!incidencia,
+    /* Qué le pasa, escrito por quien lo vio. Sin esto un paquete parado es un
+       paquete parado sin motivo, y eso no lo resuelve nadie. */
+    motivo: motivo || '',
+    dia: diaMadrid(cuando),
     ficha: f, en: new Date(cuando).toISOString()
   });
   guardarPend();
   vaciarCola();
 }
 
+/* ===========================================================================
+ * "ESTE YA LO HA RECOGIDO OTRO"
+ * ===========================================================================
+ * El 17 ago 2026 hubo 124 marcas de recogida sobre 73 paquetes: dos personas
+ * recorrieron las mismas tandas sin saberlo. Para la segunda, deslizar no hacía
+ * nada visible —el paquete ya estaba en la cola— así que desde su móvil parecía
+ * que su deslice se perdía. Es la otra mitad de lo que se veía como "se saltan
+ * pedidos", y además son dos personas haciendo el mismo trabajo.
+ *
+ * Se avisa UNA vez por paquete y sin bloquear nada: quien recoge no puede
+ * pararse a leer diálogos, pero sí tiene que saber que esa tanda ya está hecha.
+ * ======================================================================== */
+const YA_AVISADO = new Set();
+function avisarDeOtro(lista, delEnvio){
+  if (!Array.isArray(lista) || !lista.length) return;
+  const nuevos = lista.filter((x) => delEnvio.has(x.pedido) && !YA_AVISADO.has(x.pedido));
+  if (!nuevos.length) return;
+  for (const x of nuevos) YA_AVISADO.add(x.pedido);
+  const quien = nuevos[0].quien;
+  const aviso = nuevos.length === 1
+    ? 'El paquete de ' + (nuevos[0].apodo || 'ese comprador') + ' ya lo había recogido ' +
+      quien + ' (nº' + nuevos[0].numero + ').'
+    : nuevos.length + ' de los paquetes que acabas de pasar ya los había recogido ' + quien + '.';
+  decir(aviso + ' Mira en el menú qué tandas lleva cada uno antes de seguir: estáis haciendo la misma.');
+}
+
+/* Un aviso que no para el trabajo. Se ve tres segundos y se va. */
+function decir(texto){
+  let caja = document.getElementById('avisoSuave');
+  if (!caja) {
+    caja = document.createElement('div');
+    caja.id = 'avisoSuave';
+    document.body.appendChild(caja);
+  }
+  caja.textContent = texto;
+  caja.classList.add('on');
+  clearTimeout(decir.reloj);
+  decir.reloj = setTimeout(() => caja.classList.remove('on'), 6000);
+}
+
 let vaciando = false;
 async function vaciarCola(){
   if (vaciando || !PENDCOLA.length || !CODIGO) return;
   vaciando = true;
-  /* Se manda una tanda por persona: el servidor apunta un solo nombre por
-     envío, así que mezclarlos le colgaría a uno el trabajo del otro. */
+  /* Se manda una tanda por persona Y POR DÍA: el servidor apunta un solo nombre
+     y un solo día por envío, así que mezclarlos le colgaría a uno el trabajo del
+     otro, o metería en el día de hoy un paquete de anoche. */
   const dueno = PENDCOLA[0].quien || QUIEN;
-  const iban = PENDCOLA.filter((x) => (x.quien || QUIEN) === dueno);
+  const cuando = PENDCOLA[0].dia || null;
+  const mismo = (x) => (x.quien || QUIEN) === dueno && (x.dia || null) === cuando;
+  const iban = PENDCOLA.filter(mismo);
   try {
     const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
-      body: JSON.stringify({ accion:'meter', quien: dueno, paquetes: iban })
+      body: JSON.stringify({ accion:'meter', quien: dueno, dia: cuando, paquetes: iban })
     });
     const j = await r.json();
     if (j && j.ok) {
@@ -1003,6 +1366,7 @@ async function vaciarCola(){
       const fuera = new Set(iban.map((x) => x.pedido));
       PENDCOLA = PENDCOLA.filter((x) => !fuera.has(x.pedido));
       guardarPend();
+      avisarDeOtro(j.deOtro, fuera);
     }
   } catch(e){ /* sin red: se queda pendiente y sale con el siguiente */ }
   vaciando = false;
@@ -1012,19 +1376,111 @@ async function vaciarCola(){
 setInterval(vaciarCola, 20000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) vaciarCola(); });
 
-function avanzar(estado){
+/* ===========================================================================
+ * REENVIAR TODO LO DESLIZADO · el seguro de "sí o sí tiene que estar en la cola"
+ * ===========================================================================
+ * Los pendientes se van de este móvil en cuanto el servidor dice "recibido", y
+ * eso deja un agujero: si un paquete se deslizó cuando el enlace no llevaba
+ * código, o si alguien vació el navegador, o si la app se cerró antes de que
+ * volviera la cobertura, ESE paquete no vuelve a intentarse nunca. Y nadie se
+ * enteraba, porque el móvil ya no lo tenía apuntado como pendiente.
+ *
+ * Aquí se manda otra vez TODO lo deslizado del día, no solo lo pendiente.
+ * `meter` es idempotente: repetir un paquete que ya está en la cola no lo toca
+ * —a lo mejor lo está haciendo alguien—, así que esto se puede pulsar cien
+ * veces. Lo que no estaba, entra. Lo que estaba, se queda como está.
+ *
+ * La ficha se reconstruye de los datos del día, que están en este móvil: sin
+ * ella el que empaqueta recibiría un nombre sin números de prenda.
+ * ======================================================================== */
+function fichaDe(pedido){
+  for (const t of (DATOS.tandas || [])) {
+    for (const c of (t.compradores || [])) if (c.pedido === pedido) return { ficha: c, tanda: t.etiqueta || '' };
+  }
+  return null;
+}
+
+async function reenviarTodo(avisar){
+  if (!CODIGO) { if (avisar) alert('Este enlace no lleva el código del equipo, así que no puedo hablar con el servidor.'); return null; }
+  if (!QUIEN.trim()) { if (avisar) alert('Pon tu nombre antes: la cola apunta quién recogió cada paquete.'); return null; }
+  /* De las marcas de este móvil, que es el registro de lo que ha hecho esta
+     persona: cada "Listo" y cada "Incidencia", con su hora de verdad. */
+  const porDia = new Map();
+  for (const m of MARCAS) {
+    const f = fichaDe(m.pedido);
+    const dia = diaMadrid(m.t);
+    if (!porDia.has(dia)) porDia.set(dia, []);
+    porDia.get(dia).push({
+      pedido: m.pedido, apodo: m.apodo, prendas: m.prendas,
+      tanda: f ? f.tanda : '', incidencia: m.estado === 'inc',
+      ficha: f ? f.ficha : {}, en: new Date(m.t).toISOString(), dia
+    });
+  }
+  if (!porDia.size) { if (avisar) alert('Todavía no has deslizado nada en este móvil.'); return null; }
+
+  let metidos = 0, revueltos = 0, mandados = 0, fallo = false;
+  for (const [dia, paquetes] of porDia) {
+    try {
+      const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+        method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
+        body: JSON.stringify({ accion:'meter', quien: QUIEN, dia, paquetes })
+      });
+      const j = await r.json();
+      if (j && j.ok) { metidos += (j.metidos || 0); revueltos += (j.revueltos || 0); mandados += paquetes.length; }
+      else fallo = true;
+    } catch(e){ fallo = true; }
+  }
+  if (avisar) {
+    alert(fallo
+      ? 'No he podido hablar con el servidor con todo. Vuelve a pulsar en un momento.'
+      : (metidos + revueltos === 0
+          ? 'Comprobado: los ' + mandados + ' paquetes que has deslizado ya estaban en la cola.'
+          : 'Faltaban ' + (metidos + revueltos) + ' en la cola y ya están dentro (de ' + mandados + ' deslizados).'));
+  }
+  return { metidos, revueltos, mandados, fallo };
+}
+/* Sin que nadie lo pulse: al volver a la app y de vez en cuando. Un paquete que
+   falta en la cola no puede depender de que alguien se acuerde de un botón. */
+setInterval(() => { if (MODO === 'recoge' && MARCAS.length) reenviarTodo(false); }, 120000);
+
+/* ===========================================================================
+ * UNA INCIDENCIA SE EXPLICA EN UNA LÍNEA
+ * ===========================================================================
+ * Antes bastaba con deslizar a la izquierda y ya. El paquete se iba a
+ * "incidencia" y nadie —ni el que empaqueta, ni el del turno siguiente, ni tú
+ * mirándolo mañana— podía saber qué le pasaba. Con veintiún paquetes así en un
+ * día, "hay incidencias" no es información: es un montón en el suelo.
+ *
+ * Así que se escribe. Una línea, la que sea: "falta la 214", "manchada", "no
+ * está en el rack". Va con el paquete a la cola y es lo que se lee en la lista
+ * de parados y en la pantalla de fin de tanda. Si no se escribe nada, el
+ * paquete NO se marca y la tarjeta se queda donde estaba: es más barato volver
+ * a deslizar que un paquete parado sin motivo.
+ * ======================================================================== */
+function marcarIncidencia(){
   if (i >= FICHAS.length) return;
   const f = FICHAS[i];
-  if (estado === 'inc') incidencias.push(f);
+  const motivo = (prompt('¿Qué le pasa al paquete de ' + (f.apodo || 'este comprador') + '?\n\n' +
+                         'Una línea basta: falta la 214, manchada, no está en el rack…') || '').trim();
+  if (!motivo) { pintar(); return; }        // sin motivo no hay incidencia
+  avanzar('inc', motivo.slice(0, 140));
+}
+
+function avanzar(estado, motivo){
+  if (i >= FICHAS.length) return;
+  const f = FICHAS[i];
+  if (estado === 'inc') incidencias.push({ ...f, motivo: motivo || '' });
   /* La hora se sella AQUI, en el momento del gesto, y no se recalcula nunca.
      Es el unico dato que no se puede reconstruir despues. */
   const ahora = Date.now();
   MARCAS.push({ pedido: f.pedido, apodo: f.apodo, prendas: f.numeros.length,
-                t: ahora, estado });
+                t: ahora, estado, motivo: motivo || '' });
   /* AQUI EMPIEZA LA COLA. Deslizar "Listo" ya no es solo una marca de tiempo:
-     el paquete pasa a estar disponible para quien empaquete. Las incidencias
-     no entran —ese paquete tiene un problema y no se puede cerrar—. */
-  if (estado !== 'inc') aLaCola(f, ahora);
+     el paquete pasa a estar disponible para quien empaquete.
+     Y LA INCIDENCIA TAMBIÉN ENTRA, parada: antes se quedaba solo en este móvil
+     y por eso el 17 ago 2026 hubo 21 paquetes recogidos que no existían para
+     nadie más. Parado no es lo mismo que invisible. */
+  aLaCola(f, ahora, estado === 'inc', motivo);
   historial.push({i, estado}); i++;
   guardar(); pintar();
   /* Para que el otro vea en el menu por donde voy y no se meta aqui. */
@@ -1042,7 +1498,10 @@ async function atras(){
      Antes esto solo borraba en el móvil: el paquete ya estaba empujado y quien
      empaqueta lo recibía igual, aunque aquí pusiera que no. Ahora se retira.
      Si ya se lo llevó alguien no se le quita de las manos: se avisa. */
-  if (h.estado === 'inc' || !marca || !CODIGO || MODO !== 'recoge') return;
+  /* Deshacer una incidencia también tiene que llegar a la cola: ahora una
+     incidencia está ahí, parada y con número, así que si se deshace hay que
+     retirarla igual que un "Listo". */
+  if (!marca || !CODIGO || MODO !== 'recoge') return;
   const pedido = marca.pedido;
   /* Si aún no había salido del móvil, basta con sacarlo de la lista de espera. */
   const antes = PENDCOLA.length;
@@ -1085,21 +1544,38 @@ async function atras(){
 async function mandarTiempos(){
   if (!MARCAS.length) { alert('Todavía no has marcado nada.'); return; }
   if (!CODIGO || !QUIEN) { alert('Falta tu nombre o el enlace del equipo.'); return; }
-  try {
-    const r = await fetch('/api/tiempos?d=' + encodeURIComponent(CODIGO), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quien: QUIEN, modo: MODO, marcas: MARCAS })
-    });
-    const j = await r.json();
-    if (r.ok && j && j.ok) {
-      alert('Mandado. ' + j.total + ' ' + (j.total === 1 ? 'marca guardada' : 'marcas guardadas') +
-            ' a tu nombre.\n\nSe ven en /tiempos junto a las de todos.');
-      return;
-    }
-    alert('El servidor no lo ha aceptado. Vuelve a intentarlo en un momento.');
-  } catch(e){
-    alert('Sin conexión con el servidor.\n\nTus marcas siguen guardadas en este móvil:\nvuelve a pulsar cuando haya cobertura.');
+  /* Cada marca a SU día. Antes iban todas al día del envío, así que quien
+     mandaba sus tiempos a la mañana siguiente los apuntaba en el día siguiente
+     y en la página de ayer no salía nada de lo que había hecho. */
+  const porDia = new Map();
+  for (const m of MARCAS) {
+    const d = diaMadrid(m.t);
+    if (!porDia.has(d)) porDia.set(d, []);
+    porDia.get(d).push(m);
   }
+  let total = 0, fallo = false;
+  for (const [dia, marcas] of porDia) {
+    try {
+      const r = await fetch('/api/tiempos?d=' + encodeURIComponent(CODIGO), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dia, quien: QUIEN, modo: MODO, marcas })
+      });
+      const j = await r.json();
+      if (r.ok && j && j.ok) total += marcas.length; else fallo = true;
+    } catch(e){ fallo = true; }
+  }
+  if (fallo) {
+    alert('No he podido mandarlo todo.\n\nTus marcas siguen guardadas en este móvil:\nvuelve a pulsar cuando haya cobertura.');
+    return;
+  }
+  /* Y de paso se comprueba la cola: es el momento en que alguien está mirando la
+     pantalla, así que es el mejor momento para decirle si falta algo. */
+  const c = MODO === 'recoge' ? await reenviarTodo(false) : null;
+  alert('Mandado. ' + total + ' ' + (total === 1 ? 'marca guardada' : 'marcas guardadas') +
+        ' a tu nombre.' +
+        (c && (c.metidos + c.revueltos) ? '\n\nAdemás faltaban ' + (c.metidos + c.revueltos) +
+          ' en la cola de empaquetado y ya están dentro.' : '') +
+        '\n\nSe ven en /tiempos junto a las de todos.');
 }
 
 function arrastrable(el){
@@ -1123,7 +1599,7 @@ function arrastrable(el){
       const s = dx>0 ? 1 : -1;
       el.style.transform = `translateX(${s*window.innerWidth*1.3}px) rotate(${s*22}deg)`;
       el.style.opacity = 0;
-      setTimeout(() => avanzar(s>0 ? 'ok' : 'inc'), 150);
+      setTimeout(() => { if (s > 0) avanzar('ok'); else marcarIncidencia(); }, 150);
     } else { el.style.transform=''; ok.style.opacity=0; no.style.opacity=0; }
   };
   el.addEventListener('touchstart', e=>emp(e.touches[0].clientX,e.touches[0].clientY,e.target), {passive:true});
@@ -1136,7 +1612,7 @@ function arrastrable(el){
 }
 
 $('hecho').addEventListener('click', ()=>avanzar('ok'));
-$('saltar').addEventListener('click', ()=>avanzar('inc'));
+$('saltar').addEventListener('click', marcarIncidencia);
 $('atras').addEventListener('click', atras);
 $('volver').addEventListener('click', verMenu);
 $('alMenu').addEventListener('click', verMenu);
@@ -1144,7 +1620,7 @@ $('reiniciar').addEventListener('click', ()=>{ i=0; historial=[]; incidencias=[]
 document.addEventListener('keydown', e=>{
   if (tandaActual === null) return;
   if (e.key==='ArrowRight') avanzar('ok');
-  if (e.key==='ArrowLeft')  avanzar('inc');
+  if (e.key==='ArrowLeft')  marcarIncidencia();
   if (e.key==='Backspace')  atras();
 });
 

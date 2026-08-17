@@ -782,21 +782,36 @@ function pintar(j) {
         <th>Marcado</th><th>Dinero del rato</th><th>Sin marcar</th>
       </tr></thead><tbody>`;
     for (const t of c.porTurno) {
-      const falta = t.vendidas - t.marcadas;
+      /* DE BILLYSTOURVLC NO HAY DATOS DE VENTA, Y ESO SE DICE EN VEZ DE
+         INVENTARSE UN NÚMERO. Antes esta fila salía con las ventas de la OTRA
+         cuenta —las que coincidían en la hora— y un porcentaje bajísimo al lado.
+         Eso no es un número flojo: es el trabajo de otra persona colgado a
+         quien no le toca. Lo que marcó sí se enseña: eso sí se sabe. */
+      const ciega = t.sinDatos || t.vendidas == null;
+      const falta = ciega ? 0 : t.vendidas - t.marcadas;
       const clase = t.pct == null ? '' : (t.pct >= 90 ? '' : (t.pct >= 70 ? 'flojo' : 'malo'));
       html += `<tr>
         <td>${esc(t.vendedora)}${t.abierto ? '<span class="enCurso">en curso</span>' : ''}</td>
         <td class="n">${hhmm(t.empezo)}–${t.fin ? hhmm(t.fin) : 'sigue'}${
           t.cerradoSolo ? '<br><span class="et hora">cerrado solo</span>' : ''}${
-          t.solapado ? '<br><span class="et no">solapado con otra</span>' : ''}</td>
-        <td class="n">${t.vendidas}</td>
+          t.solapado ? '<br><span class="et no">solapado con otra</span>' : ''}${
+          ciega ? `<br><span class="et hora">${esc(t.cuenta || 'su cuenta')} · sin datos de venta</span>` : ''}</td>
+        <td class="n">${ciega ? '—' : t.vendidas}</td>
         <td class="n">${t.marcadas}</td>
         <td class="n">${t.pct == null ? '—' : `${t.pct}% <span class="barra" style="display:inline-block;width:60px;vertical-align:middle"><i class="${clase}" style="width:${t.pct}%"></i></span>`}</td>
-        <td class="n">${eur(t.euros)}</td>
-        <td class="n">${falta > 0 ? falta + ' · ' + eur(t.euros - t.eurosMarcados) : '—'}</td>
+        <td class="n">${ciega ? '—' : eur(t.euros)}</td>
+        <td class="n">${!ciega && falta > 0 ? falta + ' · ' + eur(t.euros - t.eurosMarcados) : '—'}</td>
       </tr>`;
     }
     html += '</tbody></table>';
+    /* Se explica una vez debajo, no en cada fila. */
+    if (c.porTurno.some((t) => t.sinDatos)) {
+      html += `<p class="sub" style="margin-top:8px">De <b>${esc(
+        [...new Set(c.porTurno.filter((t) => t.sinDatos).map((t) => t.cuenta))].join(', ')
+        )}</b> no hay panel de directo, así que no se puede saber cuántas prendas se vendieron
+        mientras. Ese turno enseña lo que marcó y lo demás va en blanco a propósito: contar ahí
+        las ventas de la otra cuenta sería colgarle a una el trabajo de la otra.</p>`;
+    }
   }
 
   // -------------------------------------------- analizar por tipo de prenda
