@@ -56,8 +56,8 @@ const FIN_SIN_VENTAS_MS = 20 * 60000;
  * "Sin reclamar" es lo que impide que dos vendedoras se lleven la misma
  * prenda; el toque que se quede sin candidato se queda sin cruce y se dice,
  * en vez de inventarle uno. */
-async function cruzar(s, dia, toques) {
-  const lotes = await s`
+async function cruzar(s, dia, toquesTodos, soloCuenta) {
+  const lotesTodos = await s`
     select l.directo, l.cuenta, l.num, l.vendida_en, l.precio, l.titulo
     from lotes l
     where l.dia = ${dia} and l.vendida_en is not null and l.parado = false
@@ -90,13 +90,11 @@ async function cruzar(s, dia, toques) {
         )
       )
     order by l.vendida_en`;
-  const turnos = await s`
+  const turnosTodos = await s`
     select vendedora, empezo, acabo, lote_inicio, lote_fin, cuenta
     from turnos where dia = ${dia} order by empezo`;
 
-  const libres = lotes.map((l) => ({ l, tomado: false }));
   const ms = (x) => new Date(x).getTime();
-  const filas = [];
 
   /* =========================================================================
      CADA TOQUE, CON LAS PRENDAS DE SU CUENTA
@@ -132,8 +130,34 @@ async function cruzar(s, dia, toques) {
   /* De qué cuenta es una prenda. Con nombre, el que traiga; sin nombre, viene
      del panel y el panel es de una sola cuenta. */
   const cuentaDeLote = (l) => (esNombreDeCuenta(l.cuenta) ? String(l.cuenta) : CUENTA_CON_PANEL);
+
+  /* =========================================================================
+     UNA CUENTA A LA VEZ  ·  las pestañas de /reparto
+     =========================================================================
+     Billy's emite desde dos cuentas y a la vez. Mezclarlas en una sola página
+     hace dos daños: no se puede comprobar que en billysvlc está solo lo de
+     billysvlc, y los totales invitan a comparar cosas que no se pueden comparar
+     —de la cuenta del tour no se sabe nada hasta que se leen sus pedidos—.
+
+     Así que se filtra AQUÍ, y todo lo de abajo se calcula ya con una sola
+     cuenta: los turnos, las prendas, el dinero, las horas, los tipos. Filtrar en
+     la página sería tener que recalcular a mano cada bloque, y el día que se
+     añada uno nuevo se olvidaría.
+
+     Sin `cuenta` en la dirección no se filtra nada y sale todo junto, como
+     siempre: hay días de una sola cuenta y ahí las pestañas no hacen falta.
+     ======================================================================= */
+  const cuentasDelDia = [...new Set([
+    ...lotesTodos.map(cuentaDeLote),
+    ...turnosTodos.map((t) => String(t.cuenta || '').trim()).filter(Boolean)
+  ])].sort((a, b) => (a === CUENTA_CON_PANEL ? -1 : b === CUENTA_CON_PANEL ? 1 : a.localeCompare(b)));
+
+  /* La cuenta de un toque sale del turno que lo contiene. Se busca SIEMPRE
+     entre todos los turnos del día, no entre los filtrados: si no, al mirar una
+     cuenta los toques de la otra se quedarían "sin cuenta" y podrían llevarse
+     una prenda que no es suya, que es justo lo que esto evita. */
   const cuentaDelToque = (t) => {
-    const suyos = turnos.filter((x) => x.vendedora === t.vendedora && x.cuenta);
+    const suyos = turnosTodos.filter((x) => x.vendedora === t.vendedora && x.cuenta);
     if (!suyos.length) return '';
     const q = ms(t.en);
     /* El turno que lo contiene; si ninguno lo contiene, el último que empezó
@@ -143,6 +167,20 @@ async function cruzar(s, dia, toques) {
     const antes = suyos.filter((x) => ms(x.empezo) <= q).pop();
     return antes ? antes.cuenta : '';
   };
+
+  const pedida = String(soloCuenta || '').trim();
+  const filtrando = !!pedida && cuentasDelDia.includes(pedida);
+  /* Los turnos y toques sin cuenta —de antes de que la tablet la preguntara— se
+     quedan con la cuenta que tiene panel: sus ventas salían de ahí. */
+  const deQuien = (c) => (String(c || '').trim() || CUENTA_CON_PANEL);
+  const lotes = filtrando ? lotesTodos.filter((l) => cuentaDeLote(l) === pedida) : lotesTodos;
+  const turnos = filtrando ? turnosTodos.filter((t) => deQuien(t.cuenta) === pedida) : turnosTodos;
+  const toques = filtrando
+    ? toquesTodos.filter((t) => deQuien(cuentaDelToque(t)) === pedida)
+    : toquesTodos;
+
+  const libres = lotes.map((l) => ({ l, tomado: false }));
+  const filas = [];
   /* Si no sabemos de qué cuenta emitía —turnos viejos, sin cuenta guardada— no
      se descarta nada: eso dejaría el día entero sin cruzar. En cuanto la tablet
      pregunta la cuenta, que es desde el 15 ago 2026, la regla es estricta. */
@@ -347,6 +385,15 @@ async function cruzar(s, dia, toques) {
   const sinMarcar = libres.filter((x) => !x.tomado).length;
   return {
     lotes: lotes.length,
+    /* LAS CUENTAS DEL DÍA Y CUÁL SE ESTÁ MIRANDO. Con esto /reparto pinta sus
+     * pestañas: una por cuenta, y cada una con SOLO lo suyo. La del panel
+     * primero, que es la que se mira siempre. */
+    cuentas: cuentasDelDia,
+    cuenta: filtrando ? pedida : null,
+    cuentaConPanel: CUENTA_CON_PANEL,
+    /* De la cuenta que no tiene panel no se sabe nada hasta que se leen sus
+     * pedidos. Que la página lo diga en vez de enseñar ceros. */
+    sinPanel: filtrando ? pedida !== CUENTA_CON_PANEL : false,
     /* El dinero del directo entero, esté marcado o no. Es la referencia contra
      * la que se mide todo lo demás. */
     euros: Math.round(euros * 100) / 100,
@@ -513,7 +560,10 @@ module.exports = puerta(async (req, res) => {
      * siguen guardados en crudo. Sellar el lote en el toque sí sería
      * irreversible, y además dejaría sin prenda todo toque dado sin cobertura.
      */
-    if (q.cruce) salida.cruce = await cruzar(s, dia, filas);
+    /* ?cuenta=billysvlc → todo lo de abajo se calcula con esa cuenta y nada
+       más. Es lo que hace que /reparto pueda tener una pestaña por cuenta y que
+       en la de billysvlc no haya NADA que no sea de billysvlc. */
+    if (q.cruce) salida.cruce = await cruzar(s, dia, filas, aTexto(q.cuenta).trim());
 
     return res.status(200).json(salida);
   }
