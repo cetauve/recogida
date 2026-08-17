@@ -797,7 +797,9 @@ function pintar(j) {
           t.solapado ? '<br><span class="et no">solapado con otra</span>' : ''}${
           ciega ? `<br><span class="et hora">${esc(t.cuenta || 'su cuenta')} · sin datos de venta</span>` : ''}</td>
         <td class="n">${ciega ? '—' : t.vendidas}</td>
-        <td class="n">${t.marcadas}</td>
+        <td class="n">${ciega
+          ? (t.marcas || 0) + ' <span class="et hora">sin prenda todavía</span>'
+          : t.marcadas}</td>
         <td class="n">${t.pct == null ? '—' : `${t.pct}% <span class="barra" style="display:inline-block;width:60px;vertical-align:middle"><i class="${clase}" style="width:${t.pct}%"></i></span>`}</td>
         <td class="n">${ciega ? '—' : eur(t.euros)}</td>
         <td class="n">${!ciega && falta > 0 ? falta + ' · ' + eur(t.euros - t.eurosMarcados) : '—'}</td>
