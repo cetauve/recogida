@@ -118,6 +118,14 @@
   td{padding:8px 10px 8px 0;border-top:1px solid var(--borde);vertical-align:top}
   td.n{font-variant-numeric:tabular-nums}
   .cargando{color:var(--tenue);padding:30px 0}
+  /* Las pestañas de cuenta. Como las del navegador pero dentro de la página:
+     la de billysvlc no puede tener nada que no sea de billysvlc. */
+  #pestanas{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 4px;border-bottom:1px solid var(--borde)}
+  #pestanas button{background:transparent;border:1px solid var(--borde);border-bottom:0;
+   color:var(--tenue);border-radius:10px 10px 0 0;padding:10px 16px;font:inherit;font-weight:700;
+   font-size:14px;cursor:pointer;position:relative;top:1px}
+  #pestanas button.on{background:var(--carta);color:var(--tinta)}
+  #pestanas button .cuantas{opacity:.6;font-weight:600;margin-left:6px}
 </style>
 </head>
 <body>
@@ -130,6 +138,15 @@
   <button id="ver">Ver</button>
   <button id="csv" class="sec">Descargar hoja de cálculo</button>
 </div>
+
+<!-- UNA PESTAÑA POR CUENTA.
+     Billy's emite desde dos cuentas a la vez y mezclarlas en una sola página
+     hacía dos daños: no había forma de comprobar que en billysvlc estaba SOLO
+     lo de billysvlc, y los totales invitaban a comparar cosas que no se pueden
+     comparar, porque de la cuenta del tour no se sabe nada hasta que se leen sus
+     pedidos. Cada pestaña se pide al servidor por separado, así que lo que se
+     ve es lo de esa cuenta y nada más. -->
+<div id="pestanas"></div>
 
 <div id="salida"><div class="cargando">Cargando…</div></div>
 
@@ -461,30 +478,44 @@ function bloqueTipos(t) {
 const soloNumero = (c) => /^\d+$/.test(String(c || ''));
 const rotuloCuenta = (c) => soloNumero(c) ? 'sin leer' : (c || '');
 
-function bloqueCuentas() {
+/* DE QUÉ CUENTA ES UNA PRENDA.
+ *
+ * Aquí ponía "Pendiente de leer · leídas en vivo, sin la lectura buena", y eso
+ * ya no es verdad y confundía —lo dijo Aaron el 17 ago 2026: "no entiendo lo de
+ * sin la lectura buena, no hemos quedado en eso"—. El panel del directo es de
+ * UNA cuenta, así que una prenda que llega en vivo sin nombre SÍ se sabe de
+ * quién es: de la cuenta con panel. Lo que le falta no es la cuenta, es el
+ * nombre de la prenda, y eso no cambia de quién es la venta. */
+const cuentaDePrenda = (l, c) => (soloNumero(l && l.cuenta) || !(l && l.cuenta))
+  ? ((c && c.cuentaConPanel) || 'la cuenta del panel')
+  : String(l.cuenta);
+
+function bloqueCuentas(c) {
   if (!PRENDAS.length) return '';
   const m = {};
   for (const l of PRENDAS) {
-    const id = String(l.cuenta || '').trim() || '(sin cuenta)';
-    const g = m[id] = m[id] || { id, prendas: 0, euros: 0 };
+    const id = cuentaDePrenda(l, c);
+    const g = m[id] = m[id] || { id, prendas: 0, euros: 0, envivo: 0 };
     g.prendas++; g.euros += Number(l.precio || 0);
+    if (soloNumero(l.cuenta) || !l.cuenta) g.envivo++;
   }
   const lista = Object.values(m).sort((a, b) => b.prendas - a.prendas);
-  if (lista.length < 2 && !lista.some((g) => /^\d+$/.test(g.id))) return '';
+  if (lista.length < 2 && !lista.some((g) => g.envivo)) return '';
 
-  const enVivo = soloNumero;
   return `<h2 style="font-size:19px;margin:22px 0 4px">Por cuenta</h2>
-    <p class="sub" style="margin-bottom:10px">Solo <b>billysvlc</b> manda sus ventas en vivo.
-      Las de <b>billystourvlc</b> aparecen cuando se lee el Centro de vendedores, con el botón
-      de su cuenta en el panel de la extensión.</p>
+    <p class="sub" style="margin-bottom:10px">Solo <b>${esc((c && c.cuentaConPanel) || 'billysvlc')}</b>
+      manda sus ventas en vivo. Las de la otra cuenta aparecen cuando se lee el Centro de
+      vendedores, con el botón de su cuenta en el panel de la extensión.</p>
     <table><thead><tr><th>Cuenta</th><th>Prendas</th><th>Vendido</th><th></th></tr></thead><tbody>
     ${lista.map((g) => `<tr>
-      <td>${enVivo(g.id) ? 'Pendiente de leer' : esc(g.id)}</td>
+      <td>${esc(g.id)}</td>
       <td class="n">${g.prendas}</td>
       <td class="n">${eur(g.euros)}</td>
-      <td>${enVivo(g.id)
-        ? '<span class="et hora">leídas en vivo, sin la lectura buena</span>'
-        : '<span class="et lote">leídas del Centro de vendedores</span>'}</td>
+      <td>${g.envivo === g.prendas
+        ? '<span class="et lote">del panel del directo, en vivo</span>'
+        : (g.envivo
+          ? `<span class="et lote">${g.prendas - g.envivo} leídas del Centro de vendedores · ${g.envivo} en vivo</span>`
+          : '<span class="et lote">leídas del Centro de vendedores</span>')}</td>
     </tr>`).join('')}
     </tbody></table>`;
 }
@@ -528,6 +559,30 @@ function bloqueMix(c) {
     </tbody></table>`;
 }
 
+/* ===========================================================================
+   LAS PESTAÑAS DE CUENTA
+   ===========================================================================
+   La cuenta elegida viaja al servidor y él filtra TODO: turnos, prendas, dinero,
+   horas y tipos. Así la pestaña de billysvlc no puede tener nada que no sea de
+   billysvlc, y no hay que acordarse de filtrar en cada bloque de la página.
+
+   Se recuerda la elegida en este navegador: quien mira siempre billysvlc no
+   tiene que volver a pulsar cada mañana.
+   ======================================================================== */
+let CUENTA = null;
+try { CUENTA = localStorage.getItem('billys_reparto_cuenta') || null; } catch (e) {}
+
+function pintarPestanas(c) {
+  const caja = $('pestanas');
+  const cuentas = (c && c.cuentas) || [];
+  /* Con una sola cuenta no se pintan: serían una pestaña sola, que no es una
+     pestaña, es un adorno. */
+  if (cuentas.length < 2) { caja.innerHTML = ''; return; }
+  caja.innerHTML = cuentas.map((x) => `<button data-c="${esc(x)}"${
+    x === (c.cuenta || cuentas[0]) ? ' class="on"' : ''}>${esc(x)}${
+    x === c.cuentaConPanel ? '' : '<span class="cuantas">sin panel</span>'}</button>`).join('');
+}
+
 async function cargar() {
   const dia = $('dia').value;
   $('salida').innerHTML = '<div class="cargando">Cargando…</div>';
@@ -540,9 +595,18 @@ async function cargar() {
   try {
     await cargarCostes();
     const r = await fetch('/api/toques?d=' + encodeURIComponent(CODIGO) +
-      '&cruce=1' + (dia ? '&dia=' + dia : ''), { cache: 'no-store' });
+      '&cruce=1' + (dia ? '&dia=' + dia : '') +
+      (CUENTA ? '&cuenta=' + encodeURIComponent(CUENTA) : ''), { cache: 'no-store' });
     const j = await r.json();
     if (!j || !j.ok) throw new Error((j && j.detalle) || 'el servidor no ha contestado bien');
+    /* Si no había ninguna elegida, se abre en la que tiene panel: es la que se
+       mira durante el directo. */
+    const cc = j.cruce || {};
+    if (!CUENTA && (cc.cuentas || []).length > 1) {
+      CUENTA = cc.cuentaConPanel || cc.cuentas[0];
+      return cargar();          // se vuelve a pedir, ya filtrado
+    }
+    pintarPestanas(cc);
     /* Las prendas en crudo, para poder decir cuántas ha traído cada cuenta.
        Si falla, la página sigue: es información de más, no el plato. */
     try {
@@ -611,16 +675,30 @@ function pintar(j) {
      * Poner aquí "comprueba que la extensión está activa" hizo que el 14 ago
      * 2026 se parara un directo a buscar una avería que no existía. Un aviso
      * que salta cuando no pasa nada acaba ignorándose cuando sí pasa. */
-    const conToques = j.total > 0;
-    html += `<div class="aviso ambar">
-      <b>Todavía no hay prendas de este día.</b><br>
-      Las prendas del directo suben cuando se hace <b>la lectura del panel</b> (paso 2
-      de la extensión), que normalmente es al final, al imprimir las etiquetas.
-      Si el directo está en marcha, esto es lo normal: aparecerán al leer.
-      ${conToques ? `<br><br>Mientras tanto sí están llegando los toques:
-        <b>${j.total}</b> de ${(j.turnos || []).length || 'varias'} vendedoras.
-        Se cruzarán solos en cuanto suban las prendas.` : ''}
-      </div>`;
+    const conToques = (c.filas || []).length > 0;
+    /* LA PESTAÑA DE LA CUENTA SIN PANEL NO ESTÁ VACÍA: está esperando.
+       De billystourvlc no se sabe NADA hasta que se leen sus pedidos, así que
+       aquí no hay prendas ni las va a haber durante el directo. Decir solo "no
+       hay prendas" hacía pensar en una avería; y lo que sí hay —su turno y lo
+       que marcó— tiene que verse, que es su trabajo. */
+    html += c.sinPanel
+      ? `<div class="aviso ambar">
+          <b>De ${esc(c.cuenta)} no hay datos de venta hasta que se lean sus pedidos.</b><br>
+          Esta cuenta no tiene panel de directo: nadie puede saber cuántas prendas se venden
+          mientras pasa. Sus prendas aparecen aquí al leer el Centro de vendedores con el botón
+          de su cuenta, en el panel de la extensión.
+          ${conToques ? `<br><br>Lo que sí hay es su trabajo: <b>${(c.filas || []).length}</b>
+            ${(c.filas || []).length === 1 ? 'marca' : 'marcas'} en su turno, esperando su prenda.` : ''}
+        </div>`
+      : `<div class="aviso ambar">
+          <b>Todavía no hay prendas de este día.</b><br>
+          Las prendas del directo suben cuando se hace <b>la lectura del panel</b> (paso 2
+          de la extensión), que normalmente es al final, al imprimir las etiquetas.
+          Si el directo está en marcha, esto es lo normal: aparecerán al leer.
+          ${conToques ? `<br><br>Mientras tanto sí están llegando los toques:
+            <b>${(c.filas || []).length}</b> de ${(c.porVendedora || []).length || 'varias'} vendedoras.
+            Se cruzarán solos en cuanto suban las prendas.` : ''}
+        </div>`;
   } else if (c.sinMarcar) {
     /* LA CIFRA DEL DÍA. Sin categoría no hay coste ni margen, así que una
        prenda sin marcar no entra en el cálculo — da igual de quién fuera.
@@ -629,11 +707,23 @@ function pintar(j) {
        sin marcar no son lo mismo que dos chaquetas de 30. Antes el grande y en
        rojo era el de unidades y el de euros iba abajo y en pequeño. */
     const pctDinero = c.marcadoEurosPct == null ? c.marcadoPct : c.marcadoEurosPct;
+    /* EL DENOMINADOR ES LO QUE HA LLEGADO, Y HAY QUE DECIRLO.
+       El 17 ago 2026: "me pone que el 100% del dinero está contado cuando solo
+       hay 300 y algo y ya vamos por 400 y pico". Y las dos cosas eran ciertas:
+       estaba marcado el 100% de LO QUE HABÍA LLEGADO del panel de esa cuenta, y
+       lo que él veía era el total del día con las dos cuentas. Un porcentaje sin
+       decir de qué es un porcentaje que engaña. */
     html += `<div class="aviso ${pctDinero < 75 ? 'rojo' : 'ambar'}">
-      <b>Marcado el ${pctDinero}% del dinero</b> · ${eur(c.eurosMarcados)} de ${eur(c.euros)}.
+      <b>Marcado el ${pctDinero}% del dinero${c.cuenta ? ' de ' + esc(c.cuenta) : ''}</b> ·
+      ${eur(c.eurosMarcados)} de ${eur(c.euros)}.
       <br>En prendas es el ${c.marcadoPct}%: ${c.lotes - c.sinMarcar} de ${c.lotes}.
       Las <b>${c.sinMarcar}</b> que nadie marcó se quedan fuera del cálculo: sin
-      categoría no hay coste ni margen. No se reparten ni se rellenan.</div>`;
+      categoría no hay coste ni margen. No se reparten ni se rellenan.
+      <br><span class="sub">Ese <b>${eur(c.euros)}</b> es lo que ha llegado
+      ${c.cuenta ? 'de <b>' + esc(c.cuenta) + '</b>' : ''}: ${c.cuentaConPanel && c.cuenta === c.cuentaConPanel
+        ? 'lo que el panel del directo ha mandado hasta ahora'
+        : 'lo leído del Centro de vendedores'}. Si el total del día que ves en TikTok es mayor,
+      la diferencia es la otra cuenta${c.ultimaVenta ? ' o prendas que el panel aún no ha mandado' : ''}.</span></div>`;
   } else {
     html += `<div class="aviso verde"><b>Marcado el 100%.</b> Todas las prendas del día
       llevan categoría y entran en el cálculo.</div>`;
@@ -707,7 +797,7 @@ function pintar(j) {
     }
   }
 
-  html += bloqueCuentas();
+  html += bloqueCuentas(c);
 
   // --------------------------------------------------------------- la gente
   html += '<div class="gente">';
@@ -939,6 +1029,15 @@ $('csv').onclick = () => {
 
 $('ver').onclick = cargar;
 $('dia').addEventListener('change', cargar);
+
+/* Cambiar de cuenta es volver a pedirlo todo con esa cuenta: la página no
+   reaprovecha nada, así que no puede quedar un número de la otra. */
+$('pestanas').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  CUENTA = b.dataset.c;
+  try { localStorage.setItem('billys_reparto_cuenta', CUENTA); } catch (err) {}
+  cargar();
+});
 
 /* El día del negocio en hora de Valencia, que es el que usa el servidor. */
 $('dia').value = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
