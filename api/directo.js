@@ -186,11 +186,22 @@ module.exports = puerta(async (req, res) => {
             and (
               /* Con SKU en los dos lados se empareja por SKU, que es lo único
                * único de verdad y distingue el 47 de una cuenta del 47 de la
-               * otra. Si a alguno le falta el SKU se cae al número: se puede
-               * pasar de listo entre cuentas, pero es mejor que contar la
-               * misma prenda dos veces. */
+               * otra.
+               *
+               * SIN SKU SE CAE AL NÚMERO **Y A LA HORA**, no al número solo.
+               * El número se repite entre cuentas y entre directos del mismo
+               * día: con el número pelado, una lectura definitiva a la que le
+               * falte el SKU podía tapar la prenda 47 de la OTRA cuenta y
+               * hacer desaparecer ventas de la cuenta buena. La hora de venta
+               * es la misma en los dos lados —las dos salen de
+               * orderCreatedTime— así que exigirla no estorba y cierra el
+               * agujero: dos prendas con el mismo número vendidas a la misma
+               * hora son la misma prenda. */
               (coalesce(l.sku, '') <> '' and coalesce(z.sku, '') = coalesce(l.sku, ''))
-              or ((coalesce(l.sku, '') = '' or coalesce(z.sku, '') = '') and z.num = l.num)
+              or ((coalesce(l.sku, '') = '' or coalesce(z.sku, '') = '')
+                  and z.num = l.num
+                  and l.vendida_en is not null and z.vendida_en is not null
+                  and abs(extract(epoch from (z.vendida_en - l.vendida_en))) <= 300)
             )
         )
       )
