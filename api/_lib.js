@@ -154,6 +154,13 @@ const ESQUEMA = [
      primary key (dia, pedido)
    )`,
   `create index if not exists cola_espera on cola (dia, estado, numero)`,
+  /* POR QUÉ ESTÁ PARADO.
+   *
+   * Una incidencia ya no se queda fuera de la cola: entra en estado 'parado' y
+   * aquí se guarda qué le pasa ("falta la 214"), que es lo que necesita saber
+   * quien vaya a resolverla. Sin esto, un paquete parado es un paquete parado
+   * sin motivo, y eso no se resuelve nunca. */
+  `alter table cola add column if not exists motivo text not null default ''`,
 
   /* QUIÉN ESTÁ HACIENDO CADA TANDA.
    *

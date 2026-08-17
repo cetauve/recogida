@@ -108,13 +108,30 @@ async function cruzar(s, dia, toques) {
      hora con la prenda que acabara de vender la OTRA cuenta, porque las dos
      venden a la vez y el reloj no las distingue.
 
-     LA RESTRICCIÓN SOLO SE APLICA CUANDO SE PUEDE. Las prendas que llegan en
-     vivo del panel no traen el nombre de la cuenta —traen el identificador
-     interno del producto—, así que exigirles el nombre dejaría a la vendedora
-     sin cruzar nada. Regla: si la prenda lleva un nombre de cuenta de verdad y
-     no es la suya, no es suya. Si no lleva nombre, no se descarta.
+     UNA PRENDA SIN NOMBRE DE CUENTA ES DE LA CUENTA QUE TIENE PANEL.
+     =========================================================================
+     Esto es lo que faltaba, y el 17 ago 2026 se vio en la cara de Anny: seis
+     ventas de billysvlc atribuidas a ella, que estaba emitiendo en
+     billystourvlc.
+
+     El motivo: las prendas que llegan EN VIVO del panel no traen el nombre de
+     la cuenta, traen el identificador interno del producto. La regla de antes
+     decía "si no lleva nombre, no se descarta", así que ninguna prenda en vivo
+     se descartaba nunca y cualquiera podía llevárselas por hora.
+
+     Pero sí se sabe de quién son: EL PANEL DEL DIRECTO ES DE UNA SOLA CUENTA.
+     No hay panel de billystourvlc —de esa cuenta no se sabe nada hasta que se
+     leen los pedidos, al acabar—. Así que una prenda sin nombre de cuenta es de
+     la cuenta que tiene panel, y punto: eso convierte "no se puede saber" en un
+     dato, que es lo que hacía falta.
      ======================================================================= */
+  /* La cuenta cuyo panel de directo alimenta las prendas en vivo. Se puede
+     cambiar por entorno el día que la del tour tenga panel. */
+  const CUENTA_CON_PANEL = process.env.BILLYS_CUENTA_PANEL || 'billysvlc';
   const esNombreDeCuenta = (c) => !!c && !/^\d+$/.test(String(c));
+  /* De qué cuenta es una prenda. Con nombre, el que traiga; sin nombre, viene
+     del panel y el panel es de una sola cuenta. */
+  const cuentaDeLote = (l) => (esNombreDeCuenta(l.cuenta) ? String(l.cuenta) : CUENTA_CON_PANEL);
   const cuentaDelToque = (t) => {
     const suyos = turnos.filter((x) => x.vendedora === t.vendedora && x.cuenta);
     if (!suyos.length) return '';
@@ -126,10 +143,13 @@ async function cruzar(s, dia, toques) {
     const antes = suyos.filter((x) => ms(x.empezo) <= q).pop();
     return antes ? antes.cuenta : '';
   };
+  /* Si no sabemos de qué cuenta emitía —turnos viejos, sin cuenta guardada— no
+     se descarta nada: eso dejaría el día entero sin cruzar. En cuanto la tablet
+     pregunta la cuenta, que es desde el 15 ago 2026, la regla es estricta. */
   const compatible = (t, l) => {
     const suya = cuentaDelToque(t);
-    if (!suya || !esNombreDeCuenta(l.cuenta)) return true;
-    return String(l.cuenta) === String(suya);
+    if (!suya) return true;
+    return cuentaDeLote(l) === String(suya);
   };
 
   /* ---------------------------------------------------------- 1 · EL LOTE
@@ -141,8 +161,12 @@ async function cruzar(s, dia, toques) {
 
   const sinLote = [];
   for (const t of toques) {
-    const sellado = t.lote == null ? null : (porNumero.get((t.cuenta || '') + '#' + t.lote) ||
-      libres.find((x) => !x.tomado && x.l.num === t.lote && compatible(t, x.l)));
+    /* Incluso el camino sellado tiene que respetar la cuenta: si el número
+       vino de un panel que no es el de su directo, no es su prenda. */
+    const porClave = t.lote == null ? null : porNumero.get((t.cuenta || '') + '#' + t.lote);
+    const sellado = t.lote == null ? null
+      : ((porClave && compatible(t, porClave.l)) ? porClave
+        : libres.find((x) => !x.tomado && x.l.num === t.lote && compatible(t, x.l)));
     if (sellado && !sellado.tomado) {
       sellado.tomado = true;
       filas.push(hacerFila(t, sellado.l, 'lote'));
@@ -249,23 +273,47 @@ async function cruzar(s, dia, toques) {
     const q = ms(cuando);
     return t.empezo && q >= ms(t.empezo) && q <= hasta(t);
   };
+  /* DE QUÉ CUENTAS TENEMOS DATOS DE VENTA, Y DE CUÁLES NO.
+   *
+   * Las prendas vendidas salen del panel del directo, y ese panel es de
+   * billysvlc. De billystourvlc NO HAY PANEL: no hay forma de saber cuántas
+   * prendas se vendieron en su directo mientras pasaba.
+   *
+   * EL 17 AGO 2026 ESO LE CAYÓ ENCIMA A ANNY. Emitía en billystourvlc a la vez
+   * que Yasmine en billysvlc, y su fila decía "15 vendidas · 5 marcadas · 33 %
+   * · 10 sin marcar · 32 €". Las quince eran de la OTRA cuenta, contadas contra
+   * su turno solo porque coincidían en la hora: se le colgaba el trabajo de otra
+   * y encima se la señalaba por no haberlo marcado.
+   *
+   * Un turno de una cuenta de la que no hay datos no vale cero: vale NO SE SABE.
+   * Lo que sí se sabe —lo que ella marcó— se sigue enseñando tal cual. */
+  const cuentasConDatos = new Set(lotes.map(cuentaDeLote));
+  const sinDatos = (t) => !!t.cuenta && !cuentasConDatos.has(String(t.cuenta));
+
   const porTurno = turnos.map((t) => {
-    const dentro = lotes.filter((l) => enVentana(t, l.vendida_en));
+    /* Solo lo vendido EN SU CUENTA. Sin esto, dos directos a la vez se cuentan
+       el uno al otro: es lo que le pasó a Anny. Si del turno no se sabe la
+       cuenta —turnos de antes del 15 ago— se cuenta como antes. */
+    const dentro = sinDatos(t) ? [] : lotes.filter((l) => enVentana(t, l.vendida_en) &&
+      (!t.cuenta || cuentaDeLote(l) === String(t.cuenta)));
     const suyas = filas.filter((f) => f.vendedora === t.vendedora && f.lote != null);
     const solapado = turnos.some((o) => o !== t && o.vendedora !== t.vendedora &&
       ms(o.empezo) < hasta(t) && hasta(o) > ms(t.empezo));
+    const ciega = sinDatos(t);
     return {
       vendedora: t.vendedora, empezo: t.empezo, cuenta: t.cuenta || '',
       /* `acabo` es lo que hay guardado; `fin` es hasta cuándo se cuenta. */
       acabo: t.acabo, fin: finDe(t),
       abierto: !finDe(t), cerradoSolo: !t.acabo && !!finDe(t), solapado,
-      /* Lo que se vendió mientras ella estaba. */
-      vendidas: dentro.length,
-      euros: Math.round(dentro.reduce((a, l) => a + eur(l.precio), 0) * 100) / 100,
-      /* Lo que ella marcó y cruzó. */
+      /* true = de esta cuenta no hay datos de venta y no se puede saber. */
+      sinDatos: ciega,
+      /* Lo que se vendió mientras ella estaba, en SU cuenta. */
+      vendidas: ciega ? null : dentro.length,
+      euros: ciega ? null : Math.round(dentro.reduce((a, l) => a + eur(l.precio), 0) * 100) / 100,
+      /* Lo que ella marcó y cruzó. Esto se sabe siempre. */
       marcadas: suyas.length,
       eurosMarcados: Math.round(suyas.reduce((a, f) => a + eur(f.precio), 0) * 100) / 100,
-      pct: dentro.length ? Math.round(suyas.length / dentro.length * 100) : null
+      pct: (ciega || !dentro.length) ? null : Math.round(suyas.length / dentro.length * 100)
     };
   });
 
