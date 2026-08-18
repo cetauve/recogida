@@ -256,6 +256,9 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
          callejón: para volver a la lista había que "cambiar rol" y volver a
          entrar, y por eso parecía que la lista ya no existía para ellos. -->
     <button id="colaLista" style="background:transparent;font-weight:600;font-size:14px;opacity:.75">Ir a la lista de tandas</button>
+    <!-- El pestillo de admin. Discreto a propósito: no es un botón de trabajo,
+         es el de "ya está todo" del final del turno. -->
+    <button id="colaAdmin" style="background:transparent;font-weight:600;font-size:13px;opacity:.35">Admin</button>
     <button id="colaSalir" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar rol</button>
     <button id="colaOtro" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar trabajador</button>
   </div>
@@ -1069,6 +1072,60 @@ $('otroBarra').addEventListener('click', cambiarTrabajador);
 $('colaOtro').addEventListener('click', cambiarTrabajador);
 
 $('colaSalir').addEventListener('click', cambiarRol);
+/* ===========================================================================
+ * EL PANEL DE ADMIN · "cerrar todos los paquetes"
+ * ===========================================================================
+ * Al final del turno la mesa está vacía y en la cola quedan sesenta paquetes
+ * que nadie va a cerrar uno a uno. Sin un botón para eso, el día se queda para
+ * siempre con sesenta "en espera" y mañana nadie sabe si eso era trabajo
+ * pendiente o restos.
+ *
+ * Va detrás de una clave, que se comprueba EN EL SERVIDOR: no es seguridad de
+ * verdad —la app se abre con un código pegado en la pared— es un pestillo para
+ * que no lo pulse nadie sin querer.
+ *
+ * Y no cierra las incidencias salvo que se diga que sí, en una segunda
+ * pregunta: un paquete parado no está hecho, y cerrarlo en bloque es
+ * exactamente cómo se pierde la prenda que estaba esperando a aparecer.
+ * ======================================================================== */
+$('colaAdmin').addEventListener('click', async () => {
+  const clave = (prompt('Clave de admin:') || '').trim();
+  if (!clave) return;
+  let hay = { espera: 0, haciendo: 0, parado: 0 };
+  try {
+    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
+    const j = await r.json();
+    if (j && j.ok) hay = { espera: j.espera || 0, haciendo: j.haciendo || 0, parado: j.parado || 0 };
+  } catch(e){ alert('Sin conexión con el servidor.'); return; }
+
+  const total = hay.espera + hay.haciendo;
+  if (!total && !hay.parado) { alert('No queda nada por cerrar.'); return; }
+  /* Se dice EXACTAMENTE qué se va a cerrar antes de cerrarlo. Un botón que
+     toca sesenta filas de golpe no puede preguntar "¿seguro?" y ya. */
+  if (total && !confirm('Vas a cerrar ' + total + ' paquetes:\n' +
+      '· ' + hay.espera + ' esperando\n· ' + hay.haciendo + ' abiertos en otros móviles\n\n' +
+      'Se quedan a nombre de quien los tuviera; los que no tenían a nadie, al tuyo.\n\n¿Cerrarlos?')) return;
+
+  /* Las incidencias, aparte y con su propia pregunta. */
+  let parados = false;
+  if (hay.parado) {
+    parados = confirm('Además hay ' + hay.parado + ' parados por incidencia.\n\n' +
+      'Esos NO están hechos: les falta algo. ¿Cerrarlos también?\n\n' +
+      'Cancela si no estás seguro: se pueden cerrar luego uno a uno.');
+  }
+  if (!total && !parados) return;
+
+  try {
+    const j = await apiCola({ accion:'cerrarTodo', quien: QUIEN || 'admin', clave, parados,
+                              en: new Date().toISOString() });
+    if (!j || !j.ok) { alert(j && j.error === 'clave' ? 'La clave no es esa.' : 'No he podido cerrarlos.'); return; }
+    if (PAQ) { PAQ = null; try{ localStorage.removeItem('billys_paq'); }catch(e){} }
+    alert('Cerrados ' + j.cerrados + '.\n\nQuedan ' + j.espera + ' esperando, ' +
+          j.haciendo + ' abiertos y ' + j.parado + ' parados.');
+    pintarCola(); refrescarContador();
+  } catch(e){ alert('Sin conexión. Prueba otra vez.'); }
+});
+
 /* A la lista sin perder el rol ni el paquete que se tenga cogido. */
 $('colaLista').addEventListener('click', () => {
   clearInterval(relojCola);
