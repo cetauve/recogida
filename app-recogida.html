@@ -157,6 +157,8 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 .qLinea .qq small{display:block;opacity:.6;font-size:12px}
 .qLinea button{border:0;border-radius:9px;padding:9px 12px;font:inherit;font-weight:800;
  font-size:13px;background:var(--red);color:#fff;cursor:pointer;white-space:nowrap}
+/* "Cerrado" en verde, como el botón grande de cerrar: es el mismo gesto. */
+.qLinea button.qCerrar{background:#2E9E6B;color:#fff}
 .qLinea.parado{border-color:rgba(216,155,46,.45)}
 .qLinea.parado button{background:#D89B2E;color:#1A1208}
 .qLinea.retirado{opacity:.45}
@@ -239,6 +241,10 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
     <button id="pedir">Dame el siguiente</button>
     <button id="cerrarPaq" style="display:none">Paquete cerrado</button>
     <button id="soltarPaq" style="display:none">No puedo con este · devolverlo</button>
+    <!-- La salida a la lista de tandas. Sin esto, entrar en la cola era un
+         callejón: para volver a la lista había que "cambiar rol" y volver a
+         entrar, y por eso parecía que la lista ya no existía para ellos. -->
+    <button id="colaLista" style="background:transparent;font-weight:600;font-size:14px;opacity:.75">Ir a la lista de tandas</button>
     <button id="colaSalir" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar rol</button>
     <button id="colaOtro" style="background:transparent;font-weight:600;font-size:14px;opacity:.6">Cambiar trabajador</button>
   </div>
@@ -449,10 +455,7 @@ function verMenu(){
   $('menu').classList.add('on');
   $('menuTitulo').textContent = DATOS.titulo || 'Recogida';
   const total = DATOS.tandas.reduce((s,t) => s + t.compradores.length, 0);
-  /* El "elige tu tanda" se le decía también a quien empaqueta, que no ve las
-     tandas: se le esconden a propósito para que no haga el paquete de otro. */
-  $('menuSub').textContent = total + ' paquetes' +
-    (MODO === 'empaqueta' && CODIGO ? ' hoy' : ' · elige tu tanda');
+  $('menuSub').textContent = total + ' paquetes · elige tu tanda';
   /* La fecha se enseñaba en crudo, tipo 2026-08-15T16:15:59.924Z. Lo que hace
      falta saber es de cuándo son estas tandas, y eso se lee mejor en hora. */
   const cuandoSalio = (() => {
@@ -472,11 +475,13 @@ function verMenu(){
        de verdad en la cola, y mete lo que falte. Existe porque un paquete que no
        llegó no deja ni rastro en el móvil: sin esto, la única forma de
        enterarse era que alguien lo echara de menos al final del día. */
-    (MARCAS.length && MODO === 'recoge'
+    (MARCAS.length && MODO
       ? '<button id="comprobarCola" style="margin-top:8px;width:100%;padding:12px;' +
         'border-radius:12px;border:1.5px solid var(--linea,rgba(237,231,219,.2));background:transparent;' +
         'color:inherit;font:inherit;font-weight:700;font-size:14px;cursor:pointer">' +
-        'Comprobar que están todos en la cola</button>' : '');
+        (MODO === 'empaqueta'
+          ? 'Comprobar que están apuntados todos mis cierres'
+          : 'Comprobar que están todos en la cola') + '</button>' : '');
   const mt = $('mandarTiempos');
   if (mt) mt.addEventListener('click', mandarTiempos);
   const cc = $('comprobarCola');
@@ -609,16 +614,32 @@ function pintarQuienSoy(){
   for (const b of document.querySelectorAll('.modoBtn')) b.classList.toggle('on', b.dataset.m === MODO);
   const listo = !!(QUIEN.trim() && MODO);
   $('tandas').classList.toggle('bloqueado', !listo);
-  /* Con cola, el que empaqueta ya no recorre tandas: pide paquetes. Verlas le
-     confundiria y ademas le dejaria hacer uno que ya esta haciendo otro. */
-  const aLaCola = listo && MODO === 'empaqueta' && !!CODIGO;
-  $('tandas').style.display = aLaCola ? 'none' : '';
-  $('irCola').style.display = aLaCola ? '' : 'none';
+  /* LOS DOS CAMINOS, NO UNO.
+   *
+   * 18 ago 2026: al meter la cola le quité la lista al que empaqueta —"ya no
+   * recorre tandas, pide paquetes"— y con eso le quité el gesto de toda la
+   * vida: deslizar y dar a Listo. Se cerraron diecinueve paquetes de verdad,
+   * encima de la mesa, y en el servidor no había ni uno: el recogedor no los
+   * había empujado, así que desde la cola no había nada que cerrar. Sin
+   * nombres, sin horas, sin forma de saber que esa gente había trabajado.
+   *
+   * Ahora tiene los dos: el botón de la cola —que sigue siendo la forma buena
+   * de repartir cuando hay tres personas doblando— y la lista debajo, donde su
+   * Listo CIERRA el paquete aunque nadie lo hubiera metido en la cola. La
+   * lista no puede dejar a nadie sin poder decir "este ya está". */
+  const conCola = listo && MODO === 'empaqueta' && !!CODIGO;
+  $('tandas').style.display = '';
+  $('irCola').style.display = conCola ? '' : 'none';
+  /* El botón dice lo que hace. Para quien recoge, "Listo" es entregarlo; para
+     quien empaqueta, es cerrarlo, y llamarlo igual es como se cierran paquetes
+     creyendo que solo se están pasando. */
+  $('hecho').textContent = MODO === 'empaqueta' ? 'Paquete cerrado' : 'Listo';
   $('ayudaModo').innerHTML = !listo
     ? 'Pon tu nombre y elige qué haces. Sin eso no puedo medir a nadie.'
     : (MODO === 'recoge'
         ? 'Tu <b>Listo</b> significa: <b>paquete entregado</b> al que empaqueta. Ahí arranca su reloj.'
-        : 'Vas a la <b>cola</b>: pides paquete y el servidor te lo da. Nadie hará el tuyo.');
+        : 'Tu <b>Listo</b> significa: <b>paquete cerrado</b>, y queda a tu nombre. Puedes pedir ' +
+          'de la <b>cola</b> o ir por la lista de tandas, como siempre.');
 }
 
 /* =========================================================================
@@ -750,10 +771,19 @@ function pintarQueda(queda){
       : (q.estado === 'espera' ? 'esperando desde ' + laHora(q.abierto_en)
         : (q.estado === 'parado' ? (q.motivo ? esc(q.motivo) : 'incidencia sin resolver')
           : 'lo retiró ' + esc(q.quien_abrio || 'el recogedor')));
+    /* DOS BOTONES, PORQUE HAY DOS SITUACIONES DISTINTAS.
+     *
+     * "Lo hago yo" es para ponerse a hacerlo. "Cerrado" es para el paquete que
+     * YA está hecho y está en la mesa: el 18 ago 2026 se cerraron diecinueve
+     * así, a mano, y no había ningún botón que dijera eso —había que cogerlo
+     * primero y cerrarlo después, dos pasos para algo que ya estaba—, así que
+     * no se apuntó ninguno. */
+    const datos = ' data-p="' + esc(q.pedido) + '" data-n="' + q.numero + '"';
     const boton = q.estado === 'parado'
-      ? '<button class="qResolver" data-p="' + esc(q.pedido) + '" data-n="' + q.numero + '">Ya está</button>'
+      ? '<button class="qResolver"' + datos + '>Ya está</button>'
       : (q.estado === 'retirado' ? ''
-        : '<button class="qCoger" data-p="' + esc(q.pedido) + '" data-n="' + q.numero + '">Lo hago yo</button>');
+        : '<button class="qCerrar"' + datos + '>Cerrado</button>' +
+          '<button class="qCoger"' + datos + '>Lo hago yo</button>');
     return '<div class="qLinea ' + q.estado + (q.atascado ? ' atascado' : '') + '">' +
       '<b>' + q.numero + '</b>' +
       '<span class="qq">' + esc(q.apodo || '') +
@@ -773,9 +803,35 @@ function pintarQueda(queda){
 $('colaQueda').addEventListener('click', async (e) => {
   const bC = e.target.closest('.qCoger');
   const bR = e.target.closest('.qResolver');
-  if (!bC && !bR) return;
-  const pedido = (bC || bR).dataset.p, num = (bC || bR).dataset.n;
-  (bC || bR).disabled = true;
+  const bX = e.target.closest('.qCerrar');
+  if (!bC && !bR && !bX) return;
+  const pedido = (bC || bR || bX).dataset.p, num = (bC || bR || bX).dataset.n;
+  (bC || bR || bX).disabled = true;
+
+  /* "Ese ya está hecho": se cierra a nombre de quien lo dice, sin tener que
+     cogerlo antes. Es el gesto que faltaba para el paquete que ya está en la
+     mesa cerrado. */
+  if (bX) {
+    if (!confirm('¿El paquete #' + num + ' ya está cerrado?\n\nSe apuntará a tu nombre.')) {
+      bX.disabled = false; return;
+    }
+    try {
+      const j = await apiCola({ accion:'cerrarLista', quien: QUIEN,
+        paquetes: [{ pedido, en: new Date().toISOString() }] });
+      if (!j || !j.ok) alert('No he podido cerrarlo. Prueba otra vez.');
+      else if ((j.deOtro || []).length) {
+        decir('El nº' + num + ' lo tenía abierto ' + j.deOtro[0].quien +
+              '. Lo he cerrado a tu nombre; dile que ya está.');
+      }
+      if (PAQ && PAQ.pedido === pedido) {
+        PAQ = null;
+        try{ localStorage.removeItem('billys_paq'); }catch(err){}
+        pintarCola();
+      }
+    } catch(err){ alert('Sin conexión. Prueba otra vez.'); }
+    refrescarContador();
+    return;
+  }
 
   if (bR) {
     if (!confirm('¿El paquete #' + num + ' ya está resuelto?\n\nVuelve a la cola y se lo dará a quien pida el siguiente.')) {
@@ -991,6 +1047,13 @@ $('otroBarra').addEventListener('click', cambiarTrabajador);
 $('colaOtro').addEventListener('click', cambiarTrabajador);
 
 $('colaSalir').addEventListener('click', cambiarRol);
+/* A la lista sin perder el rol ni el paquete que se tenga cogido. */
+$('colaLista').addEventListener('click', () => {
+  clearInterval(relojCola);
+  $('cola').classList.remove('on');
+  $('menu').classList.add('on');
+  verMenu();
+});
 
 /* Si el movil se bloqueo con un paquete en la mesa, al volver sigue siendo
    suyo: el servidor se lo devuelve tal cual en vez de darle otro. */
@@ -1279,8 +1342,16 @@ try { PENDCOLA = JSON.parse(localStorage.getItem(LLAVE_COLA) || '[]'); } catch(e
 const guardarPend = () => { try{ localStorage.setItem(LLAVE_COLA, JSON.stringify(PENDCOLA)); }catch(e){} };
 
 function aLaCola(f, cuando, incidencia, motivo){
-  if (MODO !== 'recoge') return;
+  if (MODO !== 'recoge' && MODO !== 'empaqueta') return;
   PENDCOLA.push({
+    /* QUÉ ES ESTE GESTO. El mismo deslice significa una cosa u otra según quién
+       lo haga, y el móvil lo sella aquí para que no dependa de en qué modo esté
+       la app cuando vuelva la cobertura:
+         recoge    · el paquete ENTRA en la cola (o entra parado, si es incidencia)
+         empaqueta · el paquete se CIERRA, esté o no en la cola
+       La incidencia de quien empaqueta sí entra como incidencia, no como cierre:
+       un paquete al que le falta una prenda no está hecho. */
+    cierre: MODO === 'empaqueta' && !incidencia,
     pedido: f.pedido, apodo: f.apodo, prendas: f.numeros.length,
     tanda: (DATOS.tandas[tandaActual] || {}).etiqueta || '',
     /* QUIÉN LO DESLIZÓ, sellado aquí. Si el envío se queda esperando cobertura
@@ -1316,12 +1387,23 @@ function aLaCola(f, cuando, incidencia, motivo){
  * pararse a leer diálogos, pero sí tiene que saber que esa tanda ya está hecha.
  * ======================================================================== */
 const YA_AVISADO = new Set();
-function avisarDeOtro(lista, delEnvio){
+function avisarDeOtro(lista, delEnvio, cerrando){
   if (!Array.isArray(lista) || !lista.length) return;
   const nuevos = lista.filter((x) => delEnvio.has(x.pedido) && !YA_AVISADO.has(x.pedido));
   if (!nuevos.length) return;
   for (const x of nuevos) YA_AVISADO.add(x.pedido);
   const quien = nuevos[0].quien;
+  /* Cerrando, el aviso es otro: el paquete lo tenía abierto otra persona en su
+     móvil. Se cierra igual —está hecho, lo tienes delante— pero hay que decirlo
+     para que no lo estén doblando dos. */
+  if (cerrando) {
+    decir(nuevos.length === 1
+      ? 'El nº' + nuevos[0].numero + ' lo tenía abierto ' + quien +
+        '. Lo he cerrado a tu nombre; dile que ya está.'
+      : nuevos.length + ' de los que acabas de cerrar los tenía abiertos ' + quien +
+        '. Los he cerrado a tu nombre; decídselo.');
+    return;
+  }
   const aviso = nuevos.length === 1
     ? 'El paquete de ' + (nuevos[0].apodo || 'ese comprador') + ' ya lo había recogido ' +
       quien + ' (nº' + nuevos[0].numero + ').'
@@ -1352,21 +1434,25 @@ async function vaciarCola(){
      otro, o metería en el día de hoy un paquete de anoche. */
   const dueno = PENDCOLA[0].quien || QUIEN;
   const cuando = PENDCOLA[0].dia || null;
-  const mismo = (x) => (x.quien || QUIEN) === dueno && (x.dia || null) === cuando;
+  /* Y por GESTO: meter y cerrar no se pueden mezclar en el mismo envío. */
+  const cerrando = !!PENDCOLA[0].cierre;
+  const mismo = (x) => (x.quien || QUIEN) === dueno && (x.dia || null) === cuando &&
+                       !!x.cierre === cerrando;
   const iban = PENDCOLA.filter(mismo);
   try {
     const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
-      body: JSON.stringify({ accion:'meter', quien: dueno, dia: cuando, paquetes: iban })
+      body: JSON.stringify({ accion: cerrando ? 'cerrarLista' : 'meter',
+                             quien: dueno, dia: cuando, paquetes: iban })
     });
     const j = await r.json();
     if (j && j.ok) {
       /* Solo se quitan los que iban en ESTE envio: mientras volaba puede
          haberse deslizado otro y no hay que tragarselo sin mandarlo. */
       const fuera = new Set(iban.map((x) => x.pedido));
-      PENDCOLA = PENDCOLA.filter((x) => !fuera.has(x.pedido));
+      PENDCOLA = PENDCOLA.filter((x) => !(fuera.has(x.pedido) && !!x.cierre === cerrando));
       guardarPend();
-      avisarDeOtro(j.deOtro, fuera);
+      avisarDeOtro(j.deOtro, fuera, cerrando);
     }
   } catch(e){ /* sin red: se queda pendiente y sale con el siguiente */ }
   vaciando = false;
@@ -1405,43 +1491,55 @@ async function reenviarTodo(avisar){
   if (!QUIEN.trim()) { if (avisar) alert('Pon tu nombre antes: la cola apunta quién recogió cada paquete.'); return null; }
   /* De las marcas de este móvil, que es el registro de lo que ha hecho esta
      persona: cada "Listo" y cada "Incidencia", con su hora de verdad. */
-  const porDia = new Map();
+  /* Se agrupa por día Y POR GESTO: quien recoge manda "meter" y quien empaqueta
+     manda "cerrarLista". Una incidencia siempre es "meter", la marque quien la
+     marque: un paquete al que le falta una prenda no está cerrado. */
+  const porEnvio = new Map();
   for (const m of MARCAS) {
     const f = fichaDe(m.pedido);
     const dia = diaMadrid(m.t);
-    if (!porDia.has(dia)) porDia.set(dia, []);
-    porDia.get(dia).push({
+    const cierre = MODO === 'empaqueta' && m.estado !== 'inc';
+    const llave = dia + '|' + (cierre ? 'cerrar' : 'meter');
+    if (!porEnvio.has(llave)) porEnvio.set(llave, { dia, cierre, paquetes: [] });
+    porEnvio.get(llave).paquetes.push({
       pedido: m.pedido, apodo: m.apodo, prendas: m.prendas,
-      tanda: f ? f.tanda : '', incidencia: m.estado === 'inc',
+      tanda: f ? f.tanda : '', incidencia: m.estado === 'inc', motivo: m.motivo || '',
       ficha: f ? f.ficha : {}, en: new Date(m.t).toISOString(), dia
     });
   }
-  if (!porDia.size) { if (avisar) alert('Todavía no has deslizado nada en este móvil.'); return null; }
+  if (!porEnvio.size) { if (avisar) alert('Todavía no has deslizado nada en este móvil.'); return null; }
 
-  let metidos = 0, revueltos = 0, mandados = 0, fallo = false;
-  for (const [dia, paquetes] of porDia) {
+  let metidos = 0, revueltos = 0, mandados = 0, creados = 0, fallo = false;
+  for (const [, envio] of porEnvio) {
     try {
       const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
         method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
-        body: JSON.stringify({ accion:'meter', quien: QUIEN, dia, paquetes })
+        body: JSON.stringify({ accion: envio.cierre ? 'cerrarLista' : 'meter',
+                               quien: QUIEN, dia: envio.dia, paquetes: envio.paquetes })
       });
       const j = await r.json();
-      if (j && j.ok) { metidos += (j.metidos || 0); revueltos += (j.revueltos || 0); mandados += paquetes.length; }
-      else fallo = true;
+      if (j && j.ok) {
+        metidos += (j.metidos || 0); revueltos += (j.revueltos || 0);
+        creados += (j.creados || 0); mandados += envio.paquetes.length;
+      } else fallo = true;
     } catch(e){ fallo = true; }
   }
   if (avisar) {
+    const esCierre = MODO === 'empaqueta';
     alert(fallo
       ? 'No he podido hablar con el servidor con todo. Vuelve a pulsar en un momento.'
-      : (metidos + revueltos === 0
-          ? 'Comprobado: los ' + mandados + ' paquetes que has deslizado ya estaban en la cola.'
-          : 'Faltaban ' + (metidos + revueltos) + ' en la cola y ya están dentro (de ' + mandados + ' deslizados).'));
+      : (esCierre
+          ? 'Comprobado: los ' + mandados + ' paquetes que has cerrado están apuntados a tu nombre' +
+            (creados ? ' (' + creados + ' no los había metido nadie en la cola y los he creado ya cerrados).' : '.')
+          : (metidos + revueltos === 0
+              ? 'Comprobado: los ' + mandados + ' paquetes que has deslizado ya estaban en la cola.'
+              : 'Faltaban ' + (metidos + revueltos) + ' en la cola y ya están dentro (de ' + mandados + ' deslizados).')));
   }
-  return { metidos, revueltos, mandados, fallo };
+  return { metidos, revueltos, creados, mandados, fallo };
 }
 /* Sin que nadie lo pulse: al volver a la app y de vez en cuando. Un paquete que
    falta en la cola no puede depender de que alguien se acuerde de un botón. */
-setInterval(() => { if (MODO === 'recoge' && MARCAS.length) reenviarTodo(false); }, 120000);
+setInterval(() => { if (MODO && MARCAS.length) reenviarTodo(false); }, 120000);
 
 /* ===========================================================================
  * UNA INCIDENCIA SE EXPLICA EN UNA LÍNEA
@@ -1501,24 +1599,38 @@ async function atras(){
   /* Deshacer una incidencia también tiene que llegar a la cola: ahora una
      incidencia está ahí, parada y con número, así que si se deshace hay que
      retirarla igual que un "Listo". */
-  if (!marca || !CODIGO || MODO !== 'recoge') return;
+  if (!marca || !CODIGO || (MODO !== 'recoge' && MODO !== 'empaqueta')) return;
   const pedido = marca.pedido;
+  /* El "Atrás" de quien empaqueta deshace un CIERRE, no un deslice: el paquete
+     vuelve a la cola para que lo pueda coger cualquiera. Solo puede deshacer
+     los suyos; si lo cerró otro, el servidor no lo toca y se dice. */
+  const eraCierre = MODO === 'empaqueta' && marca.estado !== 'inc';
   /* Si aún no había salido del móvil, basta con sacarlo de la lista de espera. */
   const antes = PENDCOLA.length;
-  PENDCOLA = PENDCOLA.filter((x) => x.pedido !== pedido);
+  PENDCOLA = PENDCOLA.filter((x) => !(x.pedido === pedido && !!x.cierre === eraCierre));
   if (PENDCOLA.length !== antes) { guardarPend(); return; }
   try {
     const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
-      body: JSON.stringify({ accion:'retirar', quien: QUIEN, pedido })
+      body: JSON.stringify({ accion: eraCierre ? 'reabrir' : 'retirar', quien: QUIEN, pedido })
     });
     const j = await r.json();
-    if (j && j.ok && !j.retirado && j.estado) {
+    if (eraCierre) {
+      if (j && j.ok && !j.reabierto) {
+        alert(j.estado === 'cerrado'
+          ? 'Ese paquete lo cerró ' + (j.quien || 'otra persona') + '. Solo puede deshacerlo quien lo cerró.'
+          : 'Ese paquete no está cerrado, así que no hay nada que deshacer.');
+      }
+    } else if (j && j.ok && !j.retirado && j.estado) {
       alert(j.estado === 'cerrado'
         ? 'Ese paquete ya lo ha cerrado ' + (j.quien || 'otra persona') + '. No se puede deshacer.'
         : 'Ese paquete ya lo tiene ' + (j.quien || 'otra persona') + ' en la mesa. No se lo quito.');
     }
-  } catch(e){ alert('Sin conexión: el paquete sigue en la cola. Avisa a quien empaqueta.'); }
+  } catch(e){
+    alert(eraCierre
+      ? 'Sin conexión: el paquete sigue cerrado en el servidor. Prueba otra vez en un momento.'
+      : 'Sin conexión: el paquete sigue en la cola. Avisa a quien empaqueta.');
+  }
 }
 
 /* ---------------------------------------------------------- mandar tiempos
@@ -1570,7 +1682,7 @@ async function mandarTiempos(){
   }
   /* Y de paso se comprueba la cola: es el momento en que alguien está mirando la
      pantalla, así que es el mejor momento para decirle si falta algo. */
-  const c = MODO === 'recoge' ? await reenviarTodo(false) : null;
+  const c = MODO ? await reenviarTodo(false) : null;
   alert('Mandado. ' + total + ' ' + (total === 1 ? 'marca guardada' : 'marcas guardadas') +
         ' a tu nombre.' +
         (c && (c.metidos + c.revueltos) ? '\n\nAdemás faltaban ' + (c.metidos + c.revueltos) +
