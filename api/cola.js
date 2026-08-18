@@ -5,6 +5,7 @@
  *   POST { accion:'cerrar',    quien, pedido }
  *   POST { accion:'cerrarLista', quien, paquetes:[...] }  ← el "Listo" del que empaqueta, desde la lista
  *   POST { accion:'reabrir',   quien, pedido }            ← su "Atrás"
+ *   POST { accion:'cerrarTodo', quien, clave, parados? } ← el panel de admin
  *   POST { accion:'soltar',    quien, pedido }
  *   POST { accion:'coger',     quien, pedido }        ← me llevo ESE, aunque lo tenga otro
  *   POST { accion:'resolver',  quien, pedido }        ← la incidencia ya está arreglada
@@ -404,6 +405,48 @@ module.exports = puerta(async (req, res) => {
         from cola where dia = ${dia}`;
       return res.status(200).json({ ok: true, dia, cerrados, creados, deOtro,
                                     recibidos: lista.length, ...c });
+    }
+
+    /* -------------------------------------------------------- CERRAR TODO
+     * EL BOTÓN DE "YA ESTÁ TODO", detrás de una clave.
+     *
+     * Pasa al final del turno: la mesa está vacía, los paquetes están hechos y
+     * en la cola quedan sesenta que nadie va a ir cerrando uno a uno. Sin esto,
+     * el día se queda para siempre con sesenta paquetes "en espera" y no hay
+     * forma de saber si eso es trabajo pendiente o basura.
+     *
+     * LA CLAVE NO ES SEGURIDAD DE VERDAD y no pretende serlo: la app se abre
+     * con un código que está en un QR de la pared. Es un pestillo para que
+     * nadie lo pulse sin querer. Se comprueba AQUÍ, en el servidor, y no en el
+     * móvil, para que no baste con mirar el código de la página.
+     *
+     * LOS PARADOS NO ENTRAN salvo que se pidan expresamente: un paquete con
+     * incidencia no está hecho, y cerrarlo en bloque es exactamente cómo se
+     * pierde una prenda que estaba esperando a que apareciera.
+     *
+     * A quien ya lo tenía cogido NO se le quita el mérito: solo se pone el
+     * nombre de quien pulsa en los que no tenían a nadie. */
+    if (accion === 'cerrarTodo') {
+      const clave = aTexto(b.clave).trim();
+      if (clave !== (process.env.BILLYS_ADMIN || '2003')) {
+        return res.status(403).json({ ok: false, error: 'clave', detalle: 'La clave no es esa.' });
+      }
+      const conParados = !!b.parados;
+      const en = aFecha(b.en) || new Date();
+      const estados = conParados ? ['espera', 'haciendo', 'parado'] : ['espera', 'haciendo'];
+      const filas = await s`
+        update cola
+           set estado = 'cerrado', cerrado_en = ${en},
+               quien_cierra = case when btrim(quien_cierra) = '' then ${quien} else quien_cierra end
+         where dia = ${dia} and estado = any(${estados})
+        returning pedido, numero, estado`;
+      const [c] = await s`
+        select count(*) filter (where estado = 'espera')::int   as espera,
+               count(*) filter (where estado = 'haciendo')::int as haciendo,
+               count(*) filter (where estado = 'cerrado')::int  as cerrado,
+               count(*) filter (where estado = 'parado')::int   as parado
+        from cola where dia = ${dia}`;
+      return res.status(200).json({ ok: true, dia, cerrados: filas.length, ...c });
     }
 
     /* ------------------------------------------------------------ REABRIR
