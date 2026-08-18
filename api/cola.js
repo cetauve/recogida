@@ -3,6 +3,8 @@
  *   POST { accion:'meter',     quien, paquetes:[{pedido, apodo, prendas, tanda, ficha, en, incidencia, motivo}] }
  *   POST { accion:'siguiente', quien }
  *   POST { accion:'cerrar',    quien, pedido }
+ *   POST { accion:'cerrarLista', quien, paquetes:[...] }  ← el "Listo" del que empaqueta, desde la lista
+ *   POST { accion:'reabrir',   quien, pedido }            ← su "Atrás"
  *   POST { accion:'soltar',    quien, pedido }
  *   POST { accion:'coger',     quien, pedido }        ← me llevo ESE, aunque lo tenga otro
  *   POST { accion:'resolver',  quien, pedido }        ← la incidencia ya está arreglada
@@ -316,6 +318,120 @@ module.exports = puerta(async (req, res) => {
                count(*) filter (where estado = 'cerrado')::int as cerrado
         from cola where dia = ${dia}`;
       return res.status(200).json({ ok: true, dia, pedido, ...c });
+    }
+
+    /* ----------------------------------------------- CERRAR UNA LISTA
+     * EL "LISTO" DE QUIEN EMPAQUETA, DESDE LA LISTA DE TANDAS.
+     *
+     * 18 ago 2026, con la mesa llena: los que empaquetan llevaban toda la vida
+     * deslizando y dando a "Listo" en la lista, y al meter la cola les quité la
+     * lista y les dejé SOLO el botón de "dame el siguiente". Resultado: los
+     * paquetes que el recogedor no había empujado —o los que se hicieron sin
+     * mirar la cola— no se podían cerrar de ninguna manera. Diecinueve paquetes
+     * cerrados de verdad, encima de la mesa, y en el servidor ni uno. Ni sus
+     * nombres.
+     *
+     * Así que vuelve el gesto de siempre, y aquí se recibe:
+     *
+     *   - Si el paquete está en la cola, se cierra y se apunta a nombre de
+     *     quien lo cerró, que es quien lo tuvo delante.
+     *   - SI NO ESTÁ, SE CREA YA CERRADO. Un paquete que se ha empaquetado
+     *     existió, aunque nadie lo empujara: negarlo es cómo se pierde el
+     *     trabajo de una tarde. Coge su número como cualquier otro.
+     *
+     * Se manda en lista y se puede repetir: cerrar dos veces el mismo paquete
+     * lo deja igual de cerrado. */
+    if (accion === 'cerrarLista') {
+      const lista = (Array.isArray(b.paquetes) ? b.paquetes : [])
+        .map((x) => ({
+          pedido: aTexto(x.pedido).trim(),
+          apodo: aTexto(x.apodo),
+          tanda: aTexto(x.tanda),
+          prendas: aEntero(x.prendas),
+          ficha: x.ficha && typeof x.ficha === 'object' ? x.ficha : {},
+          en: aFecha(x.en || x.t) || new Date()
+        }))
+        .filter((x) => x.pedido);
+      if (!lista.length) return res.status(400).json({ ok: false, error: 'sin-paquetes' });
+
+      let cerrados = 0, creados = 0;
+      const deOtro = [];        // lo tenía otro en la mesa: se avisa, no se calla
+      for (const x of lista) {
+        const [antes] = await s`
+          select estado, quien_cierra, numero, apodo, prendas from cola
+           where dia = ${dia} and pedido = ${x.pedido}`;
+        /* Si el paquete ya existe, mandan SUS datos: quien cierra desde la
+         * lista de "lo que queda" solo tiene el número a mano, no el nombre del
+         * comprador ni cuántas prendas lleva. */
+        if (antes) {
+          if (!x.apodo) x.apodo = antes.apodo || '';
+          if (x.prendas == null) x.prendas = antes.prendas;
+        }
+        if (antes) {
+          /* Quien lo cierra es quien lo tuvo delante. Si estaba abierto en el
+           * móvil de otro, se cierra igual —el paquete está hecho— y se dice. */
+          if (antes.estado === 'haciendo' && antes.quien_cierra && !igual(antes.quien_cierra, quien)) {
+            deOtro.push({ pedido: x.pedido, numero: antes.numero, apodo: x.apodo, quien: antes.quien_cierra });
+          }
+          await s`
+            update cola set estado = 'cerrado', cerrado_en = ${x.en}, quien_cierra = ${quien}
+             where dia = ${dia} and pedido = ${x.pedido}`;
+          cerrados++;
+        } else {
+          const [mx] = await s`select coalesce(max(numero), 0)::int as n from cola where dia = ${dia}`;
+          await s`
+            insert into cola (dia, pedido, numero, apodo, tanda, prendas, ficha, estado,
+                              motivo, quien_abrio, abierto_en, quien_cierra, tomado_en, cerrado_en)
+            /* abierto_en = la hora del cierre: es lo único que se sabe de un
+             * paquete que nadie empujó, y la columna no admite vacío. Queda
+             * quien_abrio en blanco, que es lo honesto: no se sabe quién lo
+             * recogió, y inventarlo sería peor que dejarlo vacío. */
+            values (${dia}, ${x.pedido}, ${mx.n + 1}, ${x.apodo}, ${x.tanda}, ${x.prendas},
+                    ${s.json(x.ficha)}, 'cerrado', '', '', ${x.en}, ${quien}, ${x.en}, ${x.en})
+            on conflict (dia, pedido) do update set
+              estado = 'cerrado', cerrado_en = ${x.en}, quien_cierra = ${quien}`;
+          creados++; cerrados++;
+        }
+        await apuntarTiempo(s, { dia, quien, modo: 'empaqueta', pedido: x.pedido,
+                                 apodo: x.apodo, prendas: x.prendas, en: x.en });
+      }
+
+      const [c] = await s`
+        select count(*) filter (where estado = 'espera')::int   as espera,
+               count(*) filter (where estado = 'haciendo')::int as haciendo,
+               count(*) filter (where estado = 'cerrado')::int  as cerrado,
+               count(*) filter (where estado = 'parado')::int   as parado
+        from cola where dia = ${dia}`;
+      return res.status(200).json({ ok: true, dia, cerrados, creados, deOtro,
+                                    recibidos: lista.length, ...c });
+    }
+
+    /* ------------------------------------------------------------ REABRIR
+     * El "Atrás" de quien empaqueta. Se le fue el dedo y cerró el que no era.
+     *
+     * Solo se puede deshacer lo que cerró UNO MISMO: quitarle un cierre a otro
+     * con un botón de deshacer sería peor que el error. Vuelve a 'espera' —no
+     * a 'haciendo'— para que lo pueda coger cualquiera, y se borra la marca de
+     * tiempo del empaquetado, que si no quedaría un paquete cerrado a una hora
+     * en la que no se cerró. */
+    if (accion === 'reabrir') {
+      const pedido = aTexto(b.pedido).trim();
+      if (!pedido) return res.status(400).json({ ok: false, error: 'sin-pedido' });
+      const fila = await s`
+        update cola set estado = 'espera', cerrado_en = null, quien_cierra = '', tomado_en = null
+         where dia = ${dia} and pedido = ${pedido} and estado = 'cerrado'
+           and lower(btrim(quien_cierra)) = lower(btrim(${quien}))
+        returning numero`;
+      if (!fila.length) {
+        const [ahora] = await s`select estado, quien_cierra from cola where dia = ${dia} and pedido = ${pedido}`;
+        return res.status(200).json({ ok: true, dia, reabierto: false,
+                                      estado: ahora ? ahora.estado : null,
+                                      quien: ahora ? ahora.quien_cierra : '' });
+      }
+      await s`delete from tiempos
+               where dia = ${dia} and pedido = ${pedido} and modo = 'empaqueta'
+                 and lower(btrim(quien)) = lower(btrim(${quien}))`;
+      return res.status(200).json({ ok: true, dia, reabierto: true, numero: fila[0].numero });
     }
 
     /* ------------------------------------------------------------- TANDA
