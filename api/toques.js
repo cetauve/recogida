@@ -56,6 +56,46 @@ const FIN_SIN_VENTAS_MS = 20 * 60000;
  * "Sin reclamar" es lo que impide que dos vendedoras se lleven la misma
  * prenda; el toque que se quede sin candidato se queda sin cruce y se dice,
  * en vez de inventarle uno. */
+/* Las 00:00 de un día en hora de Valencia, en milisegundos. Se calcula sin
+   tablas de zonas: se coge el mediodía UTC —que siempre cae dentro del día
+   mire quien lo mire— y se le resta la hora que marca el reloj de Valencia en
+   ese instante. */
+function inicioDelDia(dia) {
+  const medio = Date.parse(String(dia) + 'T12:00:00Z');
+  if (!Number.isFinite(medio)) return 0;
+  const partes = new Intl.DateTimeFormat('es-ES', {
+    timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(new Date(medio));
+  const h = Number((partes.find((x) => x.type === 'hour') || {}).value || 12);
+  const m = Number((partes.find((x) => x.type === 'minute') || {}).value || 0);
+  return medio - (h * 3600000 + m * 60000);
+}
+
+/* CUÁNTO SE LE PERDONA A UN TURNO QUE EMPIEZA ANTES DE SU DÍA.
+   Seis horas. Un directo que arranca a las once de la noche y cuyas ventas se
+   apuntan ya al día siguiente es normal y su turno tiene que quedar entero; un
+   turno que empezó anteayer es una tablet que nadie cerró. */
+const ANTES_DEL_DIA_OK = 6 * 3600000;
+
+function sinArrastrar(turnos, dia, toques) {
+  const t0 = inicioDelDia(dia);
+  if (!t0) return turnos;
+  return turnos.map((t) => {
+    const empezo = new Date(t.empezo).getTime();
+    if (!Number.isFinite(empezo) || empezo >= t0 - ANTES_DEL_DIA_OK) return t;
+    const nombre = String(t.vendedora || '').trim().toLowerCase();
+    let primero = null;
+    for (const q of (toques || [])) {
+      if (String(q.vendedora || '').trim().toLowerCase() !== nombre) continue;
+      const c = new Date(q.en).getTime();
+      if (!Number.isFinite(c)) continue;
+      if (primero == null || c < primero) primero = c;
+    }
+    return { ...t, empezo: new Date(primero != null ? primero : t0),
+             arrastrado: true, empezoQueVenia: t.empezo };
+  });
+}
+
 async function cruzar(s, dia, toquesTodos, soloCuenta) {
   const lotesTodos = await s`
     select l.directo, l.cuenta, l.num, l.vendida_en, l.precio, l.titulo
@@ -90,9 +130,32 @@ async function cruzar(s, dia, toquesTodos, soloCuenta) {
         )
       )
     order by l.vendida_en`;
-  const turnosCrudos = await s`
+  const turnosSinArreglar = await s`
     select vendedora, empezo, acabo, lote_inicio, lote_fin, cuenta
     from turnos where dia = ${dia} order by empezo`;
+
+  /* =========================================================================
+     UN TURNO NO PUEDE EMPEZAR ANTES DEL DÍA AL QUE PERTENECE
+     =========================================================================
+     19 ago 2026: a Heikelin le salían 46 HORAS de turno. No era un fallo de
+     cálculo: en la base de datos su turno ponía que empezó el 17 y acabó el 19.
+
+     Pasa con las tablets compartidas. La app se queda abierta con el turno sin
+     cerrar —nadie pulsa "terminar" cuando se acaba el día, se apaga la tablet y
+     ya— y al día siguiente, al cerrarlo o al cambiar de trabajadora, se manda
+     ese `empezo` de hace dos días junto al día de HOY. El turno resultante
+     abarca dos noches enteras, y como de las horas cuelga el coste por hora,
+     eso descuadra el reparto entero.
+
+     Aquí se corta por lo sano al leer: si un turno dice que empezó antes de que
+     el día empezara, se le pone la hora de su PRIMER TOQUE de ese día —que es
+     la primera prueba de que estaba trabajando— y, si no tiene ninguno, el
+     principio del día. Se marca como `arrastrado` para poder decirlo en
+     pantalla en vez de disimularlo.
+
+     Se arregla al LEER y no al escribir a propósito: así también quedan bien
+     los días que ya están guardados, sin tocar lo que mandó la tablet. */
+  const turnosCrudos = sinArrastrar(turnosSinArreglar, dia, toquesTodos);
 
   /* =========================================================================
      DOS TURNOS CON EL MISMO NOMBRE SON UN TURNO
@@ -618,9 +681,11 @@ module.exports = puerta(async (req, res) => {
       : await s`select vendedora, en, lote, cuenta, sesion, categoria, directo from toques
                 where dia = ${dia} order by vendedora, en`;
 
-    const turnos = await s`
+    /* Mismo arreglo que en el cruce: un turno que dice que empezó antes del día
+       es una tablet que se quedó abierta, no 46 horas de trabajo. */
+    const turnos = sinArrastrar(await s`
       select vendedora, empezo, acabo, lote_inicio, lote_fin, cuenta
-      from turnos where dia = ${dia} order by empezo`;
+      from turnos where dia = ${dia} order by empezo`, dia, filas);
 
     const porVendedora = {};
     for (const f of filas) (porVendedora[f.vendedora] = porVendedora[f.vendedora] || []).push(f);
