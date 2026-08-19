@@ -56,6 +56,7 @@
   .aviso{max-width:900px;margin:0 auto 16px;border-radius:13px;padding:13px 16px;font-size:15px;line-height:1.55}
   .aviso.rojo{background:#2A1512;border:1.5px solid #C8321F}
   .aviso.ambar{background:#241C0E;border:1.5px solid #D89B2E}
+  .aviso.verde{background:#0F2118;border:1.5px solid #2E9E6B}
 
   /* LA HOJA. Va en blanco y negro y con tipografía de papel: esto se imprime,
      se firma y se queda en un archivador, no se mira en una pantalla. */
@@ -96,6 +97,11 @@
     <button id="ver">Ver</button>
     <button id="imprimir" class="sec">Imprimir o guardar en PDF</button>
     <button id="csv" class="sec">Descargar CSV</button>
+    <!-- EL RESPALDO. Si la extensión no está a mano —otro ordenador, otro día,
+         o simplemente no se hizo el paso 4— el PDF de las etiquetas también
+         dice qué se ha impreso: cada etiqueta lleva su Order ID. -->
+    <button id="botonPdf" class="sec">Subir el PDF de las etiquetas</button>
+    <input type="file" id="pdf" accept="application/pdf" hidden>
   </div>
 </div>
 
@@ -124,21 +130,47 @@ let ULTIMO = null;
  * etiqueta imprime solo el Order ID más antiguo. Las tandas ya vienen
  * agrupadas por comprador —una tarjeta, un paquete— así que la lista de bultos
  * es la lista de tarjetas, en el mismo orden en que se recogen. */
+/* EL MANIFIESTO NO ES LA LISTA DE LO QUE SE QUERÍA ENVIAR, ES LA DE LO QUE SE
+   ENVÍA. La diferencia la pone el paso 4 de la extensión: relee la lista de
+   TikTok después de imprimir y devuelve, por número de pedido, si el paquete
+   está ya "a la espera de recogida" y con qué número de seguimiento.
+
+   Mientras no se haya hecho el paso 4 (`envios` vacío), esto se comporta como
+   siempre y saca todos los paquetes: es mejor un manifiesto sin comprobar que
+   ningún manifiesto. En cuanto hay comprobación, lo que no tiene etiqueta sale
+   de la hoja y se enseña aparte, para poder ir a buscarlo al montón. */
 function bultosDe(datos) {
-  const fuera = [];
+  const envios = datos.envios || null;
+  const dentro = [], fuera = [];
   for (const t of (datos.tandas || [])) {
     for (const c of (t.compradores || [])) {
-      fuera.push({
-        pedido: c.pedido || '',
+      const ids = (c.pedidos && c.pedidos.length ? c.pedidos : [c.pedido]).filter(Boolean).map(String);
+      /* Con varios pedidos del mismo comprador, TikTok los junta en un envío:
+         el que tenga seguimiento manda, y si ninguno lo tiene, el primero. */
+      let e = null, idBueno = ids[0] || '';
+      if (envios) {
+        for (const id of ids) {
+          const x = envios[id];
+          if (!x) continue;
+          if (!e || (!e.tracking && x.tracking)) { e = x; idBueno = id; }
+        }
+      }
+      const b = {
+        pedido: idBueno || c.pedido || '',
+        pedidos: ids,
         apodo: c.apodo || '',
         usuario: c.usuario || '',
         prendas: (c.numeros || []).length,
         tanda: t.etiqueta || '',
-        tracking: c.tracking || ''      // lo rellena la extensión cuando exista
-      });
+        tracking: (e && e.tracking) || c.tracking || '',
+        transportista: (e && e.transportista) || '',
+        subestado: (e && e.subestado) || ''
+      };
+      if (!envios || e) dentro.push(b); else fuera.push(b);
     }
   }
-  return fuera;
+  dentro.fuera = fuera;      // se cuelga aquí para no cambiar quién llama
+  return dentro;
 }
 
 async function cargar() {
@@ -187,6 +219,28 @@ function pintar(j) {
     aviso = `<div class="aviso ambar"><b>${conTracking} de ${bultos.length} bultos con tracking.</b>
       A los que faltan aún no se les ha creado la etiqueta.</div>`;
   }
+  /* LO QUE SE HA QUEDADO FUERA. Es la parte que hay que ir a buscar al montón
+     antes de que llegue el transportista: paquetes que se recogieron pero cuya
+     etiqueta no llegó a crearse. */
+  const fuera = bultos.fuera || [];
+  if (fuera.length) {
+    aviso += `<div class="aviso rojo"><b>${fuera.length} paquetes NO van en este manifiesto</b>
+      porque no tienen etiqueta creada. Sácalos del montón:
+      <div style="margin-top:6px;font-size:12px">${fuera.slice(0, 60).map((f) =>
+        esc(f.apodo || f.usuario || f.pedido)).join(' · ')}${fuera.length > 60
+          ? ' …y ' + (fuera.length - 60) + ' más' : ''}</div></div>`;
+  }
+  /* SI ESTÁ COMPROBADO O NO VA EN LETRA PEQUEÑA, NO EN UN AVISO.
+     Un cartel que sale todos los días deja de leerse, y entonces no sirve el
+     día que diga algo. Los avisos de arriba se guardan para lo que hay que
+     hacer ahora: paquetes que faltan. */
+  const sello = d.envios
+    ? (d.comprobado && d.comprobado.cuando
+        ? 'Comprobado contra el Centro de vendedores el ' +
+          new Date(d.comprobado.cuando).toLocaleString('es-ES') + '.'
+        : 'Comprobado contra el Centro de vendedores.')
+    : 'Sin comprobar: esto es lo que se quería enviar. El paso 4 de la extensión confirma cuáles ' +
+      'tienen ya la etiqueta y trae los números de seguimiento; también puedes subir aquí el PDF.';
 
   $('sub').textContent = j.dia + ' · ' + bultos.length +
     (bultos.length === 1 ? ' bulto · ' : ' bultos · ') + prendas + ' prendas';
@@ -220,6 +274,7 @@ function pintar(j) {
     ${conTracking ? '' : `<p style="font-size:11px;color:#666;margin:8px 0 0">
       Tracking ID sin asignar: TikTok lo da al crear las etiquetas. La entrega se
       cuadra por Order ID, que es lo que sale impreso en cada etiqueta.</p>`}
+    <p style="font-size:11px;color:#666;margin:6px 0 0">${esc(sello)}</p>
     <div class="firmas">
       <div class="firma"><div>${esc(T.firmaEntrega)} (${esc(T.nombre)})</div>
         <div class="linea"></div><div class="pie">Nombre y hora</div></div>
@@ -229,6 +284,92 @@ function pintar(j) {
     <div class="pagina">${esc(d.titulo || '')} · ${bultos.length} bultos · generado ${new Date().toLocaleString('es-ES')}</div>
   </div>`;
 }
+
+/* ===========================================================================
+ * EL PDF DE LAS ETIQUETAS, COMO SEGUNDA FUENTE
+ * ===========================================================================
+ * El paso 4 de la extensión es la vía buena: pregunta a TikTok. Pero necesita
+ * la extensión abierta en el ordenador donde se imprimió. Esto es el respaldo:
+ * el PDF que sale de "Crear etiquetas" lleva impreso el Order ID de cada
+ * paquete, así que leyéndolo se sabe QUÉ SE IMPRIMIÓ de verdad, sin depender de
+ * nada más.
+ *
+ * Se lee aquí, en el navegador: el PDF no se sube a ningún sitio.
+ *
+ * NO decide solo: marca en la hoja los que aparecen en el PDF y avisa de los
+ * que están en el manifiesto y NO salen en él, que son justo los que hay que ir
+ * a buscar. Quien decide sigue siendo quien está delante.
+ * ========================================================================= */
+let PDFJS = null;
+async function cargarPdfJs() {
+  if (PDFJS) return PDFJS;
+  await new Promise((ok, mal) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = ok; s.onerror = () => mal(new Error('no he podido cargar el lector de PDF'));
+    document.head.appendChild(s);
+  });
+  PDFJS = window.pdfjsLib;
+  PDFJS.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  return PDFJS;
+}
+
+async function textoDelPdf(archivo) {
+  const lib = await cargarPdfJs();
+  const doc = await lib.getDocument({ data: await archivo.arrayBuffer() }).promise;
+  let texto = '';
+  for (let n = 1; n <= doc.numPages; n++) {
+    const pag = await doc.getPage(n);
+    const t = await pag.getTextContent();
+    texto += ' ' + t.items.map((i) => i.str).join(' ');
+  }
+  return { texto, paginas: doc.numPages };
+}
+
+$('botonPdf').onclick = () => $('pdf').click();
+$('pdf').onchange = async (ev) => {
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!f || !ULTIMO) return;
+  const antes = $('sub').textContent;
+  $('sub').textContent = 'Leyendo el PDF…';
+  try {
+    const { texto, paginas } = await textoDelPdf(f);
+    /* Los identificadores de pedido de TikTok son números largos: 18 cifras o
+       más. Se cogen todos y se cruzan; no hace falta saber dónde los pinta. */
+    const enPdf = new Set((texto.match(/\d{15,25}/g) || []));
+    const bultos = bultosDe(ULTIMO.datos || {});
+    const fuera = bultos.fuera || [];
+    const impresos = [], sinImprimir = [];
+    for (const b of bultos) {
+      const suyo = (b.pedidos || [b.pedido]).some((id) => enPdf.has(String(id)));
+      (suyo ? impresos : sinImprimir).push(b);
+    }
+    /* Y al revés: etiquetas del PDF que no están en el manifiesto. Suelen ser
+       de otro día o de un paquete que se recogió sin pasar por aquí. */
+    const nuestros = new Set(bultos.flatMap((b) => (b.pedidos || [b.pedido]).map(String))
+      .concat(fuera.flatMap((b) => (b.pedidos || [b.pedido]).map(String))));
+    const sobran = [...enPdf].filter((id) => !nuestros.has(id));
+    const recuperados = fuera.filter((b) => (b.pedidos || [b.pedido]).some((id) => enPdf.has(String(id))));
+
+    $('sub').textContent = antes;
+    $('salida').insertAdjacentHTML('afterbegin', `<div class="aviso ${sinImprimir.length ? 'ambar' : 'verde'}">
+      <b>PDF leído:</b> ${paginas} páginas, ${enPdf.size} etiquetas.
+      <br><b>${impresos.length}</b> de los ${bultos.length} bultos del manifiesto salen en el PDF.
+      ${sinImprimir.length ? `<br><b>${sinImprimir.length} NO salen</b> (no se han impreso):
+        <span style="font-size:12px">${sinImprimir.slice(0, 40).map((b) =>
+          esc(b.apodo || b.pedido)).join(' · ')}</span>` : ''}
+      ${recuperados.length ? `<br><b>${recuperados.length} de los excluidos SÍ tienen etiqueta impresa</b>
+        según el PDF: ${recuperados.slice(0, 40).map((b) => esc(b.apodo || b.pedido)).join(' · ')}.
+        Vuelve a hacer el paso 4: puede que TikTok todavía no lo hubiera actualizado.` : ''}
+      ${sobran.length ? `<br>${sobran.length} etiquetas del PDF no están en este manifiesto.` : ''}
+    </div>`);
+  } catch (e) {
+    $('sub').textContent = antes;
+    alert('No he podido leer el PDF: ' + e.message);
+  }
+};
 
 $('imprimir').onclick = () => window.print();
 
