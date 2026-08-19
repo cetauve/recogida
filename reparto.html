@@ -244,8 +244,15 @@ const horasDe = (t) => (t && t.empezo && t.acabo)
    horas toda la noche: a las tres de la mañana la presentadora del directo de
    la tarde llevaba doce horas de coste y beneficio por hora negativo. */
 const finTurno = (t, c) => (t && (t.acabo || (c && c.finDirecto))) || null;
-const horasVivas = (t, c) => (t && t.empezo)
-  ? Math.max((new Date(finTurno(t, c) || Date.now()) - new Date(t.empezo)) / 3600000, 0.01) : null;
+/* NADA DE DIVIDIR POR CASI CERO. Un turno de dos minutos —o uno con las horas
+   mal, que también pasa— daba "27.735 € por hora" y ese número no significa
+   nada. Por debajo de tres minutos no hay €/hora que enseñar: se devuelve null
+   y en pantalla sale una raya. */
+const horasVivas = (t, c) => {
+  if (!t || !t.empezo) return null;
+  const h = (new Date(finTurno(t, c) || Date.now()) - new Date(t.empezo)) / 3600000;
+  return h >= 0.05 ? h : null;
+};
 
 /* =========================================================================
    ANÁLISIS POR TIPO DE PRENDA
