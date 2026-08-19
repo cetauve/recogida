@@ -96,6 +96,75 @@ function sinArrastrar(turnos, dia, toques) {
   });
 }
 
+/* ===========================================================================
+   UN TURNO ACABA EN LA ÚLTIMA PRENDA QUE MARCÓ
+   ===========================================================================
+   Lo pidió Aaron el 19 ago 2026: "el turno de una vendedora ha de acabar en el
+   minuto exacto en el que ha marcado su última prenda; si se le olvida pulsar
+   terminar, el programa, si han pasado más de 10 minutos sin recibir datos, lo
+   da por terminado a esa hora".
+
+   Y es lo correcto: lo que se paga es el rato que estuvo marcando. Pulsar
+   "terminar" es un gesto que a veces se hace y a veces no —y cuando se hace,
+   se hace al recoger la mesa, veinte minutos después de la última prenda—, así
+   que el botón no puede ser la fuente de la hora. La fuente es el trabajo.
+
+   Reglas, en este orden:
+     · si marcó prendas, el turno acaba en su ÚLTIMA marca;
+     · si no pulsó terminar y han pasado más de diez minutos de esa marca, se
+       da por cerrado ahí solo (y se dice: `cerradoSolo`);
+     · si hace menos de diez minutos, sigue abierto: está trabajando;
+     · un día que no es hoy está cerrado siempre. Un día pasado no "sigue".
+   ========================================================================= */
+const SIN_SENAL_MS = 10 * 60000;
+
+function cerrarPorUltimaMarca(turnos, dia, toques, esHoy) {
+  const ms0 = (x) => new Date(x).getTime();
+  return turnos.map((t) => {
+    const nombre = String(t.vendedora || '').trim().toLowerCase();
+    const desde = ms0(t.empezo);
+    /* Si volvió a fichar más tarde, sus marcas de después son del otro turno. */
+    let siguiente = Infinity;
+    for (const o of turnos) {
+      if (String(o.vendedora || '').trim().toLowerCase() !== nombre) continue;
+      const e = ms0(o.empezo);
+      if (e > desde && e < siguiente) siguiente = e;
+    }
+    let ultima = null;
+    for (const q of (toques || [])) {
+      if (String(q.vendedora || '').trim().toLowerCase() !== nombre) continue;
+      const c = ms0(q.en);
+      if (!Number.isFinite(c) || c < desde || c >= siguiente) continue;
+      if (ultima == null || c > ultima) ultima = c;
+    }
+    if (ultima == null) {
+      /* Sin una sola marca no hay nada que pagar por horas. Un día pasado se
+         cierra donde empezó; el de hoy se deja como está. */
+      if (!t.acabo && !esHoy) return { ...t, acabo: t.empezo, cerradoSolo: true, sinMarcas: true };
+      return t;
+    }
+    /* SI PULSÓ TERMINAR, MANDA SU HORA.
+     *
+     * Se probó a recortar también los turnos cerrados a mano hasta su última
+     * prenda y está mal por dos motivos: el rato final sin ventas también es
+     * trabajo —recoger, atender, esperar a que entre gente— y además rompía lo
+     * de juntar dos turnos cuando se cambia de aparato: el primero se recortaba
+     * hacia atrás, el hueco crecía y dejaban de ser el mismo turno.
+     *
+     * Lo que se arregla aquí es lo otro: el turno que NADIE cerró. */
+    /* Ojo con el null: `new Date(null)` no es una fecha inválida, es el año
+       1970, así que preguntar solo por Number.isFinite daba por cerrado todo
+       turno abierto y esto no hacía nada. */
+    if (t.acabo && Number.isFinite(ms0(t.acabo))) return t;
+    /* Sin cerrar: diez minutos de silencio y se cierra solo. Y si el día ya
+       pasó, se cierra igual: nadie sigue trabajando en un día que acabó. */
+    if (!esHoy || Date.now() - ultima > SIN_SENAL_MS) {
+      return { ...t, acabo: new Date(ultima), cerradoSolo: true };
+    }
+    return t;
+  });
+}
+
 async function cruzar(s, dia, toquesTodos, soloCuenta) {
   const lotesTodos = await s`
     select l.directo, l.cuenta, l.num, l.vendida_en, l.precio, l.titulo
@@ -155,7 +224,9 @@ async function cruzar(s, dia, toquesTodos, soloCuenta) {
 
      Se arregla al LEER y no al escribir a propósito: así también quedan bien
      los días que ya están guardados, sin tocar lo que mandó la tablet. */
-  const turnosCrudos = sinArrastrar(turnosSinArreglar, dia, toquesTodos);
+  const esHoy = dia === new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+  const turnosCrudos = cerrarPorUltimaMarca(
+    sinArrastrar(turnosSinArreglar, dia, toquesTodos), dia, toquesTodos, esHoy);
 
   /* =========================================================================
      DOS TURNOS CON EL MISMO NOMBRE SON UN TURNO
@@ -444,8 +515,20 @@ async function cruzar(s, dia, toquesTodos, soloCuenta) {
    *   3. y si volvió a fichar más tarde, no más allá de esa segunda entrada,
    *      que si no un turno se comería al siguiente.
    * Si el directo sigue vivo devuelve null, que es "sigue trabajando". */
+  /* DOS PREGUNTAS DISTINTAS, DOS RESPUESTAS DISTINTAS.
+   *
+   *   · ¿Cuánto tiempo trabajó? Hasta su última prenda marcada. De ahí cuelga
+   *     el coste por hora, y por eso un turno sin cerrar ya no suma toda la
+   *     noche (lo cierra `cerrarPorUltimaMarca`).
+   *   · ¿Qué se vendió mientras ella estaba? Eso es otra cosa: si dejó de
+   *     marcar a las ocho y el directo siguió hasta las nueve, lo de esa hora
+   *     no marcada SIGUE siendo de su rato —es justo lo que hay que poder ver
+   *     para saber cuánto se dejó sin marcar—. Así que la ventana no se
+   *     recorta: llega hasta que fichó otra vez o hasta el fin del directo.
+   *
+   * Por eso aquí solo manda el `acabo` que pulsó ELLA. */
   const finDe = (t) => {
-    if (t.acabo) return t.acabo;
+    if (t.acabo && !t.cerradoSolo) return t.acabo;
     if (!finDirecto) return null;
     const otra = turnos.find((o) => o.vendedora === t.vendedora && ms(o.empezo) > ms(t.empezo));
     return (otra && ms(otra.empezo) < ms(finDirecto)) ? otra.empezo : finDirecto;
@@ -486,8 +569,17 @@ async function cruzar(s, dia, toquesTodos, soloCuenta) {
     return {
       vendedora: t.vendedora, empezo: t.empezo, cuenta: t.cuenta || '',
       /* `acabo` es lo que hay guardado; `fin` es hasta cuándo se cuenta. */
-      acabo: t.acabo, fin: finDe(t),
-      abierto: !finDe(t), cerradoSolo: !t.acabo && !!finDe(t), solapado,
+      acabo: t.acabo,
+      /* `fin` es hasta cuándo se le cuentan HORAS: su última marca si lo cerró
+         el programa, la hora que pulsó si lo cerró ella. */
+      fin: t.acabo || finDe(t),
+      /* Sigue trabajando de verdad: ni pulsó terminar ni lleva diez minutos
+         sin marcar. */
+      abierto: !t.acabo && !finDe(t),
+      /* Lo cerró el programa, no ella: o porque llevaba diez minutos sin marcar
+         —y entonces acaba en su última prenda— o porque el día ya pasó. */
+      cerradoSolo: !!t.cerradoSolo || (!t.acabo && !!finDe(t)),
+      solapado,
       /* true = de esta cuenta no hay datos de venta y no se puede saber. */
       sinDatos: ciega,
       /* Cuántos turnos sueltos se han juntado en este. Más de uno = cambió de
@@ -683,9 +775,10 @@ module.exports = puerta(async (req, res) => {
 
     /* Mismo arreglo que en el cruce: un turno que dice que empezó antes del día
        es una tablet que se quedó abierta, no 46 horas de trabajo. */
-    const turnos = sinArrastrar(await s`
+    const hoyEs = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+    const turnos = cerrarPorUltimaMarca(sinArrastrar(await s`
       select vendedora, empezo, acabo, lote_inicio, lote_fin, cuenta
-      from turnos where dia = ${dia} order by empezo`, dia, filas);
+      from turnos where dia = ${dia} order by empezo`, dia, filas), dia, filas, dia === hoyEs);
 
     const porVendedora = {};
     for (const f of filas) (porVendedora[f.vendedora] = porVendedora[f.vendedora] || []).push(f);
