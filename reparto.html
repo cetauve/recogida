@@ -656,6 +656,19 @@ function pintar(j) {
      * si se paró el envío, así que se deja de gritar y se cuenta lo que se ha
      * dado por hecho. Un aviso rojo que sale todas las noches al acabar deja
      * de leerse, y entonces no sirve el día que la avería es de verdad. */
+    /* LOS TURNOS QUE CIERRA EL PROGRAMA SE DICEN AUNQUE EL DIRECTO SIGA.
+       19 ago 2026: a Heikelin le salían 46 horas y −396 € de beneficio de turno,
+       porque su turno se quedó abierto dos días. Ahora un turno sin cerrar se
+       cierra solo en su última prenda a los diez minutos, y eso hay que decirlo
+       aquí, no solo cuando el directo se da por terminado. */
+    const cs0 = c.cerradosSolos || [];
+    if (!c.finDirecto && cs0.length) {
+      html += `<div class="aviso ambar">
+        Se ${pl(cs0.length, 'ha cerrado solo el turno de', 'han cerrado solos los turnos de')}
+        <b>${cs0.map(esc).join(', ')}</b>: llevaban más de diez minutos sin marcar ninguna prenda,
+        así que sus horas cuentan hasta su última marca. Si siguen trabajando, con marcar una
+        prenda el turno vuelve a correr.</div>`;
+    }
     if (c.finDirecto) {
       const cs = c.cerradosSolos || [];
       html += `<div class="aviso ambar">
