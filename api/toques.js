@@ -84,11 +84,15 @@ function sinArrastrar(turnos, dia, toques) {
     const empezo = new Date(t.empezo).getTime();
     if (!Number.isFinite(empezo) || empezo >= t0 - ANTES_DEL_DIA_OK) return t;
     const nombre = String(t.vendedora || '').trim().toLowerCase();
+    /* Y EL PRIMER TOQUE TAMBIÉN TIENE QUE SER DE ESTE DÍA.
+     * 19 ago 2026: la tablet de Heikelin llevaba abierta desde el 17 y sus
+     * marcas viejas se subieron con el día de hoy. Coger "su primer toque" a
+     * secas devolvía una hora del 17 y el turno seguía durando 46 horas. */
     let primero = null;
     for (const q of (toques || [])) {
       if (String(q.vendedora || '').trim().toLowerCase() !== nombre) continue;
       const c = new Date(q.en).getTime();
-      if (!Number.isFinite(c)) continue;
+      if (!Number.isFinite(c) || c < t0 - ANTES_DEL_DIA_OK) continue;
       if (primero == null || c < primero) primero = c;
     }
     return { ...t, empezo: new Date(primero != null ? primero : t0),
@@ -163,6 +167,23 @@ function cerrarPorUltimaMarca(turnos, dia, toques, esHoy) {
     }
     return t;
   });
+}
+
+/* MARCAS QUE NO SON DE ESTE DÍA.
+   La misma avería de la tablet abierta: marcas del 17 subidas con el día 19.
+   Contarlas es inflar el trabajo del día y descuadrar el reparto. Se descartan
+   al leer, con el mismo margen de seis horas que los turnos, y se dice cuántas
+   para no borrar nada en silencio. */
+function soloDelDia(toques, dia) {
+  const t0 = inicioDelDia(dia);
+  if (!t0) return { filas: toques, fuera: 0 };
+  const filas = [], sobran = [];
+  for (const q of (toques || [])) {
+    const c = new Date(q.en).getTime();
+    if (Number.isFinite(c) && c < t0 - ANTES_DEL_DIA_OK) sobran.push(q);
+    else filas.push(q);
+  }
+  return { filas, fuera: sobran.length };
 }
 
 async function cruzar(s, dia, toquesTodos, soloCuenta) {
@@ -767,11 +788,15 @@ module.exports = puerta(async (req, res) => {
     const dia = diaDe(q.dia);
     const vendedora = aTexto(q.vendedora).trim();
 
-    const filas = vendedora
+    const filasCrudas = vendedora
       ? await s`select vendedora, en, lote, cuenta, sesion, categoria, directo from toques
                 where dia = ${dia} and vendedora = ${vendedora} order by en`
       : await s`select vendedora, en, lote, cuenta, sesion, categoria, directo from toques
                 where dia = ${dia} order by vendedora, en`;
+    /* Las marcas que no son de este día se quedan fuera: son de una tablet que
+       llevaba días abierta y las subió con la fecha de hoy. */
+    const limpias = soloDelDia(filasCrudas, dia);
+    const filas = limpias.filas;
 
     /* Mismo arreglo que en el cruce: un turno que dice que empezó antes del día
        es una tablet que se quedó abierta, no 46 horas de trabajo. */
@@ -785,6 +810,9 @@ module.exports = puerta(async (req, res) => {
 
     const salida = {
       ok: true, dia, total: filas.length,
+      /* Cuántas marcas se han descartado por no ser de este día. Se dice, no se
+         borra en silencio. */
+      deOtroDia: limpias.fuera,
       resumen: Object.keys(porVendedora).map((v) => ({
         vendedora: v,
         toques: porVendedora[v].length,
