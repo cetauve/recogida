@@ -95,7 +95,18 @@ function sinArrastrar(turnos, dia, toques) {
       if (!Number.isFinite(c) || c < t0 - ANTES_DEL_DIA_OK) continue;
       if (primero == null || c < primero) primero = c;
     }
-    return { ...t, empezo: new Date(primero != null ? primero : t0),
+    const nuevoEmpezo = primero != null ? primero : t0;
+    /* Y SI EL `acabo` QUE TRAÍA ES ANTERIOR AL NUEVO EMPIEZO, no vale.
+     *
+     * 19 ago 2026: el turno arrastrado de Heikelin empezaba el 17 y "acababa" a
+     * las 11:53 del 19. Al recortar el empiezo a su primera marca de hoy —13:42—
+     * quedaba 13:42–11:53: un turno que acaba antes de empezar. Las horas salían
+     * 0,0 y el beneficio por hora, 27.735 €. Se tira ese `acabo` y que lo cierre
+     * la regla de siempre: en su última prenda marcada. */
+    const acaboViejo = new Date(t.acabo).getTime();
+    const acaboVale = t.acabo && Number.isFinite(acaboViejo) && acaboViejo > nuevoEmpezo;
+    return { ...t, empezo: new Date(nuevoEmpezo),
+             acabo: acaboVale ? t.acabo : null,
              arrastrado: true, empezoQueVenia: t.empezo };
   });
 }
