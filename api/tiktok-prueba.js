@@ -52,6 +52,22 @@ module.exports = puerta(async (req, res) => {
   /* ?crudo=1 devuelve UN pedido tal cual lo manda TikTok, sin tocar. Es para
    * saber que campos hay de verdad antes de escribir codigo que los use: la
    * documentacion dice una cosa y la respuesta a veces dice otra. */
+  if (q.crudo !== undefined && aTexto(q.crudo) === 'productos') {
+    /* Los productos de la tienda, para saber si el identificador de producto
+     * es estable entre directos o si cambia cada dia. De eso depende que el
+     * nombre de la cuenta se pueda poner en config.json una vez y ya. */
+    const r = await T.comoCuenta(cuenta, {
+      camino: '/product/202309/products/search', metodo: 'POST',
+      params: { page_size: 50 }, cuerpo: {}
+    });
+    const lista = ((r && r.data && r.data.products) || []).map((p) => ({
+      id: aTexto(p.id), titulo: aTexto(p.title), estado: aTexto(p.status),
+      creado: p.create_time || null, tocado: p.update_time || null,
+      skus: (p.skus || []).length
+    }));
+    return res.status(200).json({ ok: r && r.code === 0, cuantos: lista.length, productos: lista });
+  }
+
   if (q.crudo !== undefined) {
     const r = await T.comoCuenta(cuenta, {
       camino: '/order/202309/orders/search', metodo: 'POST',
