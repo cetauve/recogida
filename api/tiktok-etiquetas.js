@@ -101,8 +101,17 @@ module.exports = puerta(async (req, res) => {
   const enGrupo = new Map();
   for (const g of grupos) for (const p of g.pedidos) enGrupo.set(p, g.id);
 
-  /* El paquete es la unidad de etiqueta. Viene en cada linea del pedido, asi
-   * que no hace falta preguntar por el aparte. */
+  /* EL PAQUETE DE VERDAD ES EL DE DESPUES DE COMBINAR.
+   *
+   * Hoy, antes de combinar, cada pedido es su propio bulto de una prenda: si
+   * se calculan las tandas ahora, salen 324 paquetes de 1 prenda y las tandas
+   * no significan nada. El bulto que se va a etiquetar es el que resulta de
+   * juntar los pedidos de un mismo comprador, asi que la clave es el grupo
+   * combinable cuando lo hay, y el package_id cuando no.
+   *
+   * Los grupos traen tambien pedidos que no estan en nuestra lista (de otros
+   * dias o ya enviados). Se ignoran: aqui solo cuentan los que se van a
+   * etiquetar hoy. */
   const paquetes = new Map();
   const sueltos = [];
   for (const o of pedidos) {
@@ -112,15 +121,17 @@ module.exports = puerta(async (req, res) => {
                       aTexto(((o.packages || [])[0] || {}).id);
     const nombre = aTexto((o.recipient_address || {}).name);
 
-    if (!idPaquete) { sueltos.push({ pedido: aTexto(o.id), comprador: nombre }); continue; }
+    const grupo = enGrupo.get(aTexto(o.id)) || null;
+    const clave = grupo || idPaquete;
+    if (!clave) { sueltos.push({ pedido: aTexto(o.id), comprador: nombre }); continue; }
 
-    if (!paquetes.has(idPaquete)) {
-      paquetes.set(idPaquete, {
+    if (!paquetes.has(clave)) {
+      paquetes.set(clave, {
         paquete: idPaquete, comprador: nombre, pedidos: [], prendas: 0,
-        numeros: [], aCombinar: null, yaTieneEtiqueta: false
+        numeros: [], aCombinar: grupo, yaTieneEtiqueta: false
       });
     }
-    const p = paquetes.get(idPaquete);
+    const p = paquetes.get(clave);
     p.pedidos.push(aTexto(o.id));
     p.prendas += vivas.length;
     for (const l of vivas) {
@@ -128,7 +139,6 @@ module.exports = puerta(async (req, res) => {
       if (Number.isFinite(n)) p.numeros.push(n);
       if (aTexto(l.tracking_number)) p.yaTieneEtiqueta = true;
     }
-    if (enGrupo.has(aTexto(o.id))) p.aCombinar = enGrupo.get(aTexto(o.id));
   }
 
   /* Las tandas, con el mismo criterio de siempre: de menos prendas a mas. */
@@ -161,10 +171,17 @@ module.exports = puerta(async (req, res) => {
     cuenta,
     resumen: {
       pedidos: pedidos.length, totalQueDiceTikTok: total, listaCompleta: !corto,
+      /* Paquetes DESPUES de combinar, que son los que se van a etiquetar. */
       paquetes: lista.length,
       prendas: lista.reduce((a, p) => a + p.prendas, 0),
       gruposACombinar: grupos.length,
       pedidosDentroDeEsosGrupos: grupos.reduce((a, g) => a + g.pedidos.length, 0),
+      /* De esos grupos, los que de verdad tocan a la lista de hoy. El resto
+       * son de otros dias o ya enviados y no se van a tocar. */
+      gruposQueTocanAHoy: lista.filter((p) => p.aCombinar).length,
+      pedidosQueSeJuntan: lista.filter((p) => p.aCombinar).reduce((a, p) => a + p.pedidos.length, 0),
+      /* Lo que se ahorra: cada pedido que se junta con otro es un porte menos. */
+      portesQueSeAhorran: lista.filter((p) => p.aCombinar).reduce((a, p) => a + p.pedidos.length - 1, 0),
       paquetesQueYaTienenEtiqueta: lista.filter((p) => p.yaTieneEtiqueta).length,
       pedidosSinPaquete: sueltos.length,
       paquetesFueraDeTanda: sinTanda.length
@@ -173,6 +190,7 @@ module.exports = puerta(async (req, res) => {
      * antes de apretar, no despues. */
     llamadasQueHaria: {
       'packages/combine': grupos.length,
+      'packages/combine (solo los de hoy)': lista.filter((p) => p.aCombinar).length,
       'packages/{id}/ship': lista.length,
       'packages/{id}/shipping_documents': lista.length
     },
