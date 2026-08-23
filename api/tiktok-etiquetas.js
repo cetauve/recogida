@@ -1,16 +1,19 @@
-/* /api/tiktok-etiquetas — el paso 3, de momento SOLO MIRANDO.
+/* /api/tiktok-etiquetas — el paso 3.
  *
- * Esta puerta no crea ni una etiqueta. Enseña exactamente lo que se haria:
- * que se combinaria con que, cuantos paquetes saldrian, cuantas prendas lleva
- * cada uno y en que tanda cae. Sirve para comprobar el paso 3 entero sin
- * gastar un solo porte.
+ *   GET  ?d=CODIGO                      el parte EN SECO: que se haria
+ *   GET  ?d=CODIGO&paquete=<id>         un paquete por dentro, para mirar
+ *   GET  ?d=CODIGO&pdf=<id>             la etiqueta en PDF (por aqui, no
+ *                                       directa, porque la de TikTok caduca y
+ *                                       no deja que la lea otra pagina)
+ *   POST { accion:'etiquetar', paquetes:[ids], hacer:true }   de verdad
  *
- * Se hace asi porque CREAR LA ETIQUETA NO TIENE VUELTA ATRAS: cierra el
- * paquete y compra el envio. Todo lo demas de la API se puede repetir; esto
- * no. Asi que primero se mira, y el dia que se apriete de verdad sera con otra
- * puerta y empezando por un paquete, no por trescientos.
+ * TODO VIVE EN UNA SOLA PUERTA A PROPOSITO: el plan gratis de Vercel solo deja
+ * doce funciones y estamos en doce. Cada rama nueva aqui es una funcion que no
+ * hay que crear.
  *
- *   GET ?d=CODIGO&cuenta=billysvlc[&cortes=1-1,2-3,4-6,7-10,11-999]
+ * CREAR LA ETIQUETA NO TIENE VUELTA ATRAS: cierra el paquete y compra el
+ * envio. Por eso el POST no hace nada sin `hacer: true` y sin una lista
+ * explicita de paquetes: no existe el "etiquetalo todo" por accidente.
  *
  * DE DONDE SALE CADA COSA:
  *   los pedidos      -> /order/202309/orders/search   (AWAITING_SHIPMENT)
@@ -21,7 +24,7 @@
  * por numero de prendas— pero ademas es como esta organizado el trabajo en la
  * app del almacen, asi que aqui se respetan tal cual.
  */
-const { puerta, puedeLeer, noAutorizado, aTexto, aEntero } = require('./_lib');
+const { puerta, puedeLeer, puedeEscribir, noAutorizado, aTexto, aEntero, cuerpo } = require('./_lib');
 const T = require('./_tiktok');
 
 const PEDIDOS = '/order/202309/orders/search';
@@ -84,11 +87,93 @@ async function todosLosCombinables(cuenta, t0) {
 }
 
 module.exports = puerta(async (req, res) => {
+  const q = req.query || {};
+  const cuenta0 = (aTexto(q.cuenta).trim() || 'billysvlc').toLowerCase();
+
+  /* ---------- crear las etiquetas DE VERDAD ---------- */
+  if (req.method === 'POST') {
+    if (!puedeEscribir(req)) return noAutorizado(res, 'escribir');
+    const b = cuerpo(req);
+    const cuenta = (aTexto(b.cuenta).trim() || cuenta0);
+    if (aTexto(b.accion) !== 'etiquetar') {
+      return res.status(400).json({ ok: false, error: 'accion', detalle: "Solo entiendo { accion: 'etiquetar' }" });
+    }
+    const ids = Array.isArray(b.paquetes) ? b.paquetes.map(aTexto).filter(Boolean) : [];
+    if (!ids.length) {
+      return res.status(400).json({ ok: false, error: 'sin-paquetes',
+        detalle: 'Dime QUE paquetes. Aqui no hay "todos": etiquetar no tiene vuelta atras.' });
+    }
+    if (b.hacer !== true) {
+      return res.status(400).json({ ok: false, error: 'sin-confirmar',
+        detalle: 'Falta hacer:true. Son ' + ids.length + ' etiquetas y no se pueden deshacer.' });
+    }
+
+    const t0 = Date.now();
+    const hechos = [];
+    for (const id of ids) {
+      if (Date.now() - t0 > 40000) { hechos.push({ paquete: id, ok: false, mensaje: 'no ha dado tiempo, vuelve a pedirlo' }); continue; }
+      const paso = { paquete: id };
+      try {
+        /* 1. Enviar: esto es lo que crea la etiqueta y cierra el paquete. El
+         *    cuerpo va tal cual lo mande quien llama (vacio por defecto), para
+         *    no inventarse un metodo de entrega que nadie ha pedido. */
+        const r = await T.comoCuenta(cuenta, {
+          camino: ENVIAR(id), metodo: 'POST',
+          params: { idempotency_key: id },
+          cuerpo: b.envio || {}
+        });
+        paso.enviado = !!(r && r.code === 0);
+        paso.code = r && r.code;
+        paso.mensaje = aTexto(r && r.message).slice(0, 200);
+
+        /* 2. La etiqueta. Se pide aunque el envio se queje: si el paquete ya
+         *    estaba enviado de antes, el PDF sigue existiendo. */
+        const doc = await documentoDe(cuenta, id, aTexto(b.tamano));
+        paso.ok = doc.ok;
+        paso.pdf = doc.url || null;
+        if (!doc.ok && doc.mensaje) paso.mensajePdf = doc.mensaje;
+      } catch (e) {
+        paso.ok = false;
+        paso.mensaje = String((e && e.message) || e).slice(0, 200);
+      }
+      hechos.push(paso);
+    }
+
+    const bien = hechos.filter((x) => x.ok).length;
+    return res.status(200).json({
+      ok: bien === hechos.length, cuenta,
+      pedidas: ids.length, conEtiqueta: bien,
+      /* Las etiquetas en el MISMO orden en que se pidieron: quien llama ya las
+       * mando ordenadas por tanda, asi que el taco sale ordenado. */
+      etiquetas: hechos, ms: Date.now() - t0
+    });
+  }
+
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'metodo' });
   if (!puedeLeer(req)) return noAutorizado(res, 'leer');
 
-  const q = req.query || {};
-  const cuenta = (aTexto(q.cuenta).trim() || 'billysvlc').toLowerCase();
+  /* ---------- un paquete por dentro ---------- */
+  if (aTexto(q.paquete)) {
+    const r = await T.comoCuenta(cuenta0, { camino: DETALLE(aTexto(q.paquete)) });
+    return res.status(200).json({ ok: r && r.code === 0, code: r && r.code, mensaje: r && r.message, data: r && r.data });
+  }
+
+  /* ---------- el PDF de una etiqueta, servido desde aqui ----------
+   * La direccion que da TikTok caduca y no se puede leer desde otra pagina
+   * (el navegador lo corta). Pasandola por aqui, la pagina de imprimir puede
+   * juntar las etiquetas en un solo PDF sin pelearse con nadie. */
+  if (aTexto(q.pdf)) {
+    const doc = await documentoDe(cuenta0, aTexto(q.pdf), aTexto(q.tamano));
+    if (!doc.ok || !doc.url) return res.status(502).json({ ok: false, error: 'sin-documento', detalle: doc.mensaje || 'TikTok no ha dado la etiqueta' });
+    const f = await fetch(doc.url);
+    if (!f.ok) return res.status(502).json({ ok: false, error: 'sin-pdf', detalle: 'la direccion de TikTok ha respondido ' + f.status });
+    const bytes = Buffer.from(await f.arrayBuffer());
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="etiqueta-' + aTexto(q.pdf) + '.pdf"');
+    return res.status(200).end(bytes);
+  }
+
+  const cuenta = cuenta0;
   const cortes = leerCortes(q.cortes);
   const t0 = Date.now();
 
