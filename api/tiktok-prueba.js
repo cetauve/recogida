@@ -49,6 +49,19 @@ module.exports = puerta(async (req, res) => {
   const hasta = Math.floor(Date.now() / 1000);
   const desde = hasta - 36 * 3600;
 
+  /* ?crudo=1 devuelve UN pedido tal cual lo manda TikTok, sin tocar. Es para
+   * saber que campos hay de verdad antes de escribir codigo que los use: la
+   * documentacion dice una cosa y la respuesta a veces dice otra. */
+  if (q.crudo !== undefined) {
+    const r = await T.comoCuenta(cuenta, {
+      camino: '/order/202309/orders/search', metodo: 'POST',
+      params: { page_size: 1, sort_field: 'create_time', sort_order: 'DESC' },
+      cuerpo: { order_status: 'AWAITING_SHIPMENT' }
+    });
+    const uno = ((r && r.data && r.data.orders) || [])[0] || null;
+    return res.status(200).json({ ok: r && r.code === 0, code: r && r.code, mensaje: r && r.message, pedido: uno });
+  }
+
   const partes = [];
 
   partes.push(await probar(cuenta, 'las tiendas autorizadas',
