@@ -86,6 +86,22 @@ async function todosLosCombinables(cuenta, t0) {
   return grupos;
 }
 
+const DETALLE = (id) => '/fulfillment/202309/packages/' + encodeURIComponent(id);
+const ENVIAR = (id) => '/fulfillment/202309/packages/' + encodeURIComponent(id) + '/ship';
+const DOCUMENTO = (id) => '/fulfillment/202309/packages/' + encodeURIComponent(id) + '/shipping_documents';
+const COMBINAR = '/fulfillment/202309/packages/combine';
+
+/* La etiqueta de un paquete, ya creada. Devuelve la direccion del PDF. */
+async function documentoDe(cuenta, paquete, tamano) {
+  const r = await T.comoCuenta(cuenta, {
+    camino: DOCUMENTO(paquete),
+    params: { document_type: 'SHIPPING_LABEL', document_size: tamano || 'A6' }
+  });
+  if (!r || r.code !== 0) return { ok: false, mensaje: aTexto(r && r.message), code: r && r.code };
+  const d = r.data || {};
+  return { ok: true, url: aTexto(d.doc_url || d.url), tipo: aTexto(d.doc_type) };
+}
+
 module.exports = puerta(async (req, res) => {
   const q = req.query || {};
   const cuenta0 = (aTexto(q.cuenta).trim() || 'billysvlc').toLowerCase();
