@@ -52,6 +52,35 @@ module.exports = puerta(async (req, res) => {
   /* ?crudo=1 devuelve UN pedido tal cual lo manda TikTok, sin tocar. Es para
    * saber que campos hay de verdad antes de escribir codigo que los use: la
    * documentacion dice una cosa y la respuesta a veces dice otra. */
+  /* LOS DIRECTOS DE LA TIENDA, tal cual. Es el unico sitio donde TikTok puede
+   * decir de que cuenta es cada venta: el pedido no lo dice, la API de
+   * afiliacion tampoco. Si aqui viene el nombre del creador, el rotulo de la
+   * cuenta se resuelve solo y nadie tiene que escribir nada al crear el
+   * articulo de subasta. */
+  if (aTexto(q.crudo) === 'directos') {
+    const hoy = new Date();
+    const dia = (n) => new Date(hoy.getTime() - n * 86400000).toISOString().slice(0, 10);
+    const r = await T.comoCuenta(cuenta, {
+      camino: '/analytics/202509/shop_lives/performance',
+      params: {
+        start_date_ge: aTexto(q.desde) || dia(7),
+        end_date_lt: aTexto(q.hasta) || dia(-1),
+        page_size: 50
+      }
+    });
+    return res.status(200).json({ ok: r && r.code === 0, code: r && r.code, mensaje: r && r.message, data: r && r.data });
+  }
+
+  /* Los productos vendidos en UN directo. La otra mitad del puente:
+   * directo -> productos, y el directo si sabe de quien es. */
+  if (aTexto(q.crudo) === 'directo') {
+    const r = await T.comoCuenta(cuenta, {
+      camino: '/analytics/202512/shop/' + encodeURIComponent(aTexto(q.live)) + '/products_performance',
+      params: { page_size: 50 }
+    });
+    return res.status(200).json({ ok: r && r.code === 0, code: r && r.code, mensaje: r && r.message, data: r && r.data });
+  }
+
   if (q.crudo !== undefined && aTexto(q.crudo) === 'productos') {
     /* Los productos de la tienda, para saber si el identificador de producto
      * es estable entre directos o si cambia cada dia. De eso depende que el
