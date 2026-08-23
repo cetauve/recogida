@@ -52,6 +52,26 @@ module.exports = puerta(async (req, res) => {
   /* ?crudo=1 devuelve UN pedido tal cual lo manda TikTok, sin tocar. Es para
    * saber que campos hay de verdad antes de escribir codigo que los use: la
    * documentacion dice una cosa y la respuesta a veces dice otra. */
+  /* LOS PAQUETES QUE TIKTOK DEJA COMBINAR. Solo mira, no combina nada.
+   * Hace falta para el paso 3: es lo que hoy hace el dialogo de "combinar
+   * pedidos", y combinar mal cuesta dos portes por comprador. */
+  if (aTexto(q.crudo) === 'combinables') {
+    const r = await T.comoCuenta(cuenta, {
+      camino: '/fulfillment/202309/combinable_packages/search',
+      params: { page_size: 20 }
+    });
+    return res.status(200).json({ ok: r && r.code === 0, code: r && r.code, mensaje: r && r.message, data: r && r.data });
+  }
+
+  /* Un paquete por dentro: de aqui sale si el envio lo pone la plataforma o
+   * nosotros, y que hace falta para pedir la etiqueta. */
+  if (aTexto(q.crudo) === 'paquete') {
+    const r = await T.comoCuenta(cuenta, {
+      camino: '/fulfillment/202309/packages/' + encodeURIComponent(aTexto(q.id))
+    });
+    return res.status(200).json({ ok: r && r.code === 0, code: r && r.code, mensaje: r && r.message, data: r && r.data });
+  }
+
   /* LOS DIRECTOS DE LA TIENDA, tal cual. Es el unico sitio donde TikTok puede
    * decir de que cuenta es cada venta: el pedido no lo dice, la API de
    * afiliacion tampoco. Si aqui viene el nombre del creador, el rotulo de la
