@@ -50,23 +50,46 @@ function leerCortes(texto) {
  * contara, un paquete de 6 con 4 canceladas caeria en la tanda que no es. */
 const parada = (estado) => /CANCEL|RETURN|REFUND/i.test(aTexto(estado));
 
+/* ===========================================================================
+ * LA TANDA NO PUEDE CAMBIAR MIENTRAS SE IMPRIME
+ * ===========================================================================
+ * EL FALLO DEL 23 AGO 2026, EN DIRECTO. La tanda 1 tenia 20 paquetes. Se
+ * enviaron 19 y al abrir el PDF salio UNA hoja. Las otras 19 etiquetas
+ * existian —creadas y pagadas—, pero esta funcion solo miraba
+ * AWAITING_SHIPMENT y un paquete enviado SALE de esa lista. O sea: cuanto
+ * mejor iba la impresion, menos etiquetas devolvia el PDF.
+ *
+ * Por eso se leen los DOS estados. Un pedido de hoy cuenta para su tanda esté
+ * pendiente o ya enviado; lo unico que cambia es si hay que enviarlo o solo
+ * recoger su etiqueta. Asi la tanda 3 es la tanda 3 antes de imprimir, a mitad
+ * y despues, que es lo que espera quien tiene las tarjetas en la mano.
+ * ========================================================================= */
+const ESTADOS = ['AWAITING_SHIPMENT', 'AWAITING_COLLECTION'];
+
 async function todosLosPedidos(cuenta, t0) {
   const porId = new Map();
-  let token = '', total = null;
-  for (let vuelta = 0; vuelta < 40; vuelta++) {
-    const params = { page_size: POR_PAGINA, sort_field: 'create_time', sort_order: 'ASC' };
-    if (token) params.page_token = token;
-    const r = await T.comoCuenta(cuenta, {
-      camino: PEDIDOS, metodo: 'POST', params, cuerpo: { order_status: 'AWAITING_SHIPMENT' }
-    });
-    if (!r || r.code !== 0) throw new Error('pedidos: ' + aTexto(r && r.message));
-    const d = r.data || {};
-    for (const o of (d.orders || [])) if (o && o.id) porId.set(aTexto(o.id), o);
-    if (total == null && d.total_count != null) total = Number(d.total_count);
-    token = aTexto(d.next_page_token);
-    if (!token || Date.now() - t0 > LIMITE_MS) break;
+  let total = null, corto = false;
+  for (const estado of ESTADOS) {
+    let token = '';
+    for (let vuelta = 0; vuelta < 40; vuelta++) {
+      const params = { page_size: POR_PAGINA, sort_field: 'create_time', sort_order: 'ASC' };
+      if (token) params.page_token = token;
+      const r = await T.comoCuenta(cuenta, {
+        camino: PEDIDOS, metodo: 'POST', params, cuerpo: { order_status: estado }
+      });
+      if (!r || r.code !== 0) throw new Error('pedidos: ' + aTexto(r && r.message));
+      const d = r.data || {};
+      for (const o of (d.orders || [])) if (o && o.id) porId.set(aTexto(o.id), o);
+      /* El total que se ensena es el de lo que falta por enviar: es el numero
+       * que se compara con el "Pendiente de envio (68)" de TikTok. */
+      if (estado === 'AWAITING_SHIPMENT' && total == null && d.total_count != null) total = Number(d.total_count);
+      token = aTexto(d.next_page_token);
+      if (!token || Date.now() - t0 > LIMITE_MS) break;
+    }
+    if (token) corto = true;
+    if (Date.now() - t0 > LIMITE_MS) { corto = true; break; }
   }
-  return { pedidos: [...porId.values()], total, corto: !!token };
+  return { pedidos: [...porId.values()], total, corto };
 }
 
 async function todosLosCombinables(cuenta, t0) {
@@ -170,25 +193,62 @@ async function documentoDe(cuenta, paquete, tamano, insistir) {
   return ultimo || { ok: false, mensaje: 'sin respuesta' };
 }
 
+/* VARIAS COSAS A LA VEZ, PERO NO TODAS.
+ *
+ * Los paquetes de una tanda no dependen unos de otros: juntar el bulto de un
+ * comprador no toca el de otro. Hacerlos de uno en uno era lo que convertia 73
+ * paquetes en doce minutos. De ocho en ocho son segundos, y ocho es un numero
+ * con el que TikTok no se queja de que le apretemos.
+ *
+ * El resultado sale EN EL ORDEN QUE ENTRO, no en el que fue acabando: de ese
+ * orden depende que el taco de etiquetas cuadre con las tarjetas. */
+async function enParalelo(cosas, cuantos, hacer) {
+  const fuera = new Array(cosas.length);
+  let siguiente = 0;
+  const turno = async () => {
+    for (;;) {
+      const i = siguiente++;
+      if (i >= cosas.length) return;
+      fuera[i] = await hacer(cosas[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(cuantos, cosas.length) }, turno));
+  return fuera;
+}
+
+const A_LA_VEZ = 8;
+
 /* Varias etiquetas en UN solo PDF, en el orden que se pidan.
  *
  * Es lo que hace que una tanda sea una impresion y no catorce. Y de paso el
  * orden lo ponemos nosotros: TikTok no sabe ordenar por numero de prendas, que
- * es justo el motivo por el que existen las tandas. */
+ * es justo el motivo por el que existen las tandas.
+ *
+ * Se piden todas a la vez y se pegan despues, en orden. Bajarlas de una en una
+ * no aportaba nada: son descargas independientes. */
 async function juntarPdf(cuenta, paquetes, tamano) {
-  const fuera = await PDFDocument.create();
-  const fallos = [];
-  for (const id of paquetes) {
+  const trozos = await enParalelo(paquetes, A_LA_VEZ, async (id) => {
     try {
       const doc = await documentoDe(cuenta, id, tamano, false);
-      if (!doc.ok || !doc.url) { fallos.push({ paquete: id, mensaje: doc.mensaje }); continue; }
+      if (!doc.ok || !doc.url) return { id, error: doc.mensaje };
       const f = await fetch(doc.url);
-      if (!f.ok) { fallos.push({ paquete: id, mensaje: 'la direccion de TikTok respondio ' + f.status }); continue; }
-      const dentro = await PDFDocument.load(await f.arrayBuffer());
+      if (!f.ok) return { id, error: 'la direccion de TikTok respondio ' + f.status };
+      return { id, bytes: await f.arrayBuffer() };
+    } catch (e) {
+      return { id, error: String((e && e.message) || e).slice(0, 160) };
+    }
+  });
+
+  const fuera = await PDFDocument.create();
+  const fallos = [];
+  for (const t of trozos) {
+    if (!t || t.error || !t.bytes) { fallos.push({ paquete: t && t.id, mensaje: (t && t.error) || 'sin respuesta' }); continue; }
+    try {
+      const dentro = await PDFDocument.load(t.bytes);
       const hojas = await fuera.copyPages(dentro, dentro.getPageIndices());
       for (const h of hojas) fuera.addPage(h);
     } catch (e) {
-      fallos.push({ paquete: id, mensaje: String((e && e.message) || e).slice(0, 160) });
+      fallos.push({ paquete: t.id, mensaje: String((e && e.message) || e).slice(0, 160) });
     }
   }
   return { pdf: Buffer.from(await fuera.save()), hojas: fuera.getPageCount(), fallos };
@@ -225,16 +285,32 @@ module.exports = puerta(async (req, res) => {
         detalle: 'Falta hacer:true. Son ' + ids.length + ' etiquetas y no se pueden deshacer.' });
     }
 
+    /* ===========================================================================
+     * ENVIAR NO ES IMPRIMIR — 23 ago 2026
+     * ===========================================================================
+     * La primera version hacia, por cada paquete: juntar, enviar y ESPERAR a
+     * que TikTok dejara pedir la etiqueta (unos 6 s), uno detras de otro. Con
+     * 73 paquetes eran doce minutos mirando una barra.
+     *
+     * Los seis segundos no se pueden quitar, pero SI se pueden pasar una sola
+     * vez en lugar de setenta y tres: se envia todo primero y las etiquetas se
+     * piden despues, cuando ya hace rato que TikTok se ha enterado. Para
+     * entonces no hay nada que esperar.
+     *
+     * Asi que aqui NO se pide ninguna etiqueta. Aqui se junta y se envia, de
+     * ocho en ocho. Las etiquetas salen del taco (?tacos=), que las baja todas
+     * a la vez y las pega en el orden de las tarjetas. Es lo que hacia el
+     * Centro de vendedores: seleccionar, imprimir, un PDF.
+     * ========================================================================= */
     const t0 = Date.now();
-    const hechos = [];
-    for (const it of ids) {
-      if (Date.now() - t0 > 40000) {
-        /* Vercel corta a los 60 s. Lo que no ha dado tiempo se dice por su
+    const conEtiqueta = b.conEtiqueta === true;   // el modo viejo, solo para pruebas
+    const hechos = await enParalelo(ids, A_LA_VEZ, async (it) => {
+      if (Date.now() - t0 > 45000) {
+        /* Vercel corta al minuto. Lo que no ha dado tiempo se dice por su
          * nombre para que quien llama vuelva a pedir SOLO eso, en vez de
-         * repetir la tanda entera y arriesgarse a etiquetar dos veces. */
-        hechos.push({ paquete: it.paquete, grupo: it.grupo, ok: false, aTiempo: false,
-                      mensaje: 'no ha dado tiempo, vuelve a pedirlo' });
-        continue;
+         * repetir la tanda entera. */
+        return { paquete: it.paquete, grupo: it.grupo, ok: false, aTiempo: false,
+                 mensaje: 'no ha dado tiempo, vuelve a pedirlo' };
       }
       let id = it.paquete;
       const paso = { paquete: id, grupo: it.grupo || null };
@@ -251,8 +327,7 @@ module.exports = puerta(async (req, res) => {
             paso.mensaje = 'no he podido juntar los ' + it.pedidos.length + ' pedidos de este ' +
               'comprador, asi que NO lo envio: ' + ((c.intentos[c.intentos.length - 1] || {}).mensaje || '');
             paso.intentos = c.intentos;
-            hechos.push(paso);
-            continue;
+            return paso;
           }
           if (c.paquete) { id = c.paquete; paso.paquete = id; }
         }
@@ -268,26 +343,34 @@ module.exports = puerta(async (req, res) => {
         paso.enviado = !!(r && r.code === 0);
         paso.code = r && r.code;
         paso.mensaje = aTexto(r && r.message).slice(0, 200);
+        /* UN PAQUETE QUE YA ESTABA ENVIADO NO ES UN FALLO. Pasa al repetir una
+         * tanda que se quedo a medias, y hay que decir que ese esta bien: si se
+         * contara como fallo, repetir nunca acabaria de cuadrar. */
+        paso.ok = paso.enviado || /already|shipped|has been/i.test(paso.mensaje);
 
-        /* 2. La etiqueta. Se pide aunque el envio se queje: si el paquete ya
-         *    estaba enviado de antes, el PDF sigue existiendo. */
-        const doc = await documentoDe(cuenta, id, aTexto(b.tamano), true);
-        paso.ok = doc.ok;
-        paso.pdf = doc.url || null;
-        if (!doc.ok && doc.mensaje) paso.mensajePdf = doc.mensaje;
+        /* 2. La etiqueta NO se pide aqui. Se pide al armar el taco, cuando
+         *    TikTok ya lleva rato enterado y no hay que esperar a nadie. Este
+         *    modo solo existe para las pruebas y para pedir una suelta. */
+        if (conEtiqueta) {
+          const doc = await documentoDe(cuenta, id, aTexto(b.tamano), true);
+          paso.ok = doc.ok;
+          paso.pdf = doc.url || null;
+          if (!doc.ok && doc.mensaje) paso.mensajePdf = doc.mensaje;
+        }
       } catch (e) {
         paso.ok = false;
         paso.mensaje = String((e && e.message) || e).slice(0, 200);
       }
-      hechos.push(paso);
-    }
+      return paso;
+    });
 
-    const bien = hechos.filter((x) => x.ok).length;
+    const bien = hechos.filter((x) => x && x.ok).length;
     return res.status(200).json({
       ok: bien === hechos.length, cuenta,
-      pedidas: ids.length, conEtiqueta: bien,
-      /* Las etiquetas en el MISMO orden en que se pidieron: quien llama ya las
-       * mando ordenadas por tanda, asi que el taco sale ordenado. */
+      pedidas: ids.length, conEtiqueta: bien, enviados: bien,
+      /* Los paquetes en el MISMO orden en que se pidieron —enParalelo lo
+       * respeta— y con el id de DESPUES de juntar, que es el que hay que pedirle
+       * al taco. */
       etiquetas: hechos, ms: Date.now() - t0
     });
   }
@@ -308,6 +391,27 @@ module.exports = puerta(async (req, res) => {
     }
     const c = await combinar(cuenta0, aTexto(q.combinar), suyos);
     return res.status(200).json(c);
+  }
+
+  /* ---------- EL TACO: una lista de paquetes, un PDF ----------
+   * ?tacos=id1,id2,id3 pega esas etiquetas en ESE orden y ya esta. No
+   * recalcula tandas ni vuelve a leer pedidos: se le dice que paquetes y los
+   * junta. Es la salida de emergencia del fallo del 23 ago —cuando la lista de
+   * pendientes se vacia segun se imprime, cualquier cosa que recalcule miente—
+   * y de paso es lo mas rapido que hay: las baja todas a la vez. */
+  if (aTexto(q.tacos)) {
+    const cuales = aTexto(q.tacos).split(',').map((x) => x.trim()).filter(Boolean);
+    if (!cuales.length) return res.status(400).json({ ok: false, error: 'sin-paquetes' });
+    const junto = await juntarPdf(cuenta0, cuales, aTexto(q.tamano));
+    if (!junto.hojas) {
+      return res.status(502).json({ ok: false, error: 'sin-etiquetas',
+        detalle: 'Ninguno de los ' + cuales.length + ' paquetes tiene etiqueta.',
+        fallos: junto.fallos.slice(0, 5) });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="taco.pdf"');
+    if (junto.fallos.length) res.setHeader('X-Billys-Fallos', String(junto.fallos.length));
+    return res.status(200).end(junto.pdf);
   }
 
   /* ---------- un paquete por dentro ---------- */
@@ -377,6 +481,11 @@ module.exports = puerta(async (req, res) => {
     const p = paquetes.get(clave);
     p.pedidos.push(aTexto(o.id));
     p.prendas += vivas.length;
+    /* YA ENVIADO = YA TIENE ETIQUETA, y por tanto no hay que juntarlo ni
+     * enviarlo otra vez: solo recoger su PDF para el taco. Se mira el estado
+     * del pedido y tambien el numero de seguimiento, porque TikTok tarda unos
+     * segundos en cambiar el estado y el seguimiento aparece antes. */
+    if (/COLLECTION|TRANSIT|DELIVER|COMPLET/i.test(aTexto(o.status))) p.yaTieneEtiqueta = true;
     for (const l of vivas) {
       const n = parseInt(aTexto(l.seller_sku).replace(/[^\d]/g, ''), 10);
       if (Number.isFinite(n)) p.numeros.push(n);
@@ -427,9 +536,13 @@ module.exports = puerta(async (req, res) => {
       paquetes: dentro.length,
       prendas: dentro.reduce((a, p) => a + p.prendas, 0),
       /* El orden en que saldrian las etiquetas del PDF. */
+      /* Los que ya estan enviados no hay que volver a enviarlos: cuentan para
+       * la tanda y para el taco, pero el paso 3 los salta. */
+      porEnviar: dentro.filter((p) => !p.yaTieneEtiqueta).length,
       orden: dentro.map((p) => ({ paquete: p.paquete, comprador: p.comprador,
                                   prendas: p.prendas, del: p.numeros[0], al: p.numeros[p.numeros.length - 1],
                                   cierre: p.cierre, aCombinar: p.aCombinar,
+                                  yaTieneEtiqueta: p.yaTieneEtiqueta,
                                   /* Los pedidos van con el bulto: hasta que no se
                                    * juntan, el paquete de verdad no existe, y quien
                                    * llame al POST necesita saber que junta. */
