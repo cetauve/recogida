@@ -92,6 +92,53 @@ const ENVIAR = (id) => '/fulfillment/202309/packages/' + encodeURIComponent(id) 
 const DOCUMENTO = (id) => '/fulfillment/202309/packages/' + encodeURIComponent(id) + '/shipping_documents';
 const COMBINAR = '/fulfillment/202309/packages/combine';
 
+/* ===========================================================================
+ * JUNTAR LOS PEDIDOS DE UN COMPRADOR EN UN SOLO BULTO
+ * ===========================================================================
+ * Esto es lo que en el Centro de vendedores hacia el dialogo de "combinar
+ * pedidos", y es la mitad del paso 3 que faltaba. Sin esto, cada pedido sale
+ * por su cuenta: quien ha ganado seis pujas recibe seis paquetes y le pagas
+ * seis portes. El 23 ago 2026 eran 250 portes de mas en un solo dia.
+ *
+ * VA SIEMPRE ANTES DE ENVIAR, Y SI FALLA NO SE ENVIA. Enviar sin haber juntado
+ * es exactamente el error caro, asi que un fallo aqui para ese paquete entero.
+ *
+ * La documentacion no deja claro como se manda el cuerpo, asi que se prueban
+ * las formas que tienen sentido y se guarda cual ha entrado. Solo se pasa a la
+ * siguiente si la queja es de FORMA (parametro invalido o falta algo): si
+ * TikTok se queja de otra cosa, cambiar de forma no arregla nada y solo
+ * esconde el motivo.
+ * ========================================================================= */
+async function combinar(cuenta, grupo, pedidos) {
+  const formas = [
+    { como: 'combinable_packages', cuerpo: { combinable_packages: [{ id: grupo, order_ids: pedidos }] } },
+    { como: 'combinable_package_id', cuerpo: { combinable_package_id: grupo, order_ids: pedidos } },
+    { como: 'id+order_ids', cuerpo: { id: grupo, order_ids: pedidos } },
+    { como: 'order_ids', cuerpo: { order_ids: pedidos } }
+  ];
+  const intentos = [];
+  for (const f of formas) {
+    let r = null;
+    try {
+      r = await T.comoCuenta(cuenta, { camino: COMBINAR, metodo: 'POST', cuerpo: f.cuerpo });
+    } catch (e) {
+      intentos.push({ como: f.como, mensaje: String((e && e.message) || e).slice(0, 160) });
+      continue;
+    }
+    const mensaje = aTexto(r && r.message).slice(0, 160);
+    intentos.push({ como: f.como, code: r && r.code, mensaje });
+    if (r && r.code === 0) {
+      const d = r.data || {};
+      const nuevo = aTexto(d.package_id || d.id ||
+        ((d.packages || [])[0] || {}).id ||
+        ((d.combined_packages || [])[0] || {}).id);
+      return { ok: true, como: f.como, paquete: nuevo, intentos, data: d };
+    }
+    if (!/param|invalid|required|missing|body|format/i.test(mensaje)) break;
+  }
+  return { ok: false, intentos };
+}
+
 /* TIKTOK TARDA UNOS SEGUNDOS EN DEJAR IMPRIMIR LO QUE ACABA DE ENVIAR.
  *
  * Un segundo despues del ship contesta "Documents couldn't be printed before
@@ -159,7 +206,16 @@ module.exports = puerta(async (req, res) => {
     if (aTexto(b.accion) !== 'etiquetar') {
       return res.status(400).json({ ok: false, error: 'accion', detalle: "Solo entiendo { accion: 'etiquetar' }" });
     }
-    const ids = Array.isArray(b.paquetes) ? b.paquetes.map(aTexto).filter(Boolean) : [];
+    /* Cada entrada puede venir como un id suelto —el paquete ya esta formado—
+     * o como el bulto entero que hay que juntar antes: { paquete, grupo,
+     * pedidos }. Lo segundo es lo que manda el paso 3, porque hasta que no se
+     * combina no existe el paquete de verdad. */
+    const ids = Array.isArray(b.paquetes) ? b.paquetes.map((x) => (
+      (x && typeof x === 'object')
+        ? { paquete: aTexto(x.paquete), grupo: aTexto(x.grupo || x.aCombinar),
+            pedidos: (Array.isArray(x.pedidos) ? x.pedidos : []).map(aTexto).filter(Boolean) }
+        : { paquete: aTexto(x), grupo: '', pedidos: [] }
+    )).filter((x) => x.paquete || x.grupo) : [];
     if (!ids.length) {
       return res.status(400).json({ ok: false, error: 'sin-paquetes',
         detalle: 'Dime QUE paquetes. Aqui no hay "todos": etiquetar no tiene vuelta atras.' });
@@ -171,10 +227,36 @@ module.exports = puerta(async (req, res) => {
 
     const t0 = Date.now();
     const hechos = [];
-    for (const id of ids) {
-      if (Date.now() - t0 > 40000) { hechos.push({ paquete: id, ok: false, mensaje: 'no ha dado tiempo, vuelve a pedirlo' }); continue; }
-      const paso = { paquete: id };
+    for (const it of ids) {
+      if (Date.now() - t0 > 40000) {
+        /* Vercel corta a los 60 s. Lo que no ha dado tiempo se dice por su
+         * nombre para que quien llama vuelva a pedir SOLO eso, en vez de
+         * repetir la tanda entera y arriesgarse a etiquetar dos veces. */
+        hechos.push({ paquete: it.paquete, grupo: it.grupo, ok: false, aTiempo: false,
+                      mensaje: 'no ha dado tiempo, vuelve a pedirlo' });
+        continue;
+      }
+      let id = it.paquete;
+      const paso = { paquete: id, grupo: it.grupo || null };
       try {
+        /* 0. JUNTAR PRIMERO. Si este comprador tiene varios pedidos sueltos,
+         *    van a un solo bulto antes de enviar nada. Si no se puede juntar,
+         *    NO se envia: enviar sin juntar es pagar un porte por pedido. */
+        if (it.grupo && it.pedidos.length > 1) {
+          const c = await combinar(cuenta, it.grupo, it.pedidos);
+          paso.juntados = it.pedidos.length;
+          paso.comoSeJunta = c.como || null;
+          if (!c.ok) {
+            paso.ok = false;
+            paso.mensaje = 'no he podido juntar los ' + it.pedidos.length + ' pedidos de este ' +
+              'comprador, asi que NO lo envio: ' + ((c.intentos[c.intentos.length - 1] || {}).mensaje || '');
+            paso.intentos = c.intentos;
+            hechos.push(paso);
+            continue;
+          }
+          if (c.paquete) { id = c.paquete; paso.paquete = id; }
+        }
+
         /* 1. Enviar: esto es lo que crea la etiqueta y cierra el paquete. El
          *    cuerpo va tal cual lo mande quien llama (vacio por defecto), para
          *    no inventarse un metodo de entrega que nadie ha pedido. */
@@ -212,6 +294,21 @@ module.exports = puerta(async (req, res) => {
 
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'metodo' });
   if (!puedeLeer(req)) return noAutorizado(res, 'leer');
+
+  /* ---------- juntar UN grupo, a mano ----------
+   * Para comprobar contra TikTok que forma acepta la llamada de combinar sin
+   * jugarsela con una tanda entera. Hay que decir el grupo Y sus pedidos: aqui
+   * no existe "juntalo todo". Juntar no cierra nada ni compra ningun porte
+   * —eso lo hace enviar—, asi que se puede probar con un comprador de verdad. */
+  if (aTexto(q.combinar)) {
+    const suyos = aTexto(q.pedidos).split(',').map((x) => x.trim()).filter(Boolean);
+    if (suyos.length < 2) {
+      return res.status(400).json({ ok: false, error: 'sin-pedidos',
+        detalle: 'Dime los pedidos del comprador separados por comas. Juntar uno solo no es juntar.' });
+    }
+    const c = await combinar(cuenta0, aTexto(q.combinar), suyos);
+    return res.status(200).json(c);
+  }
 
   /* ---------- un paquete por dentro ---------- */
   if (aTexto(q.paquete)) {
@@ -332,7 +429,11 @@ module.exports = puerta(async (req, res) => {
       /* El orden en que saldrian las etiquetas del PDF. */
       orden: dentro.map((p) => ({ paquete: p.paquete, comprador: p.comprador,
                                   prendas: p.prendas, del: p.numeros[0], al: p.numeros[p.numeros.length - 1],
-                                  cierre: p.cierre, aCombinar: p.aCombinar }))
+                                  cierre: p.cierre, aCombinar: p.aCombinar,
+                                  /* Los pedidos van con el bulto: hasta que no se
+                                   * juntan, el paquete de verdad no existe, y quien
+                                   * llame al POST necesita saber que junta. */
+                                  pedidos: p.pedidos }))
     };
   });
 
