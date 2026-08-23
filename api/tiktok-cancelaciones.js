@@ -97,6 +97,16 @@ module.exports = puerta(async (req, res) => {
     let ids = Array.isArray(b.ids) ? b.ids.map(aTexto).filter(Boolean) : null;
     if (!ids) ids = (await pendientes(cuenta)).map((c) => c.id);
 
+    /* LO QUE YA SE APROBO EN UNA LLAMADA ANTERIOR NO SE VUELVE A TOCAR.
+     *
+     * El buscador de TikTok tarda unos segundos en enterarse de lo aprobado,
+     * asi que la segunda vuelta vuelve a ver las mismas como pendientes. Sin
+     * esto se aprobaban otra vez —TikTok contesta "correcto" igual, por la
+     * llave de idempotencia— y el parte decia 34 donde habia 29. Paso el 23
+     * ago 2026. Quien llama manda aqui lo que ya lleva hecho. */
+    const excluir = new Set(Array.isArray(b.excluir) ? b.excluir.map(aTexto) : []);
+    ids = ids.filter((id) => id && !excluir.has(id));
+
     const hechas = [];
     const fallos = [];
     let i = 0;
@@ -113,6 +123,9 @@ module.exports = puerta(async (req, res) => {
       cuenta,
       pedidas: ids.length,
       aprobadas: hechas.length,
+      /* Los ids, no solo el numero: es lo que permite a quien llama contar
+       * cancelaciones distintas y no llamadas que salieron bien. */
+      hechas: hechas.map((x) => x.id),
       fallos,
       quedan: sinTocar,
       sigue: sinTocar > 0,
