@@ -25,6 +25,7 @@
  * app del almacen, asi que aqui se respetan tal cual.
  */
 const { puerta, puedeLeer, puedeEscribir, noAutorizado, aTexto, aEntero, cuerpo } = require('./_lib');
+const { PDFDocument } = require('pdf-lib');
 const T = require('./_tiktok');
 
 const PEDIDOS = '/order/202309/orders/search';
@@ -91,15 +92,59 @@ const ENVIAR = (id) => '/fulfillment/202309/packages/' + encodeURIComponent(id) 
 const DOCUMENTO = (id) => '/fulfillment/202309/packages/' + encodeURIComponent(id) + '/shipping_documents';
 const COMBINAR = '/fulfillment/202309/packages/combine';
 
+/* TIKTOK TARDA UNOS SEGUNDOS EN DEJAR IMPRIMIR LO QUE ACABA DE ENVIAR.
+ *
+ * Un segundo despues del ship contesta "Documents couldn't be printed before
+ * shipped"; seis segundos despues lo da a la primera. Comprobado el 23 ago
+ * 2026. Es la tercera vez que TikTok va por detras de si mismo (las
+ * cancelaciones y el buscador de pedidos hacen lo mismo), asi que aqui se
+ * espera y se reintenta en vez de dar por perdida la etiqueta. */
+const ESPERAS = [0, 3000, 5000, 8000];
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /* La etiqueta de un paquete, ya creada. Devuelve la direccion del PDF. */
-async function documentoDe(cuenta, paquete, tamano) {
-  const r = await T.comoCuenta(cuenta, {
-    camino: DOCUMENTO(paquete),
-    params: { document_type: 'SHIPPING_LABEL', document_size: tamano || 'A6' }
-  });
-  if (!r || r.code !== 0) return { ok: false, mensaje: aTexto(r && r.message), code: r && r.code };
-  const d = r.data || {};
-  return { ok: true, url: aTexto(d.doc_url || d.url), tipo: aTexto(d.doc_type) };
+async function documentoDe(cuenta, paquete, tamano, insistir) {
+  let ultimo = null;
+  for (const espera of (insistir ? ESPERAS : [0])) {
+    if (espera) await dormir(espera);
+    const r = await T.comoCuenta(cuenta, {
+      camino: DOCUMENTO(paquete),
+      params: { document_type: 'SHIPPING_LABEL', document_size: tamano || 'A6' }
+    });
+    if (r && r.code === 0) {
+      const d = r.data || {};
+      return { ok: true, url: aTexto(d.doc_url || d.url), tipo: aTexto(d.doc_type) };
+    }
+    ultimo = { ok: false, mensaje: aTexto(r && r.message), code: r && r.code };
+    /* Solo se insiste con el "todavia no": si el fallo es otro, insistir es
+     * perder el tiempo y esconder el motivo. */
+    if (!/before shipped|not shipped|arranged/i.test(ultimo.mensaje)) break;
+  }
+  return ultimo || { ok: false, mensaje: 'sin respuesta' };
+}
+
+/* Varias etiquetas en UN solo PDF, en el orden que se pidan.
+ *
+ * Es lo que hace que una tanda sea una impresion y no catorce. Y de paso el
+ * orden lo ponemos nosotros: TikTok no sabe ordenar por numero de prendas, que
+ * es justo el motivo por el que existen las tandas. */
+async function juntarPdf(cuenta, paquetes, tamano) {
+  const fuera = await PDFDocument.create();
+  const fallos = [];
+  for (const id of paquetes) {
+    try {
+      const doc = await documentoDe(cuenta, id, tamano, false);
+      if (!doc.ok || !doc.url) { fallos.push({ paquete: id, mensaje: doc.mensaje }); continue; }
+      const f = await fetch(doc.url);
+      if (!f.ok) { fallos.push({ paquete: id, mensaje: 'la direccion de TikTok respondio ' + f.status }); continue; }
+      const dentro = await PDFDocument.load(await f.arrayBuffer());
+      const hojas = await fuera.copyPages(dentro, dentro.getPageIndices());
+      for (const h of hojas) fuera.addPage(h);
+    } catch (e) {
+      fallos.push({ paquete: id, mensaje: String((e && e.message) || e).slice(0, 160) });
+    }
+  }
+  return { pdf: Buffer.from(await fuera.save()), hojas: fuera.getPageCount(), fallos };
 }
 
 module.exports = puerta(async (req, res) => {
@@ -144,7 +189,7 @@ module.exports = puerta(async (req, res) => {
 
         /* 2. La etiqueta. Se pide aunque el envio se queje: si el paquete ya
          *    estaba enviado de antes, el PDF sigue existiendo. */
-        const doc = await documentoDe(cuenta, id, aTexto(b.tamano));
+        const doc = await documentoDe(cuenta, id, aTexto(b.tamano), true);
         paso.ok = doc.ok;
         paso.pdf = doc.url || null;
         if (!doc.ok && doc.mensaje) paso.mensajePdf = doc.mensaje;
@@ -179,7 +224,7 @@ module.exports = puerta(async (req, res) => {
    * (el navegador lo corta). Pasandola por aqui, la pagina de imprimir puede
    * juntar las etiquetas en un solo PDF sin pelearse con nadie. */
   if (aTexto(q.pdf)) {
-    const doc = await documentoDe(cuenta0, aTexto(q.pdf), aTexto(q.tamano));
+    const doc = await documentoDe(cuenta0, aTexto(q.pdf), aTexto(q.tamano), true);
     if (!doc.ok || !doc.url) return res.status(502).json({ ok: false, error: 'sin-documento', detalle: doc.mensaje || 'TikTok no ha dado la etiqueta' });
     const f = await fetch(doc.url);
     if (!f.ok) return res.status(502).json({ ok: false, error: 'sin-pdf', detalle: 'la direccion de TikTok ha respondido ' + f.status });
@@ -229,7 +274,7 @@ module.exports = puerta(async (req, res) => {
     if (!paquetes.has(clave)) {
       paquetes.set(clave, {
         paquete: idPaquete, comprador: nombre, pedidos: [], prendas: 0,
-        numeros: [], aCombinar: grupo, yaTieneEtiqueta: false
+        numeros: [], piezas: [], aCombinar: grupo, yaTieneEtiqueta: false
       });
     }
     const p = paquetes.get(clave);
@@ -238,19 +283,47 @@ module.exports = puerta(async (req, res) => {
     for (const l of vivas) {
       const n = parseInt(aTexto(l.seller_sku).replace(/[^\d]/g, ''), 10);
       if (Number.isFinite(n)) p.numeros.push(n);
+      p.piezas.push({ num: Number.isFinite(n) ? n : null, rack: aTexto(l.product_id) });
       if (aTexto(l.tracking_number)) p.yaTieneEtiqueta = true;
     }
   }
 
-  /* Las tandas, con el mismo criterio de siempre: de menos prendas a mas. */
   const lista = [...paquetes.values()].filter((p) => p.prendas > 0);
   for (const p of lista) p.numeros.sort((a, b) => a - b);
 
+  /* EL ORDEN DEL TACO TIENE QUE SER EL DE LAS TARJETAS.
+   *
+   * Esta regla NO es mia: esta copiada de calcularTandas() en flujo.js, que es
+   * la que ordena las tarjetas que ven quien recoge y quien empaqueta. Si las
+   * dos no dicen lo mismo, el empaquetador tiene delante una tarjeta y en la
+   * mano la etiqueta de otro. Paso el 11 ago 2026 por ordenar solo por numero
+   * de prendas. SI SE TOCA UNA, SE TOCA LA OTRA.
+   *
+   *   1. Los racks se recorren de mas prendas a menos (cuentasDe).
+   *   2. Dentro de un paquete, las prendas van por rack y luego por numero.
+   *   3. El CIERRE de un paquete es el numero mas alto del ULTIMO rack que se
+   *      recorre: el momento en que ese paquete se puede cerrar.
+   *   4. En la tanda: por numero de prendas, y a igualdad, por cierre.
+   */
+  const porRack = new Map();
+  for (const p of lista) for (const x of p.piezas) porRack.set(x.rack, (porRack.get(x.rack) || 0) + 1);
+  const ordenRack = new Map([...porRack.entries()]
+    .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+    .map(([k], i) => [k, i]));
+  const rack = (r) => (ordenRack.get(r) == null ? 99 : ordenRack.get(r));
+
+  for (const p of lista) {
+    p.piezas.sort((a, b) => rack(a.rack) - rack(b.rack) ||
+                            ((a.num == null ? 1e9 : a.num) - (b.num == null ? 1e9 : b.num)));
+    const ultimo = p.piezas.length ? p.piezas[p.piezas.length - 1].rack : '';
+    const delUltimo = p.piezas.filter((x) => x.rack === ultimo);
+    p.cierre = delUltimo.length ? Math.max(...delUltimo.map((x) => x.num || 0)) : 0;
+    p.ordenCierre = rack(ultimo) * 1e6 + p.cierre;
+  }
+
   const tandas = cortes.map(([min, max]) => {
     const dentro = lista.filter((p) => p.prendas >= min && p.prendas <= max);
-    /* Dentro de la tanda, por el numero mas bajo: es el orden en que quien
-     * recoge recorre el perchero, y sera el orden del taco de etiquetas. */
-    dentro.sort((a, b) => (a.numeros[0] || 0) - (b.numeros[0] || 0));
+    dentro.sort((a, b) => a.prendas - b.prendas || (a.ordenCierre || 0) - (b.ordenCierre || 0));
     return {
       tanda: min === max ? String(min) + ' prenda' : min + '-' + (max >= 999 ? '+' : max) + ' prendas',
       min, max,
@@ -259,11 +332,35 @@ module.exports = puerta(async (req, res) => {
       /* El orden en que saldrian las etiquetas del PDF. */
       orden: dentro.map((p) => ({ paquete: p.paquete, comprador: p.comprador,
                                   prendas: p.prendas, del: p.numeros[0], al: p.numeros[p.numeros.length - 1],
-                                  aCombinar: p.aCombinar }))
+                                  cierre: p.cierre, aCombinar: p.aCombinar }))
     };
   });
 
   const sinTanda = lista.filter((p) => !cortes.some(([a, b]) => p.prendas >= a && p.prendas <= b));
+
+  /* ---------- UNA TANDA ENTERA, EN UN SOLO PDF ----------
+   * ?tandaPdf=3 devuelve las etiquetas de la tanda 3 pegadas y en el orden de
+   * las tarjetas. Una direccion, una impresion. Solo junta lo que YA tiene
+   * etiqueta: esto no crea ninguna. */
+  const cual = aEntero(q.tandaPdf);
+  if (cual != null) {
+    const t = tandas[cual - 1];
+    if (!t) return res.status(400).json({ ok: false, error: 'tanda', detalle: 'Solo hay ' + tandas.length + ' tandas.' });
+    if (!t.orden.length) return res.status(400).json({ ok: false, error: 'tanda-vacia', detalle: 'La tanda ' + cual + ' no tiene paquetes.' });
+
+    const junto = await juntarPdf(cuenta, t.orden.map((p) => p.paquete), aTexto(q.tamano));
+    if (!junto.hojas) {
+      return res.status(502).json({ ok: false, error: 'sin-etiquetas',
+        detalle: 'Ninguno de los ' + t.orden.length + ' paquetes tiene etiqueta todavia. Hay que crearlas primero.',
+        fallos: junto.fallos.slice(0, 5) });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="tanda-' + cual + '.pdf"');
+    /* Si alguna se ha quedado fuera se dice en una cabecera: el PDF sale igual
+     * —mas vale imprimir 13 que ninguna— pero queda constancia de cual falta. */
+    if (junto.fallos.length) res.setHeader('X-Billys-Fallos', String(junto.fallos.length));
+    return res.status(200).end(junto.pdf);
+  }
 
   return res.status(200).json({
     ok: true,
