@@ -25,6 +25,7 @@
  */
 const { puerta, puedeLeer, noAutorizado, aTexto, aNumero } = require('./_lib');
 const T = require('./_tiktok');
+const D = require('./_directos');
 
 const BUSCAR = '/order/202309/orders/search';
 const LIMITE_MS = 8000;
@@ -148,10 +149,37 @@ module.exports = puerta(async (req, res) => {
     if (Date.now() - t0 > LIMITE_MS) { corto = true; break; }
   }
 
+  const pedidos = [...porId.values()];
+
+  /* EL ROTULO DE LA CUENTA, QUE ES LO QUE LEE QUIEN RECOGE.
+   *
+   * En el rack hay un cartel con el nombre, no con un numero. Se resuelve por
+   * las analiticas del directo (ver _directos.js) y se queda guardado. Si de
+   * alguno no se sabe, se deja vacio y se dice cual: mas vale que el panel
+   * avise a que alguien vaya al rack equivocado. */
+  let sinSaber = [];
+  try {
+    const ids = [];
+    for (const p of pedidos) for (const x of p.prendas) if (x.productoId) ids.push(x.productoId);
+    const r = await D.cuentaDe(cuenta, ids);
+    for (const p of pedidos) {
+      for (const x of p.prendas) {
+        const nombre = r.mapa.get(x.productoId);
+        if (nombre) x.cuenta = nombre;
+      }
+    }
+    sinSaber = r.sinSaber;
+  } catch (e) {
+    /* Que falle esto no puede tirar la lectura entera: sin rotulo se sigue
+     * repartiendo por productoId, que es lo que de verdad separa los racks. */
+    sinSaber = ['(no se ha podido consultar: ' + String((e && e.message) || e).slice(0, 120) + ')'];
+  }
+
   return res.status(200).json({
     ok: true,
     cuenta,
-    pedidos: [...porId.values()],
+    pedidos,
+    sinSaber,
     total,
     leidas,
     siguiente: corto ? token : '',
