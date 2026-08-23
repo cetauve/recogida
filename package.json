@@ -4,6 +4,7 @@
   "private": true,
   "description": "Paginas del almacen de Billy's y la API que guarda los datos",
   "dependencies": {
+    "pdf-lib": "^1.17.1",
     "postgres": "3.4.4"
   }
 }
