@@ -437,8 +437,14 @@ async function juntarPdf(cuenta, paquetes, tamano) {
     if (!t || !t.bytes) return null;
     return { id: t.id, ...(await loQuePoneLaEtiqueta(t.bytes)) };
   });
-  const nombres = leidos.filter((x) => x && x.nombre)
+  const conLeer = leidos.filter(Boolean);
+  const nombres = conLeer.filter((x) => x.nombre)
     .map((x) => ({ paquete: x.id, nombre: x.nombre, pedido: x.ref }));
+  /* LO QUE NO SE HA PODIDO LEER SE DICE. Tragarse el motivo deja "0 nombres" sin
+   * explicacion, que es donde se pierde una tarde. */
+  const sinNombre = conLeer.filter((x) => !x.nombre)
+    .map((x) => ({ paquete: x.id, motivo: x.error || 'la etiqueta no trae nombre' }));
+
 
   const fuera = await PDFDocument.create();
   const fallos = [];
@@ -452,7 +458,7 @@ async function juntarPdf(cuenta, paquetes, tamano) {
       fallos.push({ paquete: t.id, mensaje: String((e && e.message) || e).slice(0, 160) });
     }
   }
-  return { pdf: Buffer.from(await fuera.save()), hojas: fuera.getPageCount(), fallos, nombres };
+  return { pdf: Buffer.from(await fuera.save()), hojas: fuera.getPageCount(), fallos, nombres, sinNombre };
 }
 
 module.exports = puerta(async (req, res) => {
@@ -663,6 +669,8 @@ module.exports = puerta(async (req, res) => {
     if (aTexto(q.montar)) {
       return res.status(200).json({ ok: !!junto.hojas, clave: clave || null,
         paquetes: cuales.length, hojas: junto.hojas, kb: Math.round(junto.pdf.length / 1024),
+        nombres: (junto.nombres || []).length,
+        sinNombre: (junto.sinNombre || []).slice(0, 3),
         fallos: junto.fallos.slice(0, 5), ms: Date.now() - t1 });
     }
 
