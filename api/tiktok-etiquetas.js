@@ -24,9 +24,69 @@
  * por numero de prendas— pero ademas es como esta organizado el trabajo en la
  * app del almacen, asi que aqui se respetan tal cual.
  */
-const { puerta, puedeLeer, puedeEscribir, noAutorizado, aTexto, aEntero, cuerpo } = require('./_lib');
+const { db, puerta, puedeLeer, puedeEscribir, noAutorizado, aTexto, aEntero, cuerpo } = require('./_lib');
 const { PDFDocument } = require('pdf-lib');
 const T = require('./_tiktok');
+
+/* ===========================================================================
+ * EL TACO SE GUARDA
+ * ===========================================================================
+ * Montar una tanda de 25 etiquetas son 7 segundos: cincuenta viajes a TikTok
+ * (uno para la direccion de cada PDF y otro para bajarlo), y las funciones
+ * corren en Washington mientras TikTok contesta desde Europa. Eso no se puede
+ * arreglar desde aqui.
+ *
+ * Lo que si se puede es no pagarlo dos veces. El taco se monta UNA vez —en
+ * cuanto la tanda acaba de enviarse, sin que nadie pulse nada— y se guarda ya
+ * pegado. Cuando en el almacen abren el PDF, ya esta hecho: sale al momento, y
+ * las veces que haga falta.
+ *
+ * Se guarda por CLAVE (dia + tanda), y con la lista de paquetes al lado: si un
+ * dia el guardado fallo o se limpio, ?taco= sabe rehacerlo solo en vez de
+ * dejar a nadie con un boton muerto.
+ * ========================================================================= */
+const ESQUEMA_TACO = [
+  `create table if not exists tacos (
+     clave  text primary key,
+     dia    text not null default '',
+     cuenta text not null default '',
+     ids    text not null default '',
+     hojas  integer not null default 0,
+     pdf    bytea,
+     creado timestamptz not null default now()
+   )`,
+  `create index if not exists tacos_dia on tacos (dia)`
+];
+let creandoTacos = null;
+function asegurarTacos() {
+  if (creandoTacos) return creandoTacos;
+  creandoTacos = (async () => {
+    const s = db();
+    for (const x of ESQUEMA_TACO) await s.unsafe(x);
+  })().catch((e) => { creandoTacos = null; throw e; });
+  return creandoTacos;
+}
+
+async function guardarTaco(clave, cuenta, ids, pdf, hojas) {
+  await asegurarTacos();
+  const s = db();
+  const dia = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+  await s`insert into tacos (clave, dia, cuenta, ids, hojas, pdf, creado)
+          values (${clave}, ${dia}, ${cuenta}, ${ids.join(',')}, ${hojas}, ${pdf}, now())
+          on conflict (clave) do update set dia = excluded.dia, cuenta = excluded.cuenta,
+            ids = excluded.ids, hojas = excluded.hojas, pdf = excluded.pdf, creado = now()`;
+  /* Una semana es de sobra: el taco de un directo se imprime ese dia y al
+   * siguiente. Guardar meses de PDFs no le sirve a nadie y ocupa. */
+  await s`delete from tacos where creado < now() - interval '7 days'`;
+}
+
+async function leerTaco(clave) {
+  await asegurarTacos();
+  const s = db();
+  const f = await s`select ids, hojas, pdf from tacos where clave = ${clave}`;
+  return f[0] || null;
+}
+
 
 const PEDIDOS = '/order/202309/orders/search';
 const COMBINABLES = '/fulfillment/202309/combinable_packages/search';
@@ -442,10 +502,57 @@ module.exports = puerta(async (req, res) => {
    * junta. Es la salida de emergencia del fallo del 23 ago —cuando la lista de
    * pendientes se vacia segun se imprime, cualquier cosa que recalcule miente—
    * y de paso es lo mas rapido que hay: las baja todas a la vez. */
+  /* ---------- EL TACO YA MONTADO ----------
+   * ?taco=CLAVE devuelve el PDF que se guardo al acabar la tanda. Es el que
+   * abre el boton del almacen: no habla con TikTok, sale al momento.
+   *
+   * Si por lo que sea no esta guardado pero si la lista de paquetes, se monta
+   * ahora y se guarda. Un boton nunca se queda muerto. */
+  if (aTexto(q.taco)) {
+    const clave = aTexto(q.taco);
+    const g = await leerTaco(clave);
+    if (g && g.pdf && g.hojas) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline; filename="' + clave.replace(/[^\w.-]/g, '-') + '.pdf"');
+      res.setHeader('X-Billys-Taco', 'guardado');
+      return res.status(200).end(Buffer.from(g.pdf));
+    }
+    const cuales = aTexto(g && g.ids).split(',').map((x) => x.trim()).filter(Boolean);
+    if (!cuales.length) {
+      return res.status(404).json({ ok: false, error: 'sin-taco',
+        detalle: 'No hay ningun taco guardado con la clave "' + clave + '".' });
+    }
+    const junto = await juntarPdf(cuenta0, cuales, aTexto(q.tamano));
+    if (!junto.hojas) {
+      return res.status(502).json({ ok: false, error: 'sin-etiquetas',
+        detalle: 'Ninguno de los ' + cuales.length + ' paquetes tiene etiqueta.',
+        fallos: junto.fallos.slice(0, 5) });
+    }
+    try { await guardarTaco(clave, cuenta0, cuales, junto.pdf, junto.hojas); } catch (_) {}
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="' + clave.replace(/[^\w.-]/g, '-') + '.pdf"');
+    res.setHeader('X-Billys-Taco', 'montado-ahora');
+    if (junto.fallos.length) res.setHeader('X-Billys-Fallos', String(junto.fallos.length));
+    return res.status(200).end(junto.pdf);
+  }
+
   if (aTexto(q.tacos)) {
     const cuales = aTexto(q.tacos).split(',').map((x) => x.trim()).filter(Boolean);
     if (!cuales.length) return res.status(400).json({ ok: false, error: 'sin-paquetes' });
+    const clave = aTexto(q.clave);
+    const t1 = Date.now();
     const junto = await juntarPdf(cuenta0, cuales, aTexto(q.tamano));
+    if (junto.hojas && clave) { try { await guardarTaco(clave, cuenta0, cuales, junto.pdf, junto.hojas); } catch (_) {} }
+
+    /* ?montar=1 NO devuelve el PDF, solo dice que ha quedado montado. Es lo que
+     * llama el paso 3 al acabar cada tanda: nadie va a mirar ese PDF todavia y
+     * bajarse un mega para tirarlo es tonteria. */
+    if (aTexto(q.montar)) {
+      return res.status(200).json({ ok: !!junto.hojas, clave: clave || null,
+        paquetes: cuales.length, hojas: junto.hojas, kb: Math.round(junto.pdf.length / 1024),
+        fallos: junto.fallos.slice(0, 5), ms: Date.now() - t1 });
+    }
+
     if (!junto.hojas) {
       return res.status(502).json({ ok: false, error: 'sin-etiquetas',
         detalle: 'Ninguno de los ' + cuales.length + ' paquetes tiene etiqueta.',
