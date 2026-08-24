@@ -64,32 +64,53 @@ const parada = (estado) => /CANCEL|RETURN|REFUND/i.test(aTexto(estado));
  * recoger su etiqueta. Asi la tanda 3 es la tanda 3 antes de imprimir, a mitad
  * y despues, que es lo que espera quien tiene las tarjetas en la mano.
  * ========================================================================= */
-const ESTADOS = ['AWAITING_SHIPMENT', 'AWAITING_COLLECTION'];
-
-async function todosLosPedidos(cuenta, t0) {
-  const porId = new Map();
-  let total = null, corto = false;
-  for (const estado of ESTADOS) {
-    let token = '';
-    for (let vuelta = 0; vuelta < 40; vuelta++) {
-      const params = { page_size: POR_PAGINA, sort_field: 'create_time', sort_order: 'ASC' };
-      if (token) params.page_token = token;
-      const r = await T.comoCuenta(cuenta, {
-        camino: PEDIDOS, metodo: 'POST', params, cuerpo: { order_status: estado }
-      });
-      if (!r || r.code !== 0) throw new Error('pedidos: ' + aTexto(r && r.message));
-      const d = r.data || {};
-      for (const o of (d.orders || [])) if (o && o.id) porId.set(aTexto(o.id), o);
-      /* El total que se ensena es el de lo que falta por enviar: es el numero
-       * que se compara con el "Pendiente de envio (68)" de TikTok. */
-      if (estado === 'AWAITING_SHIPMENT' && total == null && d.total_count != null) total = Number(d.total_count);
-      token = aTexto(d.next_page_token);
-      if (!token || Date.now() - t0 > LIMITE_MS) break;
-    }
-    if (token) corto = true;
+async function unEstado(cuenta, t0, estado, desde) {
+  const fuera = [];
+  let token = '', total = null, corto = false;
+  for (let vuelta = 0; vuelta < 40; vuelta++) {
+    const params = { page_size: POR_PAGINA, sort_field: 'create_time', sort_order: 'ASC' };
+    if (token) params.page_token = token;
+    const cuerpoP = { order_status: estado };
+    if (desde) cuerpoP.create_time_ge = desde;
+    const r = await T.comoCuenta(cuenta, { camino: PEDIDOS, metodo: 'POST', params, cuerpo: cuerpoP });
+    if (!r || r.code !== 0) throw new Error('pedidos: ' + aTexto(r && r.message));
+    const d = r.data || {};
+    for (const o of (d.orders || [])) if (o && o.id) fuera.push(o);
+    if (total == null && d.total_count != null) total = Number(d.total_count);
+    token = aTexto(d.next_page_token);
+    if (!token) break;
     if (Date.now() - t0 > LIMITE_MS) { corto = true; break; }
   }
-  return { pedidos: [...porId.values()], total, corto };
+  return { pedidos: fuera, total, corto };
+}
+
+async function todosLosPedidos(cuenta, t0) {
+  /* 1. Lo que falta por enviar. Este es el numero que se compara con el
+   *    "Pendiente de envio (68)" del Centro de vendedores. */
+  const pend = await unEstado(cuenta, t0, 'AWAITING_SHIPMENT', null);
+
+  /* 2. Y lo YA ENVIADO DE ESTA MISMA REMESA.
+   *
+   * "A la espera de recogida" arrastra dias enteros: pedirlo a pelo devolvia
+   * 965 pedidos y metia en las tandas de hoy gente de anteayer. Asi que se
+   * corta por fecha: desde el pedido pendiente mas antiguo. Ese es justo el
+   * principio de lo que se esta imprimiendo hoy, y todo lo enviado despues es
+   * de esta misma tanda de trabajo.
+   *
+   * Si ya no queda nada pendiente —porque el paso 3 acabo— se tira de las
+   * ultimas 36 horas, que es un directo y su dia siguiente. */
+  let desde = null;
+  for (const o of pend.pedidos) {
+    const c = Number(o.create_time) || 0;
+    if (c && (desde == null || c < desde)) desde = c;
+  }
+  if (desde == null) desde = Math.floor(Date.now() / 1000) - 36 * 3600;
+
+  const ya = await unEstado(cuenta, t0, 'AWAITING_COLLECTION', desde);
+
+  const porId = new Map();
+  for (const o of [...pend.pedidos, ...ya.pedidos]) porId.set(aTexto(o.id), o);
+  return { pedidos: [...porId.values()], total: pend.total, corto: pend.corto || ya.corto, desde };
 }
 
 async function todosLosCombinables(cuenta, t0) {
