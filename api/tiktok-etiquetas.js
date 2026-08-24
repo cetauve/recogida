@@ -99,12 +99,22 @@ async function todosLosPedidos(cuenta, t0) {
    *
    * Si ya no queda nada pendiente —porque el paso 3 acabo— se tira de las
    * ultimas 36 horas, que es un directo y su dia siguiente. */
-  let desde = null;
+  /* EL SUELO SON 36 HORAS, PASE LO QUE PASE.
+   *
+   * EL FALLO DEL 24 AGO 2026, con el almacen esperando. Se cogia la fecha del
+   * pendiente mas antiguo a secas. Esa manana quedaban dos pedidos nuevos de
+   * HOY sin enviar, asi que el corte se puso en hoy... y dejo fuera las setenta
+   * etiquetas de anoche, que era justo lo que habia que imprimir. El PDF de la
+   * tanda 2 salio con una hoja.
+   *
+   * El corte es el mas ANTIGUO de los dos: el pendiente mas viejo o hace 36
+   * horas. Un pedido nuevo no puede encoger la ventana de lo que ya se envio. */
+  const suelo = Math.floor(Date.now() / 1000) - 36 * 3600;
+  let desde = suelo;
   for (const o of pend.pedidos) {
     const c = Number(o.create_time) || 0;
-    if (c && (desde == null || c < desde)) desde = c;
+    if (c && c < desde) desde = c;
   }
-  if (desde == null) desde = Math.floor(Date.now() / 1000) - 36 * 3600;
 
   const ya = await unEstado(cuenta, t0, 'AWAITING_COLLECTION', desde);
 
