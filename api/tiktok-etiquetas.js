@@ -435,6 +435,27 @@ module.exports = puerta(async (req, res) => {
     return res.status(200).end(junto.pdf);
   }
 
+  /* ---------- LOS PEDIDOS DE UN ESTADO, CON SU PAQUETE DE AHORA ----------
+   * ?estado=AWAITING_COLLECTION[&desde=<epoch>]
+   *
+   * Existe por el lio del 24 ago 2026: al juntar, el bulto cambia de
+   * identificador, y los ids apuntados antes de juntar ya no valen para pedir
+   * la etiqueta. Cuando algo se pierde de vista, esto dice donde esta cada
+   * pedido AHORA y con que paquete, que es lo que necesita ?tacos=. */
+  if (aTexto(q.estado)) {
+    const t1 = Date.now();
+    const r = await unEstado(cuenta0, t1, aTexto(q.estado).toUpperCase(), aEntero(q.desde));
+    return res.status(200).json({
+      ok: true, estado: aTexto(q.estado).toUpperCase(), cuantos: r.pedidos.length, total: r.total, corto: r.corto,
+      pedidos: r.pedidos.map((o) => ({
+        id: aTexto(o.id), estado: aTexto(o.status), creado: o.create_time,
+        comprador: aTexto((o.recipient_address || {}).name),
+        prendas: (o.line_items || []).length,
+        paquetes: [...new Set((o.line_items || []).map((l) => aTexto(l.package_id)).filter(Boolean))]
+      }))
+    });
+  }
+
   /* ---------- un paquete por dentro ---------- */
   if (aTexto(q.paquete)) {
     const r = await T.comoCuenta(cuenta0, { camino: DETALLE(aTexto(q.paquete)) });
