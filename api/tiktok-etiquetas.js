@@ -617,6 +617,11 @@ module.exports = puerta(async (req, res) => {
                                   prendas: p.prendas, del: p.numeros[0], al: p.numeros[p.numeros.length - 1],
                                   cierre: p.cierre, aCombinar: p.aCombinar,
                                   yaTieneEtiqueta: p.yaTieneEtiqueta,
+                                  /* TODOS los numeros de prenda, no solo el primero y
+                                   * el ultimo: son los que van en la tarjeta de quien
+                                   * recoge, y sin ellos no se puede armar la tarjeta
+                                   * desde aqui. */
+                                  numeros: p.numeros,
                                   /* Los pedidos van con el bulto: hasta que no se
                                    * juntan, el paquete de verdad no existe, y quien
                                    * llame al POST necesita saber que junta. */
