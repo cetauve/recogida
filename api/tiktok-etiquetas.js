@@ -367,23 +367,17 @@ function cuadraConMascara(mascara, real) {
  * pedido que el transportista imprime como REFERENCIA CLIENTE. */
 async function loQuePoneLaEtiqueta(bytes) {
   try {
-    const { getDocumentProxy } = await import('unpdf');
+    const { extractText, getDocumentProxy } = await import('unpdf');
     /* UNA COPIA, NO EL ORIGINAL. pdf.js se queda con el buffer que le das y lo
      * deja inservible ("detached"), y luego pdf-lib no puede pegar esa hoja en
      * el taco. Cuesta unos kilobytes y ahorra un PDF de una sola pagina. */
     const doc = await getDocumentProxy(new Uint8Array(bytes.slice(0)));
-
-    /* LOS TROZOS TAL CUAL VIENEN, no el texto "bonito".
-     *
-     * La etiqueta de CTT lleva el texto girado 90 grados. Armar renglones a
-     * partir de las coordenadas —que es lo que hace extractText— se lia con eso
-     * y saca el nombre partido: probado el 24 ago 2026 contra una etiqueta de
-     * verdad, devolvia una sola palabra. Los trozos en su orden original si
-     * salen bien: DESTINATARIO: y, detras, el nombre entero. */
-    const pag = await doc.getPage(1);
-    const c = await pag.getTextContent();
-    const lineas = (c.items || []).map((x) => aTexto(x && x.str).trim()).filter(Boolean);
-    const plano = lineas.join('\n');
+    const { text } = await extractText(doc, { mergePages: true });
+    const plano = Array.isArray(text) ? text.join('\n') : aTexto(text);
+    const lineas = plano.split('\n').map((x) => x.trim()).filter(Boolean);
+    const i = lineas.findIndex((x) => /DESTINATARIO/i.test(x));
+    /* La linea de "DESTINATARIO:" puede traer ya el nombre pegado detras, o
+     * venir sola y el nombre en la siguiente. Se prueban las dos. */
     const i = lineas.findIndex((x) => /DESTINATARIO/i.test(x));
     /* La linea de "DESTINATARIO:" puede traer ya el nombre pegado detras, o
      * venir sola y el nombre en la siguiente. Se prueban las dos. */
@@ -406,6 +400,19 @@ async function loQuePoneLaEtiqueta(bytes) {
       return t.split(/\s+/).filter(Boolean).length >= 2;
     };
 
+    /* EL ORDEN DEL TEXTO NO ES DE FIAR, ASI QUE NO SE DEPENDE DE EL.
+     *
+     * La etiqueta de CTT lleva el texto girado 90 grados y armar renglones con
+     * eso sale torcido: el 24 ago 2026, contra una etiqueta de verdad, "la
+     * linea de despues de DESTINATARIO" devolvia una sola palabra. Leer los
+     * trozos sueltos en su orden original si funcionaba... en local; en Vercel
+     * tumbaba la funcion entera.
+     *
+     * Asi que se devuelven TODOS los renglones que parecen un nombre y decide
+     * quien tiene la mascara. Es mas robusto que acertar con el orden: da igual
+     * como salga el texto, porque la mascara solo deja pasar el bueno. */
+    const candidatos = lineas.filter(pareceNombre).slice(0, 12);
+
     let nombre = '';
     if (i > -1) {
       const pegado = lineas[i].replace(/.*DESTINATARIO:?/i, '').trim();
@@ -413,12 +420,13 @@ async function loQuePoneLaEtiqueta(bytes) {
         if (pareceNombre(cand)) { nombre = aTexto(cand).trim(); break; }
       }
     }
+    if (!nombre && candidatos.length) nombre = candidatos[0];
     /* La referencia del transportista es el pedido. No se exige que sea un
      * numero: si CTT cambia el formato, mejor traerlo que perderlo. */
     const ref = (plano.match(/REFERENCIA\s+CLIENTE:?\s*(\S+)/i) || [])[1] || '';
-    return { nombre, ref };
+    return { nombre, ref, candidatos };
   } catch (e) {
-    return { nombre: '', ref: '', error: String((e && e.message) || e).slice(0, 120) };
+    return { nombre: '', ref: '', candidatos: [], error: String((e && e.message) || e).slice(0, 120) };
   }
 }
 
@@ -451,7 +459,7 @@ async function juntarPdf(cuenta, paquetes, tamano) {
   });
   const conLeer = leidos.filter(Boolean);
   const nombres = conLeer.filter((x) => x.nombre)
-    .map((x) => ({ paquete: x.id, nombre: x.nombre, pedido: x.ref }));
+    .map((x) => ({ paquete: x.id, nombre: x.nombre, pedido: x.ref, candidatos: x.candidatos || [] }));
   /* LO QUE NO SE HA PODIDO LEER SE DICE. Tragarse el motivo deja "0 nombres" sin
    * explicacion, que es donde se pierde una tarde. */
   const sinNombre = conLeer.filter((x) => !x.nombre)
