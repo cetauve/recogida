@@ -367,14 +367,26 @@ function cuadraConMascara(mascara, real) {
  * pedido que el transportista imprime como REFERENCIA CLIENTE. */
 async function loQuePoneLaEtiqueta(bytes) {
   try {
-    const { extractText, getDocumentProxy } = await import('unpdf');
+    const { getDocumentProxy } = await import('unpdf');
     /* UNA COPIA, NO EL ORIGINAL. pdf.js se queda con el buffer que le das y lo
      * deja inservible ("detached"), y luego pdf-lib no puede pegar esa hoja en
      * el taco. Cuesta unos kilobytes y ahorra un PDF de una sola pagina. */
     const doc = await getDocumentProxy(new Uint8Array(bytes.slice(0)));
-    const { text } = await extractText(doc, { mergePages: true });
-    const plano = Array.isArray(text) ? text.join('\n') : aTexto(text);
-    const lineas = plano.split('\n').map((x) => x.trim()).filter(Boolean);
+
+    /* LOS TROZOS TAL CUAL VIENEN, no el texto "bonito".
+     *
+     * La etiqueta de CTT lleva el texto girado 90 grados. Armar renglones a
+     * partir de las coordenadas —que es lo que hace extractText— se lia con eso
+     * y saca el nombre partido: probado el 24 ago 2026 contra una etiqueta de
+     * verdad, devolvia una sola palabra. Los trozos en su orden original si
+     * salen bien: DESTINATARIO: y, detras, el nombre entero. */
+    const pag = await doc.getPage(1);
+    const c = await pag.getTextContent();
+    const lineas = (c.items || []).map((x) => aTexto(x && x.str).trim()).filter(Boolean);
+    const plano = lineas.join('\n');
+    const i = lineas.findIndex((x) => /DESTINATARIO/i.test(x));
+    /* La linea de "DESTINATARIO:" puede traer ya el nombre pegado detras, o
+     * venir sola y el nombre en la siguiente. Se prueban las dos. */
     const i = lineas.findIndex((x) => /DESTINATARIO/i.test(x));
     /* La linea de "DESTINATARIO:" puede traer ya el nombre pegado detras, o
      * venir sola y el nombre en la siguiente. Se prueban las dos. */
