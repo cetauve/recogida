@@ -32,6 +32,11 @@ const PEDIDOS = '/order/202309/orders/search';
 const COMBINABLES = '/fulfillment/202309/combinable_packages/search';
 const LIMITE_MS = 25000;
 const POR_PAGINA = 50;
+/* Cuanto hacia atras se mira lo YA ENVIADO. Tres dias: un directo del viernes
+ * que se imprime el domingo por la manana sigue entrando. Mas atras empieza a
+ * mezclar remesas; para eso esta ?desde=. */
+const VENTANA_H = 72;
+
 
 const CORTES = [[1, 1], [2, 3], [4, 6], [7, 10], [11, 999]];
 
@@ -84,7 +89,7 @@ async function unEstado(cuenta, t0, estado, desde) {
   return { pedidos: fuera, total, corto };
 }
 
-async function todosLosPedidos(cuenta, t0) {
+async function todosLosPedidos(cuenta, t0, desdeFuera) {
   /* 1. Lo que falta por enviar. Este es el numero que se compara con el
    *    "Pendiente de envio (68)" del Centro de vendedores. */
   const pend = await unEstado(cuenta, t0, 'AWAITING_SHIPMENT', null);
@@ -109,12 +114,19 @@ async function todosLosPedidos(cuenta, t0) {
    *
    * El corte es el mas ANTIGUO de los dos: el pendiente mas viejo o hace 36
    * horas. Un pedido nuevo no puede encoger la ventana de lo que ya se envio. */
-  const suelo = Math.floor(Date.now() / 1000) - 36 * 3600;
+  const suelo = Math.floor(Date.now() / 1000) - VENTANA_H * 3600;
   let desde = suelo;
   for (const o of pend.pedidos) {
     const c = Number(o.create_time) || 0;
     if (c && c < desde) desde = c;
   }
+
+  /* Y SE PUEDE DECIR A MANO. La ventana automatica acierta con el ritmo normal
+   * —directo, imprimir, recoger— pero el 24 ago 2026 la remesa era del dia 22 y
+   * se estaba imprimiendo el 24: se quedaba fuera. Cuando eso pasa, ?desde= lo
+   * arregla sin tocar codigo, que es justo lo que hace falta con el almacen
+   * esperando. Acepta una fecha (2026-08-22) o segundos. */
+  if (desdeFuera) desde = desdeFuera;
 
   const ya = await unEstado(cuenta, t0, 'AWAITING_COLLECTION', desde);
 
@@ -491,7 +503,17 @@ module.exports = puerta(async (req, res) => {
   const cortes = leerCortes(q.cortes);
   const t0 = Date.now();
 
-  const { pedidos, total, corto } = await todosLosPedidos(cuenta, t0);
+  /* ?desde=2026-08-22 (o en segundos) fuerza desde donde se mira lo ya
+   * enviado. Sin el, la ventana la pone el codigo. */
+  const desdeMano = (() => {
+    const v = aTexto(q.desde).trim();
+    if (!v) return null;
+    if (/^\d+$/.test(v)) return Number(v);
+    const d = new Date(v);
+    return isNaN(d) ? null : Math.floor(d.getTime() / 1000);
+  })();
+
+  const { pedidos, total, corto, desde } = await todosLosPedidos(cuenta, t0, desdeMano);
   const grupos = await todosLosCombinables(cuenta, t0);
 
   /* Que pedidos estan pendientes de juntarse con otros del mismo comprador. Si
@@ -635,6 +657,9 @@ module.exports = puerta(async (req, res) => {
     cuenta,
     resumen: {
       pedidos: pedidos.length, totalQueDiceTikTok: total, listaCompleta: !corto,
+      /* Desde donde se ha mirado lo ya enviado. Va a la vista para que, cuando
+       * un PDF salga corto, se vea de un vistazo si el corte es el problema. */
+      loYaEnviadoDesde: new Date(desde * 1000).toISOString(),
       /* Paquetes DESPUES de combinar, que son los que se van a etiquetar. */
       paquetes: lista.length,
       prendas: lista.reduce((a, p) => a + p.prendas, 0),
