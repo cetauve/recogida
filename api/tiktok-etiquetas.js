@@ -53,8 +53,12 @@ const ESQUEMA_TACO = [
      ids    text not null default '',
      hojas  integer not null default 0,
      pdf    bytea,
+     /* Lo que pone cada etiqueta: el nombre sin tapar y el pedido que imprime
+      * el transportista. De aqui salen las tarjetas con nombre de verdad. */
+     nombres jsonb not null default '[]'::jsonb,
      creado timestamptz not null default now()
    )`,
+  `alter table tacos add column if not exists nombres jsonb not null default '[]'::jsonb`,
   `create index if not exists tacos_dia on tacos (dia)`
 ];
 let creandoTacos = null;
@@ -67,14 +71,17 @@ function asegurarTacos() {
   return creandoTacos;
 }
 
-async function guardarTaco(clave, cuenta, ids, pdf, hojas) {
+async function guardarTaco(clave, cuenta, ids, pdf, hojas, nombres) {
   await asegurarTacos();
   const s = db();
   const dia = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
-  await s`insert into tacos (clave, dia, cuenta, ids, hojas, pdf, creado)
-          values (${clave}, ${dia}, ${cuenta}, ${ids.join(',')}, ${hojas}, ${pdf}, now())
+  await s`insert into tacos (clave, dia, cuenta, ids, hojas, pdf, nombres, creado)
+          values (${clave}, ${dia}, ${cuenta}, ${ids.join(',')}, ${hojas}, ${pdf},
+                  ${s.json(nombres || [])}, now())
           on conflict (clave) do update set dia = excluded.dia, cuenta = excluded.cuenta,
-            ids = excluded.ids, hojas = excluded.hojas, pdf = excluded.pdf, creado = now()`;
+            ids = excluded.ids, hojas = excluded.hojas, pdf = excluded.pdf,
+            nombres = excluded.nombres, creado = now()`;
+
   /* Una semana es de sobra: el taco de un directo se imprime ese dia y al
    * siguiente. Guardar meses de PDFs no le sirve a nadie y ocupa. */
   await s`delete from tacos where creado < now() - interval '7 days'`;
@@ -83,7 +90,7 @@ async function guardarTaco(clave, cuenta, ids, pdf, hojas) {
 async function leerTaco(clave) {
   await asegurarTacos();
   const s = db();
-  const f = await s`select ids, hojas, pdf from tacos where clave = ${clave}`;
+  const f = await s`select ids, hojas, pdf, nombres from tacos where clave = ${clave}`;
   return f[0] || null;
 }
 
@@ -321,6 +328,88 @@ async function enParalelo(cosas, cuantos, hacer) {
 
 const A_LA_VEZ = 8;
 
+/* ===========================================================================
+ * EL NOMBRE DE VERDAD ESTA EN LA ETIQUETA
+ * ===========================================================================
+ * La API de TikTok entrega los datos personales tapados: el comprador llega
+ * como "j*** r***n m***ix p***z". Con eso, quien empaqueta no reconoce a nadie
+ * —paso el 24 ago 2026: dijeron que un comprador "no salia" en la tanda 3 y
+ * estaba, en la tarjeta 2—. No hay permiso que destape eso: los 40 de la app
+ * estan mirados y ninguno lo hace.
+ *
+ * Pero la etiqueta la imprime el transportista con los datos reales, y el PDF
+ * lleva TEXTO, no una foto. Como para montar el taco ya nos bajamos todas las
+ * etiquetas, el nombre pasa por aqui sin una sola llamada de mas.
+ *
+ * NO SE FIA A CIEGAS. De la etiqueta puede salir cualquier cosa —una direccion,
+ * un renglon cortado— y poner el nombre de otro en una tarjeta es peor que no
+ * poner ninguno. Asi que lo que se saca se comprueba contra la mascara que dio
+ * la API, y solo se acepta si cuadra. Si no, se queda el tapado.
+ * ========================================================================= */
+
+/* De "j*** r***n m***ix p***z" + "Juan Ramon Mataix Perez" -> true.
+ * De la mascara se respeta lo unico que se ve: cuantas palabras hay, con que
+ * empieza cada una y con que acaba cuando la mascara lo enseña. */
+function cuadraConMascara(mascara, real) {
+  const m = aTexto(mascara).trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const r = aTexto(real).trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!m.length || m.length !== r.length) return false;
+  for (let i = 0; i < m.length; i++) {
+    const partes = m[i].split('*').filter(Boolean);   // ['j'] o ['j','di','h']
+    if (!partes.length) continue;                     // palabra tapada entera
+    if (!m[i].startsWith('*') && !r[i].startsWith(partes[0])) return false;
+    if (!m[i].endsWith('*') && !r[i].endsWith(partes[partes.length - 1])) return false;
+  }
+  return true;
+}
+
+/* Lo que pone la etiqueta: el nombre que va detras de DESTINATARIO: y el
+ * pedido que el transportista imprime como REFERENCIA CLIENTE. */
+async function loQuePoneLaEtiqueta(bytes) {
+  try {
+    const { extractText, getDocumentProxy } = await import('unpdf');
+    /* UNA COPIA, NO EL ORIGINAL. pdf.js se queda con el buffer que le das y lo
+     * deja inservible ("detached"), y luego pdf-lib no puede pegar esa hoja en
+     * el taco. Cuesta unos kilobytes y ahorra un PDF de una sola pagina. */
+    const doc = await getDocumentProxy(new Uint8Array(bytes.slice(0)));
+    const { text } = await extractText(doc, { mergePages: true });
+    const plano = Array.isArray(text) ? text.join('\n') : aTexto(text);
+    const lineas = plano.split('\n').map((x) => x.trim()).filter(Boolean);
+    const i = lineas.findIndex((x) => /DESTINATARIO/i.test(x));
+    /* La linea de "DESTINATARIO:" puede traer ya el nombre pegado detras, o
+     * venir sola y el nombre en la siguiente. Se prueban las dos. */
+    /* PARECE UN NOMBRE, no cualquier renglon. Si la etiqueta viene sin nombre,
+     * la linea de despues es la CALLE, y meter una direccion donde va el
+     * comprador es justo lo que no puede pasar. Un nombre no lleva cifras y
+     * tiene al menos dos palabras. */
+    const pareceNombre = (x) => {
+      const t = aTexto(x).trim();
+      if (t.length < 4 || t.length > 70) return false;
+      if (/\d/.test(t)) return false;
+      if (/^(calle|c\/|av|avda|avenida|plaza|pza|rua|carrer|urb|pol|ctra|apto|piso|esc)\b/i.test(t)) return false;
+      /* Los rotulos del impreso no son nombres: llevan dos puntos o son
+       * palabras sueltas del formulario del transportista. */
+      if (/:/.test(t)) return false;
+      if (/^(remitente|destinatario|referencia|bultos|fecha|peso|compromiso|reembolso|firma|sello|codigo|c[oó]digo|exp|cliente|shop)\b/i.test(t)) return false;
+      return t.split(/\s+/).filter(Boolean).length >= 2;
+    };
+
+    let nombre = '';
+    if (i > -1) {
+      const pegado = lineas[i].replace(/.*DESTINATARIO:?/i, '').trim();
+      for (const cand of [pegado, lineas[i + 1], lineas[i + 2]]) {
+        if (pareceNombre(cand)) { nombre = aTexto(cand).trim(); break; }
+      }
+    }
+    /* La referencia del transportista es el pedido. No se exige que sea un
+     * numero: si CTT cambia el formato, mejor traerlo que perderlo. */
+    const ref = (plano.match(/REFERENCIA\s+CLIENTE:?\s*(\S+)/i) || [])[1] || '';
+    return { nombre, ref };
+  } catch (e) {
+    return { nombre: '', ref: '', error: String((e && e.message) || e).slice(0, 120) };
+  }
+}
+
 /* Varias etiquetas en UN solo PDF, en el orden que se pidan.
  *
  * Es lo que hace que una tanda sea una impresion y no catorce. Y de paso el
@@ -342,6 +431,15 @@ async function juntarPdf(cuenta, paquetes, tamano) {
     }
   });
 
+  /* De paso que estan bajadas, se les lee el nombre. Va en paralelo tambien:
+   * leer el texto de un PDF cuesta poco, pero setenta veces seguidas no. */
+  const leidos = await enParalelo(trozos, A_LA_VEZ, async (t) => {
+    if (!t || !t.bytes) return null;
+    return { id: t.id, ...(await loQuePoneLaEtiqueta(t.bytes)) };
+  });
+  const nombres = leidos.filter((x) => x && x.nombre)
+    .map((x) => ({ paquete: x.id, nombre: x.nombre, pedido: x.ref }));
+
   const fuera = await PDFDocument.create();
   const fallos = [];
   for (const t of trozos) {
@@ -354,7 +452,7 @@ async function juntarPdf(cuenta, paquetes, tamano) {
       fallos.push({ paquete: t.id, mensaje: String((e && e.message) || e).slice(0, 160) });
     }
   }
-  return { pdf: Buffer.from(await fuera.save()), hojas: fuera.getPageCount(), fallos };
+  return { pdf: Buffer.from(await fuera.save()), hojas: fuera.getPageCount(), fallos, nombres };
 }
 
 module.exports = puerta(async (req, res) => {
@@ -502,6 +600,21 @@ module.exports = puerta(async (req, res) => {
    * junta. Es la salida de emergencia del fallo del 23 ago —cuando la lista de
    * pendientes se vacia segun se imprime, cualquier cosa que recalcule miente—
    * y de paso es lo mas rapido que hay: las baja todas a la vez. */
+  /* ---------- LOS NOMBRES DE VERDAD DE UN TACO ----------
+   * ?nombres=CLAVE devuelve, por paquete, lo que pone su etiqueta. Se leyo al
+   * montar el taco, asi que esto no habla con TikTok ni abre ningun PDF: sale
+   * de lo guardado.
+   *
+   * Quien llama tiene que cruzarlo con la mascara de la API antes de pintarlo
+   * en una tarjeta. Aqui se da tambien hecho —?mascara=— para no dejar esa
+   * comprobacion al azar de quien use la direccion. */
+  if (aTexto(q.nombres)) {
+    const g = await leerTaco(aTexto(q.nombres));
+    if (!g) return res.status(404).json({ ok: false, error: 'sin-taco' });
+    const suyos = Array.isArray(g.nombres) ? g.nombres : [];
+    return res.status(200).json({ ok: true, clave: aTexto(q.nombres), cuantos: suyos.length, nombres: suyos });
+  }
+
   /* ---------- EL TACO YA MONTADO ----------
    * ?taco=CLAVE devuelve el PDF que se guardo al acabar la tanda. Es el que
    * abre el boton del almacen: no habla con TikTok, sale al momento.
@@ -528,7 +641,7 @@ module.exports = puerta(async (req, res) => {
         detalle: 'Ninguno de los ' + cuales.length + ' paquetes tiene etiqueta.',
         fallos: junto.fallos.slice(0, 5) });
     }
-    try { await guardarTaco(clave, cuenta0, cuales, junto.pdf, junto.hojas); } catch (_) {}
+    try { await guardarTaco(clave, cuenta0, cuales, junto.pdf, junto.hojas, junto.nombres); } catch (_) {}
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="' + clave.replace(/[^\w.-]/g, '-') + '.pdf"');
     res.setHeader('X-Billys-Taco', 'montado-ahora');
