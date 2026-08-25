@@ -613,6 +613,28 @@ module.exports = puerta(async (req, res) => {
     });
   }
 
+  /* ---------- LOS DIRECTOS Y SUS PRODUCTOS ----------
+   * ?directos=1 saca cada sesion con su username, sus horas y que producto se
+   * vendio en ella. Es de donde sale el rotulo de la cuenta, y el 25 ago 2026
+   * dos directos distintos acabaron los dos como "billystourvlc": sin poder
+   * mirar esto no hay forma de saber cual es cual. */
+  if (aTexto(q.directos)) {
+    const D = require('./_directos');
+    const lista = await D.directos(cuenta0, aEntero(q.dias) || 3);
+    const fuera = [];
+    for (const d of lista.slice(0, aEntero(q.cuantos) || 8)) {
+      const ps = await D.productosDe(cuenta0, d.id);
+      fuera.push({
+        directo: d.id, cuenta: d.cuenta,
+        empezo: d.empezo ? new Date(d.empezo).toISOString() : null,
+        acabo: d.acabo ? new Date(d.acabo).toISOString() : null,
+        prendas: d.prendas,
+        productos: ps.map((p) => ({ id: p.id, vendidas: p.vendidas, titulo: p.titulo }))
+      });
+    }
+    return res.status(200).json({ ok: true, directos: fuera });
+  }
+
   /* ---------- un paquete por dentro ---------- */
   if (aTexto(q.paquete)) {
     const r = await T.comoCuenta(cuenta0, { camino: DETALLE(aTexto(q.paquete)) });
