@@ -1,4 +1,10 @@
 {
+  "_functions": "EL MINUTO DE LA LECTURA. Por defecto Vercel corta antes, y el paso 3 con tres cuentas emitiendo necesita el minuto entero: el 24 ago 2026 habia 962 pedidos pendientes y la lectura salia corta. Va SOLO en esta funcion a proposito: es la unica que lee listas largas, y subirselo a todas seria dejar que cualquier otra se cuelgue un minuto en vez de fallar rapido.",
+  "functions": {
+    "api/tiktok-etiquetas.js": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
       "source": "/recogida",
