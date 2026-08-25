@@ -613,6 +613,43 @@ module.exports = puerta(async (req, res) => {
     });
   }
 
+  /* ---------- DE QUE CUENTA ES CADA PRODUCTO, A MANO ----------
+   * ?fijar=<producto>&cuenta_es=<nombre>
+   *
+   * EL FALLO DEL 25 AGO 2026. El rotulo de la cuenta se aprende de las
+   * analiticas de directos, y ese dia vinieron VACIAS: los tres productos del
+   * dia se quedaron con lo que hubiera guardado de antes y dos directos
+   * distintos acabaron los dos como "billystourvlc". Como cada directo numera
+   * sus prendas desde el 1, en el perchero habia dos numeros 47 con el mismo
+   * cartel.
+   *
+   * Con el almacen esperando no se puede depender de que TikTok conteste. Esto
+   * escribe el rotulo a mano y manda sobre lo aprendido. Es la valvula de
+   * escape, no la via normal.
+   *
+   * ?verProductos=1 enseña lo que hay guardado, que es lo primero que hay que
+   * mirar cuando un cartel sale cambiado. */
+  if (aTexto(q.verProductos)) {
+    const D = require('./_directos');
+    await D.asegurarTablas();
+    const s = db();
+    const filas = await s`select producto, cuenta, directo, titulo, visto
+                          from tiktok_productos order by visto desc limit 40`;
+    return res.status(200).json({ ok: true, cuantos: filas.length, productos: filas });
+  }
+
+  if (aTexto(q.fijar)) {
+    if (!puedeEscribir(req)) return noAutorizado(res, 'escribir');
+    const prod = aTexto(q.fijar), nombre = aTexto(q.cuenta_es).trim();
+    if (!nombre) return res.status(400).json({ ok: false, error: 'sin-cuenta',
+      detalle: 'Dime de que cuenta es: &cuenta_es=billysvlc' });
+    const D = require('./_directos');
+    await D.guardar(prod, nombre, 'a mano', 'fijado a mano');
+    const s = db();
+    const f = await s`select producto, cuenta from tiktok_productos where producto = ${prod}`;
+    return res.status(200).json({ ok: true, fijado: f[0] || null });
+  }
+
   /* ---------- LOS DIRECTOS Y SUS PRODUCTOS ----------
    * ?directos=1 saca cada sesion con su username, sus horas y que producto se
    * vendio en ella. Es de donde sale el rotulo de la cuenta, y el 25 ago 2026
