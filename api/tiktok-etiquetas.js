@@ -90,7 +90,17 @@ async function leerTaco(clave) {
 
 const PEDIDOS = '/order/202309/orders/search';
 const COMBINABLES = '/fulfillment/202309/combinable_packages/search';
-const LIMITE_MS = 25000;
+/* EL PRESUPUESTO DE LA LECTURA, en dos tramos.
+ *
+ * Vercel corta la funcion al minuto. De ahi sale todo lo demas: leer pedidos,
+ * leer que se puede combinar, y armar las tandas. Lo pendiente manda —sin ello
+ * no se puede imprimir— y se lleva los primeros 38 segundos; lo ya enviado se
+ * lleva hasta el 48, y quedan doce para lo que falta.
+ *
+ * Antes esto era UN tope de 25 s compartido por los dos. Con 962 pedidos
+ * pendientes —tres cuentas emitiendo, 24 ago 2026— la lectura salia corta. */
+const LIMITE_PENDIENTES_MS = 38000;
+const LIMITE_MS = 48000;
 const POR_PAGINA = 50;
 /* Cuanto hacia atras se mira lo YA ENVIADO. Tres dias: un directo del viernes
  * que se imprime el domingo por la manana sigue entrando. Mas atras empieza a
@@ -129,10 +139,12 @@ const parada = (estado) => /CANCEL|RETURN|REFUND/i.test(aTexto(estado));
  * recoger su etiqueta. Asi la tanda 3 es la tanda 3 antes de imprimir, a mitad
  * y despues, que es lo que espera quien tiene las tarjetas en la mano.
  * ========================================================================= */
-async function unEstado(cuenta, t0, estado, desde) {
+async function unEstado(cuenta, t0, estado, desde, tope) {
   const fuera = [];
   let token = '', total = null, corto = false;
-  for (let vuelta = 0; vuelta < 40; vuelta++) {
+  /* 40 vueltas de 50 son 2.000 pedidos. Con tres cuentas emitiendo se llega:
+   * el 24 ago 2026 habia 962 pendientes en un solo dia. */
+  for (let vuelta = 0; vuelta < 60; vuelta++) {
     const params = { page_size: POR_PAGINA, sort_field: 'create_time', sort_order: 'ASC' };
     if (token) params.page_token = token;
     const cuerpoP = { order_status: estado };
@@ -144,7 +156,7 @@ async function unEstado(cuenta, t0, estado, desde) {
     if (total == null && d.total_count != null) total = Number(d.total_count);
     token = aTexto(d.next_page_token);
     if (!token) break;
-    if (Date.now() - t0 > LIMITE_MS) { corto = true; break; }
+    if (Date.now() - t0 > tope) { corto = true; break; }
   }
   return { pedidos: fuera, total, corto };
 }
@@ -152,7 +164,21 @@ async function unEstado(cuenta, t0, estado, desde) {
 async function todosLosPedidos(cuenta, t0, desdeFuera) {
   /* 1. Lo que falta por enviar. Este es el numero que se compara con el
    *    "Pendiente de envio (68)" del Centro de vendedores. */
-  const pend = await unEstado(cuenta, t0, 'AWAITING_SHIPMENT', null);
+  /* ===========================================================================
+   * LO PENDIENTE SE LEE ENTERO. LO DEMAS, SI DA TIEMPO.
+   * ===========================================================================
+   * EL FALLO DEL 24 AGO 2026, con el directo en marcha. Con tres cuentas
+   * emitiendo habia 962 pedidos pendientes; los dos estados compartian un tope
+   * de 25 segundos y la lectura salio con `listaCompleta: false`. Imprimir asi
+   * deja pedidos fuera de las tandas, que es el error que mas cuesta: la prenda
+   * esta en el perchero y no hay etiqueta que la saque.
+   *
+   * Lo pendiente y lo ya enviado NO valen lo mismo. Si falta un pendiente, esa
+   * venta no se envia hoy. Si falta uno ya enviado, la tanda pierde una etiqueta
+   * que ya existe y se puede recuperar. Asi que el presupuesto va por delante
+   * para lo pendiente, y lo enviado se lleva lo que sobre.
+   * ========================================================================= */
+  const pend = await unEstado(cuenta, t0, 'AWAITING_SHIPMENT', null, LIMITE_PENDIENTES_MS);
 
   /* 2. Y lo YA ENVIADO DE ESTA MISMA REMESA.
    *
@@ -188,7 +214,9 @@ async function todosLosPedidos(cuenta, t0, desdeFuera) {
    * esperando. Acepta una fecha (2026-08-22) o segundos. */
   if (desdeFuera) desde = desdeFuera;
 
-  const ya = await unEstado(cuenta, t0, 'AWAITING_COLLECTION', desde);
+  /* Y lo ya enviado con lo que quede del minuto. Si se corta, se dice: mejor
+   * una tanda con una etiqueta de menos y avisando, que una que miente. */
+  const ya = await unEstado(cuenta, t0, 'AWAITING_COLLECTION', desde, LIMITE_MS);
 
   const porId = new Map();
   for (const o of [...pend.pedidos, ...ya.pedidos]) porId.set(aTexto(o.id), o);
