@@ -373,13 +373,24 @@ async function desdeEnlace(){
  * compradores de cualquiera que teclee la dirección.
  */
 const CODIGO = new URLSearchParams(location.search).get('d') || '';
+
+/* ?dia=2026-08-26 — LAS TARJETAS DE OTRO DIA.
+ *
+ * EL FALLO DEL 27 AGO 2026, a las 11:30 y con el equipo esperando. Esta pagina
+ * pedia SIEMPRE las tandas de hoy, asi que a la manana siguiente de un directo
+ * decia "no hay nada que recoger" aunque las tarjetas de anoche estuvieran
+ * guardadas y enteras. El servidor si acepta el dia; era esta pagina la que no
+ * lo mandaba. Sin esto, la unica salida era rehacer el paso 2 y regenerarlas,
+ * que es justo lo que no se puede hacer con gente recogiendo. */
+const DIA = new URLSearchParams(location.search).get('dia') || '';
 let GENERADO = null;      // el sello de lo que estamos usando ahora mismo
 let PENDIENTE = null;     // datos nuevos que aún no toca meter
 
 async function desdeApi(){
   if (!CODIGO) return null;
   try {
-    const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO), { cache: 'no-store' });
+    const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) +
+                          (DIA ? '&dia=' + encodeURIComponent(DIA) : ''), { cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
     if (!j || !j.hay || !j.datos || !(j.datos.tandas || []).length) return null;
