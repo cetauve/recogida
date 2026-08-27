@@ -5,109 +5,104 @@
  *
  * Cuando algo no funcione, esta es la primera dirección que hay que abrir.
  */
-const { db, puerta, puedeLeer, aTexto, diaDeHoy } = require('./_lib');
+const { db, puerta, puedeLeer, aTexto, aEntero, diaDeHoy } = require('./_lib');
 const T = require('./_tiktok');
 
 /* ===========================================================================
- * ?pedido=<id> — DE QUÉ DIRECTO VIENE ESTA VENTA. Prueba, 26 ago 2026.
+ * ?prendas=<ESTADO>&desde=<fecha> — QUE NUMERO ES DE QUE CUENTA.
  * ===========================================================================
- * Lo dijo la account manager de TikTok y hay que comprobarlo antes de fiarse:
- * el DETALLE del pedido trae `room_id`, "the unique ID of the LIVE session
- * where the order line item was created". Si eso viene relleno, se acabó
- * adivinar de qué cuenta es cada producto: TikTok lo dice.
+ * EL FALLO DEL 26 AGO 2026. Las tarjetas de ese dia salieron con las 866
+ * prendas bajo el mismo cartel: los tres productos del dia se aprendieron mal,
+ * y como el panel vio "una sola cuenta" decidio que no hacia falta pintar el
+ * rotulo. En el almacen tenian tres racks y ninguna forma de saber cual era
+ * cual.
  *
- * Y explica por qué no lo habíamos visto nunca: el paso 2 usa la BÚSQUEDA de
- * pedidos (/order/202309/orders/search) y esto está en el DETALLE
- * (/order/202309/orders?ids=), que no se llama en ningún sitio.
+ * El paso 2 solo lee lo PENDIENTE DE ENVIO, asi que en cuanto se imprime no
+ * hay forma de volver a preguntar por esas prendas. Esto lee cualquier estado
+ * —A LA ESPERA DE RECOGIDA, que es donde acaban— y devuelve, por prenda, su
+ * numero y de que producto es. Con los productos ya fijados a mano, eso es el
+ * rotulo bueno.
  *
- * Se pregunta por las dos vías a la vez para saber si hace falta la llamada de
- * más o si la búsqueda ya lo traía y lo estábamos tirando.
- *
- * VIVE AQUÍ Y NO EN tiktok-etiquetas.js A PROPÓSITO: esto es una prueba, y el
- * archivo de las etiquetas es el que no se puede romper. Cuando se sepa la
- * respuesta, esta rama se borra.
- *
- * NO DEVUELVE EL PEDIDO ENTERO: nombres y direcciones no salen de aquí. Solo
- * los nombres de los campos y los identificadores que hacen falta. */
-async function deQueDirecto(req) {
+ * Es una herramienta de rescate, no parte del flujo. Solo lee. */
+const BUSCAR = '/order/202309/orders/search';
+
+async function prendasPorCuenta(req) {
   const q = req.query || {};
-  const pedido = aTexto(q.pedido).trim();
   const cuenta = (aTexto(q.cuenta).trim() || 'billysvlc').toLowerCase();
+  const estado = (aTexto(q.prendas).trim() || 'AWAITING_COLLECTION').toUpperCase();
+  const desde = (() => {
+    const v = aTexto(q.desde).trim();
+    if (!v) return 0;
+    if (/^\d+$/.test(v)) return Number(v);
+    const t = Date.parse(v.length <= 10 ? v + 'T00:00:00Z' : v);
+    return Number.isFinite(t) ? Math.floor(t / 1000) : 0;
+  })();
 
-  const fuera = { pedido, cuenta };
+  const t0 = Date.now();
+  const cuerpo = { order_status: estado };
+  if (desde) cuerpo.create_time_ge = desde;
 
-  /* 1. EL DETALLE, que es donde dicen que está. */
-  try {
-    const r = await T.comoCuenta(cuenta, {
-      camino: '/order/202309/orders',
-      params: { ids: pedido }
-    });
-    const o = ((r && r.data && r.data.orders) || [])[0] || null;
-    const lineas = (o && o.line_items) || [];
-    fuera.detalle = {
-      code: r && r.code,
-      mensaje: aTexto(r && r.message).slice(0, 160),
-      camposDelPedido: o ? Object.keys(o) : null,
-      camposDeLaLinea: lineas[0] ? Object.keys(lineas[0]) : null,
-      /* lo que importa */
-      room_id: lineas.map((l) => aTexto(l.room_id)),
-      product_id: lineas.map((l) => aTexto(l.product_id)),
-      seller_sku: lineas.map((l) => aTexto(l.seller_sku)),
-      product_listing_type: lineas.map((l) => aTexto(l.product_listing_type))
-    };
-  } catch (e) {
-    fuera.detalle = { error: String((e && e.message) || e).slice(0, 200) };
+  const prendas = [];
+  let token = '', vueltas = 0, corto = false;
+  do {
+    const params = { page_size: 50 };
+    if (token) params.page_token = token;
+    const r = await T.comoCuenta(cuenta, { camino: BUSCAR, metodo: 'POST', params, cuerpo });
+    if (!r || r.code !== 0) return { error: aTexto(r && r.message).slice(0, 200), code: r && r.code };
+    const d = r.data || {};
+    for (const o of (d.orders || [])) {
+      for (const l of (o.line_items || [])) {
+        const num = Number(aTexto(l.seller_sku).replace(/\D+/g, ''));
+        prendas.push({
+          num: Number.isFinite(num) ? num : null,
+          producto: aTexto(l.product_id),
+          pedido: aTexto(o.id),
+          creado: o.create_time ? Number(o.create_time) * 1000 : null
+        });
+      }
+    }
+    token = aTexto(d.next_page_token);
+    vueltas++;
+    if (Date.now() - t0 > 40000) { corto = true; break; }
+  } while (token && vueltas < 40);
+
+  /* El rotulo de cada producto, de lo ya guardado (incluido lo fijado a mano). */
+  const D = require('./_directos');
+  await D.asegurarTablas();
+  const s = db();
+  const ids = [...new Set(prendas.map((p) => p.producto).filter(Boolean))];
+  const filas = ids.length
+    ? await s`select producto, cuenta, directo from tiktok_productos where producto = any(${ids})`
+    : [];
+  const rotulo = new Map(filas.map((f) => [f.producto, f.cuenta]));
+
+  /* Agrupado por cuenta, con los numeros ordenados: es lo que hace falta para
+   * rehacer las tarjetas o para cantarlo en el almacen. */
+  const porCuenta = {};
+  for (const p of prendas) {
+    const c = rotulo.get(p.producto) || ('(sin rotulo) ' + p.producto);
+    const e = porCuenta[c] = porCuenta[c] || { prendas: 0, numeros: [] };
+    e.prendas++;
+    if (p.num != null) e.numeros.push(p.num);
   }
+  for (const c of Object.keys(porCuenta)) porCuenta[c].numeros.sort((a, b) => a - b);
 
-  /* 2. LA BÚSQUEDA, la que ya usamos. ¿Traía el dato y no lo mirábamos? */
-  try {
-    const r = await T.comoCuenta(cuenta, {
-      camino: '/order/202309/orders/search',
-      metodo: 'POST',
-      params: { page_size: 1 },
-      cuerpo: { order_status: 'AWAITING_COLLECTION' }
-    });
-    const o = ((r && r.data && r.data.orders) || [])[0] || null;
-    const lineas = (o && o.line_items) || [];
-    fuera.busqueda = {
-      code: r && r.code,
-      camposDelPedido: o ? Object.keys(o) : null,
-      camposDeLaLinea: lineas[0] ? Object.keys(lineas[0]) : null,
-      traeRoomId: lineas.some((l) => l && l.room_id !== undefined),
-      room_id: lineas.map((l) => aTexto(l.room_id))
-    };
-  } catch (e) {
-    fuera.busqueda = { error: String((e && e.message) || e).slice(0, 200) };
-  }
-
-  /* 3. Y los directos de estos días, para poder casar el room_id con un nombre
-   *    ahí mismo, sin tener que abrir otra pestaña. */
-  try {
-    const D = require('./_directos');
-    const lista = await D.directos(cuenta, 3);
-    fuera.directos = lista.map((d) => ({ sesion: d.id, cuenta: d.cuenta, prendas: d.prendas }));
-    const rooms = (fuera.detalle && fuera.detalle.room_id) || [];
-    fuera.cuadra = rooms.map((r) => {
-      const d = lista.find((x) => x.id === r);
-      return { room_id: r, cuenta: d ? d.cuenta : (r ? '(no está en los directos leídos)' : '(vacío)') };
-    });
-  } catch (e) {
-    fuera.directos = { error: String((e && e.message) || e).slice(0, 200) };
-  }
-
-  return fuera;
+  return {
+    estado, desde, vueltas, corto, ms: Date.now() - t0,
+    total: prendas.length,
+    productos: ids.map((id) => ({ producto: id, cuenta: rotulo.get(id) || '(sin rotulo)' })),
+    porCuenta
+  };
 }
 
 module.exports = puerta(async (req, res) => {
   const s = db();
   const hoy = diaDeHoy();
 
-  /* La prueba del room_id va delante y exige código de lectura: llama a TikTok
-   * y no tiene por qué contestarle a cualquiera. */
-  if (aTexto((req.query || {}).pedido)) {
+  if (aTexto((req.query || {}).prendas)) {
     if (!puedeLeer(req)) return res.status(401).json({ ok: false, error: 'sin-permiso' });
-    const r = await deQueDirecto(req);
-    return res.status(200).json({ ok: true, prueba: 'room_id', ...r });
+    const r = await prendasPorCuenta(req);
+    return res.status(200).json({ ok: !r.error, ...r });
   }
 
   const estado = {
