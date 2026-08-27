@@ -47,8 +47,12 @@ function asegurarTablas() {
   return creando;
 }
 
-const DIAS_ATRAS = 10;
-const LIMITE_MS = 6000;
+/* TRES DIAS, NO DIEZ. El articulo que se busca es el de anoche: esta en los
+ * directos de hoy o de ayer. Y desde el 27 ago 2026 hay que recorrer TODOS los
+ * directos del dia para poder compararlos entre si (ver cuentaDe), asi que
+ * cada dia de mas son tres llamadas de mas. */
+const DIAS_ATRAS = 3;
+const LIMITE_MS = 9000;
 
 const soloFecha = (d) => new Date(d).toISOString().slice(0, 10);
 
@@ -106,7 +110,8 @@ async function guardar(producto, cuenta, directo, titulo) {
     values (${producto}, ${cuenta}, ${directo}, ${titulo}, now())
     on conflict (producto) do update set
       cuenta = case when excluded.cuenta = '' then tiktok_productos.cuenta else excluded.cuenta end,
-      directo = excluded.directo, titulo = excluded.titulo, visto = now()`;
+      directo = excluded.directo, titulo = excluded.titulo, visto = now()
+    where tiktok_productos.directo <> 'a mano' or excluded.directo = 'a mano'`;
 }
 
 /* De que cuenta es cada uno de estos productos.
@@ -125,18 +130,57 @@ async function cuentaDe(cuenta, ids) {
   let consultados = 0;
   const lista = await directos(cuenta);
 
+  /* =========================================================================
+   * GANA EL DIRECTO DONDE MAS SE VENDIO, NO EL PRIMERO QUE LO NOMBRA.
+   * =========================================================================
+   * EL FALLO DEL 25 Y DEL 26 AGO 2026, con cientos de prendas mal rotuladas.
+   *
+   * TikTok lista el MISMO producto en las analiticas de varios directos, tambien
+   * en los de las otras cuentas, con las unidades vendidas al lado. El 26 decia:
+   *
+   *     directo de billysvlc      -> producto ...614761: 350 vendidas
+   *     directo de billystourvlc  -> producto ...614761:   0 vendidas
+   *     directo de billystacos    -> producto ...614761:   0 vendidas
+   *
+   * El dueno es evidente: el unico donde se vendio algo. Pero esto se quedaba
+   * con el PRIMERO de la lista que lo nombrara —y la lista va del mas reciente
+   * al mas viejo—, sin mirar las unidades ni una vez. `vendidas` se pedia, se
+   * recibia, se mapeaba y no se usaba nunca.
+   *
+   * Ahora: las apariciones con CERO ventas se tiran, y de las que quedan gana la
+   * de mas unidades. Y no se decide hasta haber visto todos los directos de ese
+   * dia, porque comparar exige tenerlos los tres delante. */
+  const mejor = new Map();
+  let diaBueno = null;
+  const sinCandidato = () => [...faltan].filter((x) => !mejor.has(x)).length;
+
   for (const d of lista) {
-    if (!faltan.size || Date.now() - t0 > LIMITE_MS) break;
+    if (Date.now() - t0 > LIMITE_MS) break;
     if (!d.cuenta) continue;
+    const dia = d.empezo ? soloFecha(d.empezo) : '';
+    if (!sinCandidato() && diaBueno && dia !== diaBueno) break;
+
     consultados++;
     const productos = await productosDe(cuenta, d.id);
     for (const p of productos) {
       if (!p.id) continue;
-      /* Se guarda TODO lo que se ve, no solo lo que buscabamos: la proxima vez
-       * ya estara y no habra que volver a preguntar. */
-      await guardar(p.id, d.cuenta, d.id, p.titulo);
-      if (faltan.has(p.id)) { mapa.set(p.id, d.cuenta); faltan.delete(p.id); }
+      /* Cero ventas no es una pista: es el mismo articulo asomando en el
+       * directo de otra cuenta. Guardarlo fue lo que rompio el perchero. */
+      if (!p.vendidas) continue;
+      const ya = mejor.get(p.id);
+      if (!ya || p.vendidas > ya.vendidas) {
+        mejor.set(p.id, { cuenta: d.cuenta, directo: d.id, titulo: p.titulo, vendidas: p.vendidas });
+      }
+      if (faltan.has(p.id) && !diaBueno) diaBueno = dia;
     }
+  }
+
+  /* Se escribe al final, con el ganador ya decidido. Antes se guardaba dentro
+   * del bucle y la base acababa diciendo una cosa distinta de la que devolvia
+   * esta misma llamada. */
+  for (const [id, m] of mejor) {
+    await guardar(id, m.cuenta, m.directo, m.titulo);
+    if (faltan.has(id)) { mapa.set(id, m.cuenta); faltan.delete(id); }
   }
 
   return { mapa, sinSaber: [...faltan], consultados };
