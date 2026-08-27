@@ -81,9 +81,12 @@
 
   /* DESDE QUÉ CUENTA SE EMITE. Dos botones grandes, del tamaño de los de la
      rejilla: se pulsa de pie y una sola vez al día. */
-  .cuentas{display:flex;gap:10px;margin:14px 0 6px}
+  /* Desde el 27 ago 2026 son TRES y pueden saltar de linea: con tres en una
+     sola fila el nombre se parte por la mitad en una tablet de pie. */
+  .cuentas{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 6px}
   .cuentas button{
-    flex:1;padding:16px 10px;border-radius:14px;border:2px solid var(--borde);
+    flex:1 1 30%;min-width:150px;
+    padding:16px 10px;border-radius:14px;border:2px solid var(--borde);
     background:var(--carta);color:var(--tinta);font:inherit;font-size:16px;font-weight:800;
   }
   .cuentas button.on{border-color:var(--acento);background:rgba(200,50,31,.16)}
@@ -272,7 +275,11 @@ const CONFIG = {
      las prendas y es lo que permite no mezclar los dos directos. */
   cuentas: [
     { id: 'billysvlc',     nombre: 'billysvlc',     pie: 'la de siempre' },
-    { id: 'billystourvlc', nombre: 'billystourvlc', pie: 'la del tour' }
+    { id: 'billystourvlc', nombre: 'billystourvlc', pie: 'la del tour' },
+    /* Estreno el 25 ago 2026. Se anade aqui y ya esta: los botones se pintan
+       de esta lista, y el servidor saca las cuentas del dia de los turnos que
+       llegan, no de una lista suya. */
+    { id: 'billystacos',   nombre: 'billystacos',   pie: 'la de los tacos' }
   ],
   categorias: [
     { id:'camisetas_a', nombre:'Camisetas A'    },
