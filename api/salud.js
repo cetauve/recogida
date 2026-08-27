@@ -56,6 +56,7 @@ async function prendasPorCuenta(req) {
         prendas.push({
           num: Number.isFinite(num) ? num : null,
           producto: aTexto(l.product_id),
+          sku: aTexto(l.sku_id),
           pedido: aTexto(o.id),
           creado: o.create_time ? Number(o.create_time) * 1000 : null
         });
@@ -81,17 +82,34 @@ async function prendasPorCuenta(req) {
   const porCuenta = {};
   for (const p of prendas) {
     const c = rotulo.get(p.producto) || ('(sin rotulo) ' + p.producto);
-    const e = porCuenta[c] = porCuenta[c] || { prendas: 0, numeros: [] };
+    const e = porCuenta[c] = porCuenta[c] || { prendas: 0, numeros: [], ejemplos: [] };
     e.prendas++;
     if (p.num != null) e.numeros.push(p.num);
+    /* Tres pedidos de muestra por cuenta. Sirven para abrir uno en el Centro de
+     * vendedores y comprobar a mano que el rotulo que dice esto es el que pone
+     * TikTok en pantalla ("LIVE: billysvlc"), que por API no llega. */
+    if (e.ejemplos.length < 3) e.ejemplos.push({ pedido: p.pedido, num: p.num, sku: p.sku });
   }
   for (const c of Object.keys(porCuenta)) porCuenta[c].numeros.sort((a, b) => a - b);
+
+  /* Y LO MISMO POR PEDIDO, que es lo unico que desambigua.
+   * El numero 47 existe en los tres racks y son prendas distintas, asi que
+   * repartir los numeros de una tarjeta mirando solo el numero no vale. La
+   * tarjeta si guarda los ids de pedido de su comprador: con esto se cruza por
+   * ahi y cada numero cae en su cuenta sin lugar a dudas. */
+  const porPedido = {};
+  for (const p of prendas) {
+    if (!p.pedido) continue;
+    const c = rotulo.get(p.producto) || '';
+    (porPedido[p.pedido] = porPedido[p.pedido] || []).push({ n: p.num, c });
+  }
 
   return {
     estado, desde, vueltas, corto, ms: Date.now() - t0,
     total: prendas.length,
     productos: ids.map((id) => ({ producto: id, cuenta: rotulo.get(id) || '(sin rotulo)' })),
-    porCuenta
+    porCuenta,
+    porPedido
   };
 }
 
