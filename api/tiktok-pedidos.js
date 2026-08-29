@@ -109,6 +109,16 @@ module.exports = puerta(async (req, res) => {
 
   const q = req.query || {};
   const cuenta = (aTexto(q.cuenta).trim() || 'billysvlc').toLowerCase();
+  /* QUE ESTADO SE LEE. Por defecto lo de siempre —lo que falta por enviar—,
+   * que es el paso 2 y no cambia.
+   *
+   * EL 29 AGO 2026 hizo falta lo otro. El equipo dio al paso 2 con la version
+   * vieja, se imprimieron esas etiquetas, y al releer ya no estaban: un pedido
+   * con etiqueta sale de AWAITING_SHIPMENT, asi que sus tarjetas desaparecieron
+   * del almacen con los paquetes todavia sin empaquetar. Para devolverlas hay
+   * que poder leer AWAITING_COLLECTION con la MISMA forma que el paso 2 —con su
+   * comprador y sus numeros—, y eso es lo unico que esto anade. */
+  const estado = (aTexto(q.estado).trim() || 'AWAITING_SHIPMENT').toUpperCase();
   const t0 = Date.now();
 
   const porId = new Map();
@@ -123,7 +133,7 @@ module.exports = puerta(async (req, res) => {
 
     const r = await T.comoCuenta(cuenta, {
       camino: BUSCAR, metodo: 'POST', params,
-      cuerpo: { order_status: 'AWAITING_SHIPMENT' }
+      cuerpo: { order_status: estado }
     });
     if (!r || r.code !== 0) {
       return res.status(502).json({
