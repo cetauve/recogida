@@ -124,7 +124,23 @@ async function llamar({ camino, metodo = 'GET', params = {}, cuerpo = null, acce
 
 /* ------------------------------------------------------------------ tokens */
 
-const enSegundos = (s) => (s ? new Date(Date.now() + Number(s) * 1000) : null);
+/* TIKTOK MANDA UN INSTANTE, NO UNA DURACION.
+ *
+ * EL FALLO DEL 31 AGO 2026. Esto sumaba access_token_expire_in a la hora de
+ * ahora, como si fueran "segundos que quedan". Pero TikTok manda el momento
+ * exacto de caducidad en segundos desde 1970, asi que se guardaba "caduca en
+ * 2083" y el refresco automatico —que solo entra cuando quedan menos de diez
+ * minutos— no entraba NUNCA. El token aguantaba sus siete dias de verdad y al
+ * octavo se caia en seco en mitad de la mañana, sin arreglarse solo. Paso el
+ * lunes 31, con el almacen esperando las etiquetas del sabado.
+ *
+ * Se aceptan las dos formas: por encima de mil millones es una fecha, por
+ * debajo es una duracion. Asi da igual lo que mande TikTok. */
+const enSegundos = (s) => {
+  const n = Number(s);
+  if (!n || !Number.isFinite(n) || n <= 0) return null;
+  return new Date(n > 1e9 ? n * 1000 : Date.now() + n * 1000);
+};
 
 async function pedirToken(codigo) {
   const q = new URLSearchParams({
@@ -205,7 +221,13 @@ async function accesoDe(cuenta) {
   const f = filas[0];
 
   const queda = f.acceso_hasta ? new Date(f.acceso_hasta).getTime() - Date.now() : -1;
-  if (f.acceso && queda > MARGEN_MS) return { acceso: f.acceso, cifra: f.tienda_cifra, fila: f };
+  /* Y NO NOS FIAMOS DE UNA FECHA IMPOSIBLE. Las filas guardadas antes del
+   * arreglo de arriba dicen que el token dura hasta 2083; si nos la creemos no
+   * se refresca jamas y la tienda se queda muerta hasta que alguien vuelva a
+   * autorizar a mano. Un access_token de TikTok dura dias, no años: si lo
+   * guardado dice mas de un mes, esta mal y se refresca. */
+  const creible = queda > MARGEN_MS && queda < 31 * 24 * 3600 * 1000;
+  if (f.acceso && creible) return { acceso: f.acceso, cifra: f.tienda_cifra, fila: f };
 
   if (!f.refresco) { const e = new Error('Sin refresh_token para ' + cuenta + ': hay que volver a autorizar'); e.sinAutorizar = true; throw e; }
   const nuevo = await refrescarToken(f.refresco);
