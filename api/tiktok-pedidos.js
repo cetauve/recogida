@@ -23,7 +23,7 @@
  * se recorre —lo mismo que hacia que el paso 1 contara 34 donde habia 29—. Con
  * un mapa por id eso no puede inflar nada.
  */
-const { puerta, puedeLeer, noAutorizado, aTexto, aNumero } = require('./_lib');
+const { db, puerta, puedeLeer, noAutorizado, aTexto, aNumero } = require('./_lib');
 const T = require('./_tiktok');
 const D = require('./_directos');
 
@@ -184,6 +184,61 @@ module.exports = puerta(async (req, res) => {
      * repartiendo por productoId, que es lo que de verdad separa los racks. */
     sinSaber = ['(no se ha podido consultar: ' + String((e && e.message) || e).slice(0, 120) + ')'];
   }
+
+  /* EL NOMBRE DEL PRODUCTO MANDA SOBRE LO APRENDIDO.
+   *
+   * EL 3 SEP 2026, en pleno directo, 120 de las 152 prendas pendientes salian
+   * SIN ROTULO. El producto se llamaba "PRODUCTO DE MARCA - BILLYSTACOS" y el
+   * programa no lo miraba: de un producto solo sabia lo que hubiera aprendido
+   * de las analiticas de directos —que llegan con un dia de retraso— o lo que
+   * alguien hubiera fijado a mano en la pantalla del paso 2. La respuesta
+   * estaba escrita en el titulo desde el primer segundo y habia que esperar un
+   * dia, o a que una persona lo dijera, para poder usarla.
+   *
+   * Va DESPUES del bloque de arriba y a proposito:
+   *   - lo fijado a mano no se toca NUNCA, que lo ha dicho una persona;
+   *   - el nombre gana a lo aprendido, porque lo aprendido es justo lo que
+   *     fallo el 25 y el 26 de agosto, y el nombre no depende de que TikTok
+   *     conteste nada;
+   *   - y funciona con las analiticas caidas, que es cuando hace falta.
+   *
+   * Se exige que lo que coincida tenga ocho letras o mas, para que "billys" a
+   * secas no case con todo, y se acepta la forma sin el "vlc" del final porque
+   * los titulos ponen BILLYSTOUR y la cuenta se llama billystourvlc. Gana la
+   * coincidencia mas larga: si un titulo lleva dos nombres, manda el especifico. */
+  try {
+    const s = db();
+    const todos = [];
+    for (const p of pedidos) for (const x of p.prendas) if (x.productoId) todos.push(x.productoId);
+    const unicos = [...new Set(todos)];
+    const filas = unicos.length
+      ? await s`select producto, directo from tiktok_productos where producto = any(${unicos})`
+      : [];
+    const aMano = new Set(filas.filter((f) => aTexto(f.directo) === 'a mano').map((f) => aTexto(f.producto)));
+    const cuentas = await s`select distinct cuenta from tiktok_productos where cuenta <> ''`;
+    const nombres = [...new Set(cuentas.map((c) => aTexto(c.cuenta).toLowerCase()).filter(Boolean))];
+    const limpia = (x) => aTexto(x).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const formas = (c) => {
+      const n = limpia(c), v = [n];
+      if (n.length > 3 && n.slice(-3) === 'vlc') v.push(n.slice(0, -3));
+      return v.filter((x) => x.length >= 8);
+    };
+    const porNombre = (titulo) => {
+      const t = limpia(titulo);
+      let gana = null, largo = 0;
+      for (const c of nombres) for (const f of formas(c)) {
+        if (t.includes(f) && f.length > largo) { gana = c; largo = f.length; }
+      }
+      return gana;
+    };
+    const puestos = new Set();
+    for (const p of pedidos) for (const x of p.prendas) {
+      if (!x.productoId || aMano.has(x.productoId)) continue;
+      const dice = porNombre(x.producto);
+      if (dice) { x.cuenta = dice; puestos.add(x.productoId); }
+    }
+    if (puestos.size) sinSaber = (sinSaber || []).filter((z) => !puestos.has(aTexto(z)));
+  } catch (_) { /* si esto falla, se queda como estaba: sin rotulo, pero leido */ }
 
   return res.status(200).json({
     ok: true,
