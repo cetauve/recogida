@@ -571,7 +571,15 @@ module.exports = puerta(async (req, res) => {
      * fallo de las hojas mal contadas. */
     const cuantosIds = aTexto(g && g.ids).split(',').filter((x) => x.trim()).length;
     const completo = g && g.hojas >= cuantosIds && cuantosIds > 0;
-    if (g && g.pdf && g.hojas && completo) {
+    /* ?rehacer=1 lo vuelve a montar aunque lo guardado parezca completo.
+     *
+     * Hace falta para los tacos en blanco de una sola etiqueta: se guardaron
+     * con "una hoja" —la que pdf-lib metia sola— y un paquete, asi que las
+     * cuentas cuadran y no se rehacen por su cuenta. Y de paso es lo que hay
+     * que pulsar cualquier dia que un taco salga raro, en vez de rehacer el
+     * paso 3 entero. */
+    const rehacer = !!aTexto(q.rehacer);
+    if (g && g.pdf && g.hojas && completo && !rehacer) {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'inline; filename="' + clave.replace(/[^\w.-]/g, '-') + '.pdf"');
       res.setHeader('X-Billys-Taco', 'guardado');
