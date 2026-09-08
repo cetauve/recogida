@@ -395,16 +395,31 @@ const DIA = new URLSearchParams(location.search).get('dia') || '';
  *
  * Con esto, cada juego tiene su propia cola. Sin ?dia= en el enlace, DIA queda
  * vacio y el servidor sigue usando el dia de hoy: Espana no se entera. */
-const urlCola = () => '/api/cola?d=' + encodeURIComponent(CODIGO) +
-                      (DIA ? '&dia=' + encodeURIComponent(DIA) : '');
+/* ?juego=es-2026-09-08 — LA LLAVE DE VERDAD.
+ *
+ * Un juego es una sesion de recogida: lo que sale de un paso 2. El pais va
+ * dentro del codigo y la fecha queda de etiqueta. Es lo que permite que Espana
+ * y Holanda trabajen el mismo dia sin pisarse, y que un directo que cruza la
+ * medianoche siga siendo uno.
+ *
+ * SI NO VIENE, SE USA ?dia= COMO ANTES, y si tampoco viene, el servidor pone el
+ * dia de hoy. Un enlace viejo sigue funcionando igual que ayer. */
+const JUEGO = new URLSearchParams(location.search).get('juego') || '';
+
+/* Lo que identifica a este juego, se llame como se llame el parametro. */
+const LLAVE = () => JUEGO || DIA || '';
+const colaEnLaUrl = () => (JUEGO ? '&juego=' + encodeURIComponent(JUEGO)
+                                 : (DIA ? '&dia=' + encodeURIComponent(DIA) : ''));
+
+const urlCola = () => '/api/cola?d=' + encodeURIComponent(CODIGO) + colaEnLaUrl();
 let GENERADO = null;      // el sello de lo que estamos usando ahora mismo
 let PENDIENTE = null;     // datos nuevos que aún no toca meter
 
 async function desdeApi(){
   if (!CODIGO) return null;
   try {
-    const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) +
-                          (DIA ? '&dia=' + encodeURIComponent(DIA) : ''), { cache: 'no-store' });
+    const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) + colaEnLaUrl(),
+                          { cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
     if (!j || !j.hay || !j.datos || !(j.datos.tandas || []).length) return null;
@@ -413,6 +428,9 @@ async function desdeApi(){
        del de ayer; sin esto, el móvil abría las tandas de hoy con las palomitas
        verdes del día anterior puestas. */
     j.datos.dia = j.dia || j.datos.dia || '';
+    /* De que JUEGO son estas tarjetas. Es lo que separa el avance guardado en
+       este movil: dos juegos del mismo dia tienen avances distintos. */
+    j.datos.juego = j.juego || j.datos.juego || j.datos.dia || '';
     return j.datos;
   } catch(e){ console.warn('sin servidor', e); return null; }
 }
@@ -443,7 +461,10 @@ async function mirarSiHayNuevo(){
  * Ahora la clave lleva el DÍA. Y al arrancar se tira lo de los días
  * anteriores, que además no cabe eternamente en un móvil.
  * ========================================================================= */
-const diaDatos = () => DATOS.dia || (DATOS.generado || '').slice(0, 10) || 'suelto';
+/* LA CLAVE DEL AVANCE ES EL JUEGO.
+   Llevaba la fecha, y con dos juegos el mismo dia —Espana y Holanda— el segundo
+   abria las tandas con las palomitas verdes del primero. */
+const diaDatos = () => DATOS.juego || DATOS.dia || (DATOS.generado || '').slice(0, 10) || 'suelto';
 const claveDe = (ti) => 'billys_rec_' + diaDatos() + '_t' + ti;
 /* LAS MARCAS SON DE LA PERSONA, NO DEL MÓVIL.
    La clave llevaba solo día y rol, así que en una tablet compartida el que
@@ -604,7 +625,7 @@ async function apuntarTanda(etiqueta, hechos, total, forzar){
     const r = await fetch(urlCola(), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
       /* En POST el servidor lee el dia del CUERPO, no de la direccion. */
-      body: JSON.stringify({ dia: DIA || undefined, accion:'tanda', quien: QUIEN,
+      body: JSON.stringify({ juego: LLAVE() || undefined, accion:'tanda', quien: QUIEN,
                              tanda: etiqueta, hechos, total, forzar: !!forzar })
     });
     return await r.json();
@@ -707,7 +728,7 @@ async function apiCola(cuerpo){
     method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
     /* El dia primero y el cuerpo despues: si alguna llamada trae el suyo, manda
        la llamada. Hoy ninguna lo trae, pero no quiero que eso sea una trampa. */
-    body: JSON.stringify({ dia: DIA || undefined, ...cuerpo })
+    body: JSON.stringify({ juego: LLAVE() || undefined, ...cuerpo })
   });
   return r.json();
 }
@@ -1474,9 +1495,10 @@ function aLaCola(f, cuando, incidencia, motivo){
     /* Qué le pasa, escrito por quien lo vio. Sin esto un paquete parado es un
        paquete parado sin motivo, y eso no lo resuelve nadie. */
     motivo: motivo || '',
-    /* El dia del JUEGO, no el del calendario: una recogida que cruza la
-       medianoche es la misma recogida. Sin ?dia=, sigue siendo el de hoy. */
-    dia: DIA || diaMadrid(cuando),
+    /* El dia de verdad, que es de lo que viven los tiempos de empaquetado. La
+       identidad del juego no va aqui: va en `juego`, que es la llave. */
+    dia: diaMadrid(cuando),
+    juego: LLAVE() || null,
     ficha: f, en: new Date(cuando).toISOString()
   });
   guardarPend();
@@ -1543,16 +1565,20 @@ async function vaciarCola(){
      otro, o metería en el día de hoy un paquete de anoche. */
   const dueno = PENDCOLA[0].quien || QUIEN;
   const cuando = PENDCOLA[0].dia || null;
+  /* El juego con el que se sello el deslice. Lo pendiente de antes de este
+     cambio no lo lleva: para eso esta el respaldo a la llave de hoy. */
+  const elJuego = PENDCOLA[0].juego || LLAVE();
   /* Y por GESTO: meter y cerrar no se pueden mezclar en el mismo envío. */
   const cerrando = !!PENDCOLA[0].cierre;
   const mismo = (x) => (x.quien || QUIEN) === dueno && (x.dia || null) === cuando &&
-                       !!x.cierre === cerrando;
+                       (x.juego || LLAVE()) === elJuego && !!x.cierre === cerrando;
   const iban = PENDCOLA.filter(mismo);
   try {
     const r = await fetch(urlCola(), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
       body: JSON.stringify({ accion: cerrando ? 'cerrarLista' : 'meter',
-                             quien: dueno, dia: cuando, paquetes: iban })
+                             quien: dueno, dia: cuando, juego: elJuego || undefined,
+                             paquetes: iban })
     });
     const j = await r.json();
     if (j && j.ok) {
@@ -1606,7 +1632,7 @@ async function reenviarTodo(avisar){
   const porEnvio = new Map();
   for (const m of MARCAS) {
     const f = fichaDe(m.pedido);
-    const dia = DIA || diaMadrid(m.t);
+    const dia = diaMadrid(m.t);
     const cierre = MODO === 'empaqueta' && m.estado !== 'inc';
     const llave = dia + '|' + (cierre ? 'cerrar' : 'meter');
     if (!porEnvio.has(llave)) porEnvio.set(llave, { dia, cierre, paquetes: [] });
@@ -1624,7 +1650,8 @@ async function reenviarTodo(avisar){
       const r = await fetch(urlCola(), {
         method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
         body: JSON.stringify({ accion: envio.cierre ? 'cerrarLista' : 'meter',
-                               quien: QUIEN, dia: envio.dia, paquetes: envio.paquetes })
+                               quien: QUIEN, dia: envio.dia, juego: LLAVE() || undefined,
+                               paquetes: envio.paquetes })
       });
       const j = await r.json();
       if (j && j.ok) {
@@ -1721,7 +1748,7 @@ async function atras(){
   try {
     const r = await fetch(urlCola(), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
-      body: JSON.stringify({ dia: DIA || undefined,
+      body: JSON.stringify({ juego: LLAVE() || undefined,
                              accion: eraCierre ? 'reabrir' : 'retirar', quien: QUIEN, pedido })
     });
     const j = await r.json();
