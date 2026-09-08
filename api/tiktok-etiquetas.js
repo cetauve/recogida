@@ -357,10 +357,18 @@ const A_LA_VEZ = 8;
  *
  * Se piden todas a la vez y se pegan despues, en orden. Bajarlas de una en una
  * no aportaba nada: son descargas independientes. */
-async function juntarPdf(cuenta, paquetes, tamano) {
+async function juntarPdf(cuenta, paquetes, tamano, insistir) {
+  /* AQUI SI SE INSISTE. Y ESTE ERA EL FALLO DE FONDO DEL TACO EN BLANCO.
+   *
+   * Esto pedia el documento con `insistir = false`, o sea una sola vez. Pero
+   * TikTok tarda unos segundos en tener la etiqueta lista despues de crearla, y
+   * el paso 3 monta el taco JUSTO despues de crearlas: llegaba antes que las
+   * etiquetas, se rendia a la primera y el taco salia vacio. `documentoDe` ya
+   * sabe esperar y reintentar —solo ante el "todavia no", no ante otros
+   * errores—, pero nadie se lo estaba pidiendo. */
   const trozos = await enParalelo(paquetes, A_LA_VEZ, async (id) => {
     try {
-      const doc = await documentoDe(cuenta, id, tamano, false);
+      const doc = await documentoDe(cuenta, id, tamano, insistir !== false);
       if (!doc.ok || !doc.url) return { id, error: doc.mensaje };
       const f = await fetch(doc.url);
       if (!f.ok) return { id, error: 'la direccion de TikTok respondio ' + f.status };
@@ -372,17 +380,33 @@ async function juntarPdf(cuenta, paquetes, tamano) {
 
   const fuera = await PDFDocument.create();
   const fallos = [];
+  /* LAS HOJAS SE CUENTAN AQUI, SEGUN SE PEGAN. NO DESPUES DE GUARDAR.
+   *
+   * EL FALLO DEL 8 SEP 2026, y explica el taco en blanco de Holanda.
+   * pdf-lib, al guardar un documento SIN NINGUNA PAGINA, le mete una pagina en
+   * blanco. Y este return pedia `pdf` antes que `hojas`, o sea que guardaba
+   * primero y contaba despues: con las 63 etiquetas fallando, `getPageCount()`
+   * devolvia 1. De ahi salia todo lo demas:
+   *
+   *   - `ok: !!junto.hojas` decia que si, con cero etiquetas dentro
+   *   - `if (junto.hojas && clave)` guardaba el taco en blanco
+   *   - y `if (!junto.hojas)`, que existe justo para esto, no saltaba nunca
+   *
+   * El boton del almacen servia esa hoja en blanco para siempre, y el paso 3
+   * decia que la tanda habia quedado montada. */
+  let pegadas = 0;
   for (const t of trozos) {
     if (!t || t.error || !t.bytes) { fallos.push({ paquete: t && t.id, mensaje: (t && t.error) || 'sin respuesta' }); continue; }
     try {
       const dentro = await PDFDocument.load(t.bytes);
       const hojas = await fuera.copyPages(dentro, dentro.getPageIndices());
-      for (const h of hojas) fuera.addPage(h);
+      for (const h of hojas) { fuera.addPage(h); pegadas++; }
     } catch (e) {
       fallos.push({ paquete: t.id, mensaje: String((e && e.message) || e).slice(0, 160) });
     }
   }
-  return { pdf: Buffer.from(await fuera.save()), hojas: fuera.getPageCount(), fallos };
+  const pdf = Buffer.from(await fuera.save());
+  return { pdf, hojas: pegadas, fallos, pedidas: paquetes.length };
 }
 
 module.exports = puerta(async (req, res) => {
@@ -539,7 +563,15 @@ module.exports = puerta(async (req, res) => {
   if (aTexto(q.taco)) {
     const clave = aTexto(q.taco);
     const g = await leerTaco(clave);
-    if (g && g.pdf && g.hojas) {
+    /* SI LO GUARDADO ESTA INCOMPLETO, SE REHACE. Un taco con menos hojas que
+     * paquetes es un taco al que le faltan etiquetas, casi siempre porque se
+     * monto antes de que TikTok las tuviera listas. Servirlo tal cual es
+     * mandar a alguien a empaquetar sin etiqueta; rehacerlo cuesta segundos.
+     * Esto ademas repara solo los tacos en blanco que se guardaron por el
+     * fallo de las hojas mal contadas. */
+    const cuantosIds = aTexto(g && g.ids).split(',').filter((x) => x.trim()).length;
+    const completo = g && g.hojas >= cuantosIds && cuantosIds > 0;
+    if (g && g.pdf && g.hojas && completo) {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'inline; filename="' + clave.replace(/[^\w.-]/g, '-') + '.pdf"');
       res.setHeader('X-Billys-Taco', 'guardado');
@@ -550,7 +582,7 @@ module.exports = puerta(async (req, res) => {
       return res.status(404).json({ ok: false, error: 'sin-taco',
         detalle: 'No hay ningun taco guardado con la clave "' + clave + '".' });
     }
-    const junto = await juntarPdf(cuenta0, cuales, aTexto(q.tamano));
+    const junto = await juntarPdf(cuenta0, cuales, aTexto(q.tamano), true);
     if (!junto.hojas) {
       return res.status(502).json({ ok: false, error: 'sin-etiquetas',
         detalle: 'Ninguno de los ' + cuales.length + ' paquetes tiene etiqueta.',
@@ -569,16 +601,27 @@ module.exports = puerta(async (req, res) => {
     if (!cuales.length) return res.status(400).json({ ok: false, error: 'sin-paquetes' });
     const clave = aTexto(q.clave);
     const t1 = Date.now();
-    const junto = await juntarPdf(cuenta0, cuales, aTexto(q.tamano));
-    if (junto.hojas && clave) { try { await guardarTaco(clave, cuenta0, cuales, junto.pdf, junto.hojas); } catch (_) {} }
+    const junto = await juntarPdf(cuenta0, cuales, aTexto(q.tamano), true);
+    /* Sin una sola etiqueta dentro no se guarda NADA: guardar el vacio es lo
+     * que dejaba el boton del almacen sirviendo una hoja en blanco para
+     * siempre. Incompleto si se guarda —algo es mejor que nada para imprimir lo
+     * que hay—, pero abajo queda apuntado cuantas faltan y ?taco= lo rehace. */
+    if (junto.hojas > 0 && clave) { try { await guardarTaco(clave, cuenta0, cuales, junto.pdf, junto.hojas); } catch (_) {} }
 
     /* ?montar=1 NO devuelve el PDF, solo dice que ha quedado montado. Es lo que
      * llama el paso 3 al acabar cada tanda: nadie va a mirar ese PDF todavia y
      * bajarse un mega para tirarlo es tonteria. */
     if (aTexto(q.montar)) {
-      return res.status(200).json({ ok: !!junto.hojas, clave: clave || null,
-        paquetes: cuales.length, hojas: junto.hojas, kb: Math.round(junto.pdf.length / 1024),
-        fallos: junto.fallos.slice(0, 5), ms: Date.now() - t1 });
+      /* COMPLETO O NO ESTA. Un taco al que le falta una etiqueta es un paquete
+       * que alguien va a empaquetar sin poder pegarle nada, asi que se dice que
+       * NO ha ido bien aunque haya hojas: quien mira el paso 3 tiene que
+       * enterarse ahi, no delante de la impresora. */
+      return res.status(200).json({
+        ok: junto.hojas > 0 && junto.fallos.length === 0,
+        clave: clave || null, paquetes: cuales.length, hojas: junto.hojas,
+        kb: Math.round(junto.pdf.length / 1024),
+        fallos: junto.fallos.slice(0, 5), faltan: junto.fallos.length,
+        ms: Date.now() - t1 });
     }
 
     if (!junto.hojas) {
