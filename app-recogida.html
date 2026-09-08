@@ -383,6 +383,20 @@ const CODIGO = new URLSearchParams(location.search).get('d') || '';
  * lo mandaba. Sin esto, la unica salida era rehacer el paso 2 y regenerarlas,
  * que es justo lo que no se puede hacer con gente recogiendo. */
 const DIA = new URLSearchParams(location.search).get('dia') || '';
+
+/* LA COLA TAMBIEN ES DE ESE DIA, NO DE HOY.
+ *
+ * EL FALLO DEL 5 SEP 2026. Las tarjetas si sabian de que juego eran (?dia=),
+ * pero NINGUNA llamada a /api/cola lo mandaba, y el servidor, sin dia, escribe
+ * en el dia real. Resultado: el juego de Espana y el de Holanda caian en la
+ * MISMA cola. Ese dia quedaron 191 paquetes juntos con nueve nombres de tanda
+ * mezclados, y "quien lleva la tanda" se cruzaba entre paises porque
+ * tandas_toma tiene clave (dia, tanda) y el nombre de tanda se repite.
+ *
+ * Con esto, cada juego tiene su propia cola. Sin ?dia= en el enlace, DIA queda
+ * vacio y el servidor sigue usando el dia de hoy: Espana no se entera. */
+const urlCola = () => '/api/cola?d=' + encodeURIComponent(CODIGO) +
+                      (DIA ? '&dia=' + encodeURIComponent(DIA) : '');
 let GENERADO = null;      // el sello de lo que estamos usando ahora mismo
 let PENDIENTE = null;     // datos nuevos que aún no toca meter
 
@@ -568,7 +582,7 @@ async function mirarTandas(){
   if (!CODIGO || !$('menu').classList.contains('on')) return;
   relojTandas = setInterval(mirarTandas, 15000);
   try {
-    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
+    const r = await fetch(urlCola(), { cache:'no-store' });
     const j = await r.json();
     if (j && j.ok) {
       TANDAS_TOMA = j.tandas || [];
@@ -587,10 +601,11 @@ async function mirarTandas(){
 async function apuntarTanda(etiqueta, hechos, total, forzar){
   if (!CODIGO || MODO !== 'recoge' || !QUIEN.trim()) return null;
   try {
-    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+    const r = await fetch(urlCola(), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
-      body: JSON.stringify({ accion:'tanda', quien: QUIEN, tanda: etiqueta,
-                             hechos, total, forzar: !!forzar })
+      /* En POST el servidor lee el dia del CUERPO, no de la direccion. */
+      body: JSON.stringify({ dia: DIA || undefined, accion:'tanda', quien: QUIEN,
+                             tanda: etiqueta, hechos, total, forzar: !!forzar })
     });
     return await r.json();
   } catch(e){ return null; }
@@ -688,9 +703,11 @@ let PAQ = null;               // el paquete que tengo ahora mismo en la mesa
 let NADA = null;
 
 async function apiCola(cuerpo){
-  const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+  const r = await fetch(urlCola(), {
     method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
-    body: JSON.stringify(cuerpo)
+    /* El dia primero y el cuerpo despues: si alguna llamada trae el suyo, manda
+       la llamada. Hoy ninguna lo trae, pero no quiero que eso sea una trampa. */
+    body: JSON.stringify({ dia: DIA || undefined, ...cuerpo })
   });
   return r.json();
 }
@@ -718,7 +735,7 @@ function verCola(){
 async function comprobarMio(){
   if (!PAQ || !PAQ.pedido || !CODIGO) return;
   try {
-    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
+    const r = await fetch(urlCola(), { cache:'no-store' });
     const j = await r.json();
     if (!j || !j.ok || !Array.isArray(j.paquetes)) return;
     const mio = j.paquetes.find((x) => x.pedido === PAQ.pedido);
@@ -744,7 +761,7 @@ async function refrescarContador(){
   relojCola = setInterval(refrescarContador, 15000);
   if (!$('cola').classList.contains('on')) { clearInterval(relojCola); return; }
   try {
-    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
+    const r = await fetch(urlCola(), { cache:'no-store' });
     const j = await r.json();
     if (!j || !j.ok) return;
     apuntarNombres(j);
@@ -1104,7 +1121,7 @@ $('colaAdmin').addEventListener('click', async () => {
   if (!clave) return;
   let hay = { espera: 0, haciendo: 0, parado: 0 };
   try {
-    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), { cache:'no-store' });
+    const r = await fetch(urlCola(), { cache:'no-store' });
     const j = await r.json();
     if (j && j.ok) hay = { espera: j.espera || 0, haciendo: j.haciendo || 0, parado: j.parado || 0 };
   } catch(e){ alert('Sin conexión con el servidor.'); return; }
@@ -1457,7 +1474,9 @@ function aLaCola(f, cuando, incidencia, motivo){
     /* Qué le pasa, escrito por quien lo vio. Sin esto un paquete parado es un
        paquete parado sin motivo, y eso no lo resuelve nadie. */
     motivo: motivo || '',
-    dia: diaMadrid(cuando),
+    /* El dia del JUEGO, no el del calendario: una recogida que cruza la
+       medianoche es la misma recogida. Sin ?dia=, sigue siendo el de hoy. */
+    dia: DIA || diaMadrid(cuando),
     ficha: f, en: new Date(cuando).toISOString()
   });
   guardarPend();
@@ -1530,7 +1549,7 @@ async function vaciarCola(){
                        !!x.cierre === cerrando;
   const iban = PENDCOLA.filter(mismo);
   try {
-    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+    const r = await fetch(urlCola(), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
       body: JSON.stringify({ accion: cerrando ? 'cerrarLista' : 'meter',
                              quien: dueno, dia: cuando, paquetes: iban })
@@ -1587,7 +1606,7 @@ async function reenviarTodo(avisar){
   const porEnvio = new Map();
   for (const m of MARCAS) {
     const f = fichaDe(m.pedido);
-    const dia = diaMadrid(m.t);
+    const dia = DIA || diaMadrid(m.t);
     const cierre = MODO === 'empaqueta' && m.estado !== 'inc';
     const llave = dia + '|' + (cierre ? 'cerrar' : 'meter');
     if (!porEnvio.has(llave)) porEnvio.set(llave, { dia, cierre, paquetes: [] });
@@ -1602,7 +1621,7 @@ async function reenviarTodo(avisar){
   let metidos = 0, revueltos = 0, mandados = 0, creados = 0, fallo = false;
   for (const [, envio] of porEnvio) {
     try {
-      const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+      const r = await fetch(urlCola(), {
         method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
         body: JSON.stringify({ accion: envio.cierre ? 'cerrarLista' : 'meter',
                                quien: QUIEN, dia: envio.dia, paquetes: envio.paquetes })
@@ -1700,9 +1719,10 @@ async function atras(){
   PENDCOLA = PENDCOLA.filter((x) => !(x.pedido === pedido && !!x.cierre === eraCierre));
   if (PENDCOLA.length !== antes) { guardarPend(); return; }
   try {
-    const r = await fetch('/api/cola?d=' + encodeURIComponent(CODIGO), {
+    const r = await fetch(urlCola(), {
       method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
-      body: JSON.stringify({ accion: eraCierre ? 'reabrir' : 'retirar', quien: QUIEN, pedido })
+      body: JSON.stringify({ dia: DIA || undefined,
+                             accion: eraCierre ? 'reabrir' : 'retirar', quien: QUIEN, pedido })
     });
     const j = await r.json();
     if (eraCierre) {
