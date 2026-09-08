@@ -238,7 +238,88 @@ const ESQUEMA = [
      en      timestamptz not null,
      unique (dia, tier, en)
    )`,
-  `create index if not exists regalos_dia on regalos (dia)`
+  `create index if not exists regalos_dia on regalos (dia)`,
+
+  /* =========================================================================
+   * LA LLAVE PASA DE SER LA FECHA A SER EL JUEGO
+   * =========================================================================
+   * EL PROBLEMA. `tandas` tenia `dia date primary key`: UNA FILA POR DIA. Con
+   * eso solo cabe un juego de tarjetas al dia, asi que Holanda pisaba a Espana
+   * y habia que aparcar los juegos en fechas falsas (26, 28 de septiembre) para
+   * que convivieran. Y un directo que cruza la medianoche se partia en dos dias
+   * aunque fuera el mismo directo.
+   *
+   * LA LLAVE BUENA ES EL JUEGO. Un juego es una sesion de recogida: lo que sale
+   * de un paso 2. Lleva un codigo que se inventa una vez —`es-2026-09-08`,
+   * `nl-2026-09-08`, y `-2`, `-3` si hay mas de uno ese dia— y ya no cambia.
+   * El pais va dentro y la fecha queda de desempate y de etiqueta para leer.
+   *
+   * `dia` NO se quita. Sigue siendo la fecha de verdad y de ella viven los
+   * tiempos de empaquetado, que se cruzan por dia y no por juego. Lo que deja
+   * de ser es la llave.
+   *
+   * SE PUEDE VOLVER A EJECUTAR SIN MIEDO. Esto corre en cada arranque en frio,
+   * asi que cada paso comprueba antes si ya esta hecho. Y lo que ya habia se
+   * queda con `juego` = su fecha en texto, asi que los enlaces viejos del tipo
+   * ?dia=2026-09-26 siguen valiendo: el servidor, si no le mandan juego, usa la
+   * fecha como juego y sale lo mismo de siempre.
+   * ========================================================================= */
+  `alter table tandas      add column if not exists juego text`,
+  `alter table cola        add column if not exists juego text`,
+  `alter table tandas_toma add column if not exists juego text`,
+
+  `update tandas      set juego = dia::text where juego is null or juego = ''`,
+  `update cola        set juego = dia::text where juego is null or juego = ''`,
+  `update tandas_toma set juego = dia::text where juego is null or juego = ''`,
+
+  `do $$
+   begin
+     if exists (select 1 from pg_constraint
+                 where conrelid = 'tandas'::regclass and contype = 'p'
+                   and conname <> 'tandas_juego_pk') then
+       execute 'alter table tandas drop constraint ' ||
+               (select conname from pg_constraint
+                 where conrelid = 'tandas'::regclass and contype = 'p');
+     end if;
+     alter table tandas alter column juego set not null;
+     if not exists (select 1 from pg_constraint where conname = 'tandas_juego_pk') then
+       alter table tandas add constraint tandas_juego_pk primary key (juego);
+     end if;
+   end $$`,
+
+  `do $$
+   begin
+     if exists (select 1 from pg_constraint
+                 where conrelid = 'cola'::regclass and contype = 'p'
+                   and conname <> 'cola_juego_pk') then
+       execute 'alter table cola drop constraint ' ||
+               (select conname from pg_constraint
+                 where conrelid = 'cola'::regclass and contype = 'p');
+     end if;
+     alter table cola alter column juego set not null;
+     if not exists (select 1 from pg_constraint where conname = 'cola_juego_pk') then
+       alter table cola add constraint cola_juego_pk primary key (juego, pedido);
+     end if;
+   end $$`,
+
+  `do $$
+   begin
+     if exists (select 1 from pg_constraint
+                 where conrelid = 'tandas_toma'::regclass and contype = 'p'
+                   and conname <> 'tandas_toma_juego_pk') then
+       execute 'alter table tandas_toma drop constraint ' ||
+               (select conname from pg_constraint
+                 where conrelid = 'tandas_toma'::regclass and contype = 'p');
+     end if;
+     alter table tandas_toma alter column juego set not null;
+     if not exists (select 1 from pg_constraint where conname = 'tandas_toma_juego_pk') then
+       alter table tandas_toma add constraint tandas_toma_juego_pk primary key (juego, tanda);
+     end if;
+   end $$`,
+
+  /* El indice por el que se reparte la cola: ahora por juego, que es como se
+   * pregunta. El viejo por dia se queda, que no molesta y sirve para mirar. */
+  `create index if not exists cola_espera_juego on cola (juego, estado, numero)`
 ];
 
 let creando = null;

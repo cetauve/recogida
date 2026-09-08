@@ -100,7 +100,17 @@ module.exports = puerta(async (req, res) => {
   if (req.method === 'POST') {
     if (!puedeLeer(req)) return noAutorizado(res, 'leer');
     const b = cuerpo(req);
+    /* LA FECHA SIGUE SIENDO LA FECHA, Y LA LLAVE ES EL JUEGO.
+     *
+     * `dia` es el dia de verdad y de el viven los tiempos de empaquetado, que
+     * se cruzan por dia. `juego` es la sesion de recogida y es lo que separa un
+     * juego de otro: Espana de Holanda, y el directo de anoche del de hoy.
+     *
+     * SI NO MANDAN JUEGO SE USA LA FECHA. Un movil con la pagina vieja en cache
+     * o un enlace de los de antes siguen funcionando exactamente igual que
+     * ayer, porque su juego pasa a ser su fecha, que es lo que ya eran. */
     const dia = diaDe(b.dia);
+    const juego = aTexto(b.juego).trim() || dia;
     const quien = aTexto(b.quien).trim();
     const accion = aTexto(b.accion) || 'meter';
 
@@ -136,7 +146,7 @@ module.exports = puerta(async (req, res) => {
        * el 12"). Tiene que ser correlativo y no saltar huecos, así que se
        * numera solo lo que de verdad es nuevo y se calcula desde el máximo que
        * ya hay guardado ese día. */
-      const yaHay = await s`select pedido, estado from cola where dia = ${dia}`;
+      const yaHay = await s`select pedido, estado from cola where juego = ${juego}`;
       const dentro = new Map(yaHay.map((x) => [x.pedido, x.estado]));
       const nuevos = brutos.filter((x) => !dentro.has(x.pedido));
       /* Los que ya estaban PARADOS o RETIRADOS y ahora llegan como buenos: la
@@ -147,9 +157,9 @@ module.exports = puerta(async (req, res) => {
 
       let metidos = 0;
       if (nuevos.length) {
-        const [mx] = await s`select coalesce(max(numero), 0)::int as n from cola where dia = ${dia}`;
+        const [mx] = await s`select coalesce(max(numero), 0)::int as n from cola where juego = ${juego}`;
         const filas = nuevos.map((x, k) => ({
-          dia, pedido: x.pedido, numero: mx.n + k + 1,
+          dia, juego, pedido: x.pedido, numero: mx.n + k + 1,
           apodo: x.apodo, tanda: x.tanda, prendas: x.prendas,
           /* s.json y no JSON.stringify: en una columna jsonb, una cadena se
            * guarda COMO cadena y al leerla vuelve texto, no la ficha. */
@@ -158,9 +168,9 @@ module.exports = puerta(async (req, res) => {
           quien_abrio: quien, abierto_en: x.en
         }));
         await s`
-          insert into cola ${s(filas, 'dia', 'pedido', 'numero', 'apodo', 'tanda',
+          insert into cola ${s(filas, 'dia', 'juego', 'pedido', 'numero', 'apodo', 'tanda',
                               'prendas', 'ficha', 'estado', 'motivo', 'quien_abrio', 'abierto_en')}
-          on conflict (dia, pedido) do nothing`;
+          on conflict (juego, pedido) do nothing`;
         metidos = filas.length;
 
         /* El "listo" del recogedor es ABRIR el paquete: ahí arranca el reloj
@@ -181,7 +191,7 @@ module.exports = puerta(async (req, res) => {
              set estado = 'espera', motivo = '', quien_cierra = '', tomado_en = null,
                  abierto_en = ${x.en}, quien_abrio = ${quien},
                  ficha = case when cola.ficha = '{}'::jsonb then ${s.json(x.ficha)} else cola.ficha end
-           where dia = ${dia} and pedido = ${x.pedido} and estado in ('parado', 'retirado')
+           where juego = ${juego} and pedido = ${x.pedido} and estado in ('parado', 'retirado')
           returning numero`;
         if (f.length) {
           revueltos++;
@@ -206,7 +216,7 @@ module.exports = puerta(async (req, res) => {
       if (repetidos.length) {
         const filas = await s`
           select pedido, numero, apodo, estado, quien_abrio from cola
-           where dia = ${dia} and pedido = any(${repetidos})`;
+           where juego = ${juego} and pedido = any(${repetidos})`;
         deOtro = filas
           .filter((f) => f.quien_abrio && !igual(f.quien_abrio, quien))
           .map((f) => ({ pedido: f.pedido, numero: f.numero, apodo: f.apodo,
@@ -219,8 +229,8 @@ module.exports = puerta(async (req, res) => {
                count(*) filter (where estado = 'cerrado')::int  as cerrado,
                count(*) filter (where estado = 'parado')::int   as parado,
                count(*) filter (where estado = 'retirado')::int as retirado
-        from cola where dia = ${dia}`;
-      return res.status(200).json({ ok: true, dia, metidos, revueltos, deOtro,
+        from cola where juego = ${juego}`;
+      return res.status(200).json({ ok: true, dia, juego, metidos, revueltos, deOtro,
                                     recibidos: brutos.length, ...c });
     }
 
@@ -232,17 +242,17 @@ module.exports = puerta(async (req, res) => {
        * tiene en la mesa ni pedir otro encima. */
       const mio = await s`
         select * from cola
-        where dia = ${dia} and estado = 'haciendo'
+        where juego = ${juego} and estado = 'haciendo'
           and lower(btrim(quien_cierra)) = lower(btrim(${quien}))
         order by numero limit 1`;
-      if (mio.length) return res.status(200).json({ ok: true, dia, hay: true, yaLoTenias: true, paquete: mio[0] });
+      if (mio.length) return res.status(200).json({ ok: true, dia, juego, hay: true, yaLoTenias: true, paquete: mio[0] });
 
       /* El reparto. El `skip locked` hace que dos móviles que pulsan a la vez
        * se lleven filas distintas en vez de pelearse por la misma. */
       const dado = await s`
         with elegido as (
           select pedido from cola
-          where dia = ${dia} and estado = 'espera'
+          where juego = ${juego} and estado = 'espera'
           order by numero
           for update skip locked
           limit 1
@@ -250,9 +260,9 @@ module.exports = puerta(async (req, res) => {
         update cola c
            set estado = 'haciendo', quien_cierra = ${quien}, tomado_en = now()
           from elegido e
-         where c.dia = ${dia} and c.pedido = e.pedido
+         where c.juego = ${juego} and c.pedido = e.pedido
         returning c.*`;
-      if (dado.length) return res.status(200).json({ ok: true, dia, hay: true, paquete: dado[0] });
+      if (dado.length) return res.status(200).json({ ok: true, dia, juego, hay: true, paquete: dado[0] });
 
       /* --------------------------------------------------- LOS ATASCADOS
        * Un paquete que alguien cogió y nunca cerró se queda fuera de la
@@ -268,7 +278,7 @@ module.exports = puerta(async (req, res) => {
       const rescatado = await s`
         with elegido as (
           select pedido, quien_cierra as antes, tomado_en as desde from cola
-          where dia = ${dia} and estado = 'haciendo'
+          where juego = ${juego} and estado = 'haciendo'
             and lower(btrim(quien_cierra)) <> lower(btrim(${quien}))
             and tomado_en < now() - ${ATASCO_MIN + ' minutes'}::interval
           order by tomado_en
@@ -278,10 +288,10 @@ module.exports = puerta(async (req, res) => {
         update cola c
            set quien_cierra = ${quien}, tomado_en = now()
           from elegido e
-         where c.dia = ${dia} and c.pedido = e.pedido
+         where c.juego = ${juego} and c.pedido = e.pedido
         returning c.*, e.antes, e.desde`;
       if (rescatado.length) {
-        return res.status(200).json({ ok: true, dia, hay: true, rescatado: true,
+        return res.status(200).json({ ok: true, dia, juego, hay: true, rescatado: true,
           loTenia: rescatado[0].antes,
           minutos: Math.round((Date.now() - new Date(rescatado[0].desde)) / 60000),
           paquete: rescatado[0] });
@@ -295,8 +305,8 @@ module.exports = puerta(async (req, res) => {
         select count(*) filter (where estado = 'haciendo')::int as haciendo,
                count(*) filter (where estado = 'cerrado')::int  as cerrado,
                count(*) filter (where estado = 'parado')::int   as parado
-        from cola where dia = ${dia}`;
-      return res.status(200).json({ ok: true, dia, hay: false, ...c });
+        from cola where juego = ${juego}`;
+      return res.status(200).json({ ok: true, dia, juego, hay: false, ...c });
     }
 
     /* ------------------------------------------------------------ CERRAR */
@@ -307,7 +317,7 @@ module.exports = puerta(async (req, res) => {
       const fila = await s`
         update cola set estado = 'cerrado', cerrado_en = ${en},
                         quien_cierra = case when quien_cierra = '' then ${quien} else quien_cierra end
-         where dia = ${dia} and pedido = ${pedido}
+         where juego = ${juego} and pedido = ${pedido}
         returning *`;
       if (!fila.length) return res.status(404).json({ ok: false, error: 'no-esta-en-la-cola' });
 
@@ -317,8 +327,8 @@ module.exports = puerta(async (req, res) => {
       const [c] = await s`
         select count(*) filter (where estado = 'espera')::int  as espera,
                count(*) filter (where estado = 'cerrado')::int as cerrado
-        from cola where dia = ${dia}`;
-      return res.status(200).json({ ok: true, dia, pedido, ...c });
+        from cola where juego = ${juego}`;
+      return res.status(200).json({ ok: true, dia, juego, pedido, ...c });
     }
 
     /* ----------------------------------------------- CERRAR UNA LISTA
@@ -360,7 +370,7 @@ module.exports = puerta(async (req, res) => {
       for (const x of lista) {
         const [antes] = await s`
           select estado, quien_cierra, numero, apodo, prendas from cola
-           where dia = ${dia} and pedido = ${x.pedido}`;
+           where juego = ${juego} and pedido = ${x.pedido}`;
         /* Si el paquete ya existe, mandan SUS datos: quien cierra desde la
          * lista de "lo que queda" solo tiene el número a mano, no el nombre del
          * comprador ni cuántas prendas lleva. */
@@ -376,20 +386,20 @@ module.exports = puerta(async (req, res) => {
           }
           await s`
             update cola set estado = 'cerrado', cerrado_en = ${x.en}, quien_cierra = ${quien}
-             where dia = ${dia} and pedido = ${x.pedido}`;
+             where juego = ${juego} and pedido = ${x.pedido}`;
           cerrados++;
         } else {
-          const [mx] = await s`select coalesce(max(numero), 0)::int as n from cola where dia = ${dia}`;
+          const [mx] = await s`select coalesce(max(numero), 0)::int as n from cola where juego = ${juego}`;
           await s`
-            insert into cola (dia, pedido, numero, apodo, tanda, prendas, ficha, estado,
+            insert into cola (dia, juego, pedido, numero, apodo, tanda, prendas, ficha, estado,
                               motivo, quien_abrio, abierto_en, quien_cierra, tomado_en, cerrado_en)
             /* abierto_en = la hora del cierre: es lo único que se sabe de un
              * paquete que nadie empujó, y la columna no admite vacío. Queda
              * quien_abrio en blanco, que es lo honesto: no se sabe quién lo
              * recogió, y inventarlo sería peor que dejarlo vacío. */
-            values (${dia}, ${x.pedido}, ${mx.n + 1}, ${x.apodo}, ${x.tanda}, ${x.prendas},
+            values (${dia}, ${juego}, ${x.pedido}, ${mx.n + 1}, ${x.apodo}, ${x.tanda}, ${x.prendas},
                     ${s.json(x.ficha)}, 'cerrado', '', '', ${x.en}, ${quien}, ${x.en}, ${x.en})
-            on conflict (dia, pedido) do update set
+            on conflict (juego, pedido) do update set
               estado = 'cerrado', cerrado_en = ${x.en}, quien_cierra = ${quien}`;
           creados++; cerrados++;
         }
@@ -402,8 +412,8 @@ module.exports = puerta(async (req, res) => {
                count(*) filter (where estado = 'haciendo')::int as haciendo,
                count(*) filter (where estado = 'cerrado')::int  as cerrado,
                count(*) filter (where estado = 'parado')::int   as parado
-        from cola where dia = ${dia}`;
-      return res.status(200).json({ ok: true, dia, cerrados, creados, deOtro,
+        from cola where juego = ${juego}`;
+      return res.status(200).json({ ok: true, dia, juego, cerrados, creados, deOtro,
                                     recibidos: lista.length, ...c });
     }
 
@@ -438,15 +448,15 @@ module.exports = puerta(async (req, res) => {
         update cola
            set estado = 'cerrado', cerrado_en = ${en},
                quien_cierra = case when btrim(quien_cierra) = '' then ${quien} else quien_cierra end
-         where dia = ${dia} and estado = any(${estados})
+         where juego = ${juego} and estado = any(${estados})
         returning pedido, numero, estado`;
       const [c] = await s`
         select count(*) filter (where estado = 'espera')::int   as espera,
                count(*) filter (where estado = 'haciendo')::int as haciendo,
                count(*) filter (where estado = 'cerrado')::int  as cerrado,
                count(*) filter (where estado = 'parado')::int   as parado
-        from cola where dia = ${dia}`;
-      return res.status(200).json({ ok: true, dia, cerrados: filas.length, ...c });
+        from cola where juego = ${juego}`;
+      return res.status(200).json({ ok: true, dia, juego, cerrados: filas.length, ...c });
     }
 
     /* ------------------------------------------------------------ REABRIR
@@ -462,19 +472,19 @@ module.exports = puerta(async (req, res) => {
       if (!pedido) return res.status(400).json({ ok: false, error: 'sin-pedido' });
       const fila = await s`
         update cola set estado = 'espera', cerrado_en = null, quien_cierra = '', tomado_en = null
-         where dia = ${dia} and pedido = ${pedido} and estado = 'cerrado'
+         where juego = ${juego} and pedido = ${pedido} and estado = 'cerrado'
            and lower(btrim(quien_cierra)) = lower(btrim(${quien}))
         returning numero`;
       if (!fila.length) {
-        const [ahora] = await s`select estado, quien_cierra from cola where dia = ${dia} and pedido = ${pedido}`;
-        return res.status(200).json({ ok: true, dia, reabierto: false,
+        const [ahora] = await s`select estado, quien_cierra from cola where juego = ${juego} and pedido = ${pedido}`;
+        return res.status(200).json({ ok: true, dia, juego, reabierto: false,
                                       estado: ahora ? ahora.estado : null,
                                       quien: ahora ? ahora.quien_cierra : '' });
       }
       await s`delete from tiempos
                where dia = ${dia} and pedido = ${pedido} and modo = 'empaqueta'
                  and lower(btrim(quien)) = lower(btrim(${quien}))`;
-      return res.status(200).json({ ok: true, dia, reabierto: true, numero: fila[0].numero });
+      return res.status(200).json({ ok: true, dia, juego, reabierto: true, numero: fila[0].numero });
     }
 
     /* ------------------------------------------------------------- TANDA
@@ -492,9 +502,9 @@ module.exports = puerta(async (req, res) => {
       const forzar = !!b.forzar;
 
       const [fila] = await s`
-        insert into tandas_toma (dia, tanda, quien, hechos, total, actualizado)
-        values (${dia}, ${tanda}, ${quien}, ${hechos}, ${total}, now())
-        on conflict (dia, tanda) do update set
+        insert into tandas_toma (dia, juego, tanda, quien, hechos, total, actualizado)
+        values (${dia}, ${juego}, ${tanda}, ${quien}, ${hechos}, ${total}, now())
+        on conflict (juego, tanda) do update set
           quien       = case when tandas_toma.quien = ''
                               or lower(btrim(tandas_toma.quien)) = lower(btrim(${quien}))
                               or ${forzar}
@@ -524,9 +534,9 @@ module.exports = puerta(async (req, res) => {
       if (!pedido) return res.status(400).json({ ok: false, error: 'sin-pedido' });
       const fila = await s`
         update cola set estado = 'espera', quien_cierra = '', tomado_en = null
-         where dia = ${dia} and pedido = ${pedido} and estado = 'haciendo'
+         where juego = ${juego} and pedido = ${pedido} and estado = 'haciendo'
         returning pedido`;
-      return res.status(200).json({ ok: true, dia, soltado: fila.length > 0 });
+      return res.status(200).json({ ok: true, dia, juego, soltado: fila.length > 0 });
     }
 
     /* ----------------------------------------------------------- RETIRAR
@@ -550,15 +560,15 @@ module.exports = puerta(async (req, res) => {
       if (!pedido) return res.status(400).json({ ok: false, error: 'sin-pedido' });
       const fila = await s`
         update cola set estado = 'retirado', quien_cierra = '', tomado_en = null
-         where dia = ${dia} and pedido = ${pedido} and estado in ('espera', 'parado')
+         where juego = ${juego} and pedido = ${pedido} and estado in ('espera', 'parado')
         returning pedido, numero`;
       if (fila.length) {
         await s`delete from tiempos
                  where dia = ${dia} and pedido = ${pedido} and modo = 'recoge'`;
-        return res.status(200).json({ ok: true, dia, retirado: true, estado: null, quien: '' });
+        return res.status(200).json({ ok: true, dia, juego, retirado: true, estado: null, quien: '' });
       }
       const [ahora] = await s`
-        select estado, quien_cierra from cola where dia = ${dia} and pedido = ${pedido}`;
+        select estado, quien_cierra from cola where juego = ${juego} and pedido = ${pedido}`;
       return res.status(200).json({
         ok: true, dia, retirado: false,
         estado: ahora ? ahora.estado : null,
@@ -580,18 +590,18 @@ module.exports = puerta(async (req, res) => {
       const en = aFecha(b.en) || new Date();
       const fila = await s`
         update cola set estado = 'espera', motivo = '', abierto_en = ${en}
-         where dia = ${dia} and pedido = ${pedido} and estado in ('parado', 'retirado')
+         where juego = ${juego} and pedido = ${pedido} and estado in ('parado', 'retirado')
         returning *`;
       if (!fila.length) {
-        const [ahora] = await s`select estado from cola where dia = ${dia} and pedido = ${pedido}`;
-        return res.status(200).json({ ok: true, dia, resuelto: false,
+        const [ahora] = await s`select estado from cola where juego = ${juego} and pedido = ${pedido}`;
+        return res.status(200).json({ ok: true, dia, juego, resuelto: false,
                                       estado: ahora ? ahora.estado : null });
       }
       /* Ahora sí arranca el reloj del que empaqueta: hasta este momento el
        * paquete no estaba entregado a nadie. */
       await apuntarTiempo(s, { dia, quien: fila[0].quien_abrio || quien, modo: 'recoge',
                                pedido, apodo: fila[0].apodo, prendas: fila[0].prendas, en });
-      return res.status(200).json({ ok: true, dia, resuelto: true, numero: fila[0].numero });
+      return res.status(200).json({ ok: true, dia, juego, resuelto: true, numero: fila[0].numero });
     }
 
     /* ------------------------------------------------------------- COGER
@@ -611,23 +621,23 @@ module.exports = puerta(async (req, res) => {
       const pedido = aTexto(b.pedido).trim();
       if (!pedido) return res.status(400).json({ ok: false, error: 'sin-pedido' });
       const [antes] = await s`
-        select estado, quien_cierra, tomado_en from cola where dia = ${dia} and pedido = ${pedido}`;
+        select estado, quien_cierra, tomado_en from cola where juego = ${juego} and pedido = ${pedido}`;
       if (!antes) return res.status(404).json({ ok: false, error: 'no-esta-en-la-cola' });
       if (antes.estado === 'cerrado') {
-        return res.status(200).json({ ok: true, dia, cogido: false, estado: 'cerrado',
+        return res.status(200).json({ ok: true, dia, juego, cogido: false, estado: 'cerrado',
                                       loTenia: antes.quien_cierra });
       }
       if (antes.estado === 'parado') {
-        return res.status(200).json({ ok: true, dia, cogido: false, estado: 'parado' });
+        return res.status(200).json({ ok: true, dia, juego, cogido: false, estado: 'parado' });
       }
       const fila = await s`
         update cola set estado = 'haciendo', quien_cierra = ${quien}, tomado_en = now()
-         where dia = ${dia} and pedido = ${pedido} and estado in ('espera', 'haciendo')
+         where juego = ${juego} and pedido = ${pedido} and estado in ('espera', 'haciendo')
         returning *`;
-      if (!fila.length) return res.status(200).json({ ok: true, dia, cogido: false, estado: antes.estado });
+      if (!fila.length) return res.status(200).json({ ok: true, dia, juego, cogido: false, estado: antes.estado });
       const deOtro = antes.estado === 'haciendo' && !igual(antes.quien_cierra, quien);
       return res.status(200).json({
-        ok: true, dia, cogido: true, paquete: fila[0],
+        ok: true, dia, juego, cogido: true, paquete: fila[0],
         rescatado: deOtro,
         loTenia: deOtro ? antes.quien_cierra : null,
         minutos: deOtro && antes.tomado_en
@@ -640,7 +650,9 @@ module.exports = puerta(async (req, res) => {
 
   if (req.method === 'GET') {
     if (!puedeLeer(req)) return noAutorizado(res, 'leer');
-    const dia = diaDe((req.query || {}).dia);
+    const q = req.query || {};
+    const dia = diaDe(q.dia);
+    const juego = aTexto(q.juego).trim() || dia;
 
     /* Sin la ficha: para ver cómo va la cola no hacen falta los números de
      * cada paquete, y son cuatrocientos. La ficha solo viaja cuando alguien
@@ -648,7 +660,7 @@ module.exports = puerta(async (req, res) => {
     const filas = await s`
       select pedido, numero, apodo, tanda, prendas, estado, motivo,
              quien_abrio, abierto_en, quien_cierra, tomado_en, cerrado_en
-      from cola where dia = ${dia} order by numero`;
+      from cola where juego = ${juego} order by numero`;
 
     /* Los recuentos por persona, juntando "yasmin" y "Yasmine": se agrupa por
      * el nombre en minúsculas y se enseña como lo escribió la primera vez. */
@@ -667,7 +679,7 @@ module.exports = puerta(async (req, res) => {
     const tandas = await s`
       select tanda, quien, hechos, total, actualizado,
              (actualizado < now() - interval '20 minutes') as fria
-      from tandas_toma where dia = ${dia} order by tanda`;
+      from tandas_toma where juego = ${juego} order by tanda`;
 
     /* "Haciendo" y "atascado" no son lo mismo y confundirlos hace que nadie
      * mire: uno es trabajo en marcha y el otro es trabajo parado. */
@@ -692,7 +704,7 @@ module.exports = puerta(async (req, res) => {
       }));
 
     return res.status(200).json({
-      ok: true, dia, tandas,
+      ok: true, dia, juego, tandas,
       espera:   filas.filter((f) => f.estado === 'espera').length,
       atascados: filas.filter((f) => f.estado === 'haciendo' &&
                    f.tomado_en && new Date(f.tomado_en).getTime() < limite).length,
