@@ -129,6 +129,25 @@
   .cat .n{font-size:13px;font-weight:700;color:var(--tenue);font-variant-numeric:tabular-nums}
   .cat.pulsada .n{color:rgba(255,255,255,.85)}
 
+  /* El cajon de las premium. El oro es SOLO para esto y no compite con el
+     acento: no marca importancia, marca que es otra clase de prenda. */
+  #cajon{margin-top:12px;border-top:1px solid var(--borde);padding-top:12px}
+  #cajonCab{display:flex;align-items:center;justify-content:space-between;width:100%;
+    background:none;border:0;padding:6px 2px;color:var(--tinta);
+    font-size:15px;font-weight:800}
+  #cajonCab span{display:inline-flex;align-items:center;gap:8px}
+  #cajonChevron{color:var(--tenue);font-size:13px;font-weight:700}
+  .puntoOro{width:8px;height:8px;border-radius:50%;background:#C9A227;display:inline-block}
+  /* `hidden` NO basta con display:grid encima: cualquier `display` de autor gana
+     al del navegador, asi que el cajon se quedaba abierto siempre. Hace falta
+     decirlo a mano. */
+  .rejilla.premium{flex:none;margin-top:10px}
+  .rejilla.premium[hidden]{display:none}
+  #cajon[hidden]{display:none}
+  .rejilla.premium .cat{min-height:66px;font-size:15px;
+    background:rgba(201,162,39,.13);border-color:rgba(201,162,39,.40)}
+  .rejilla.premium .cat.pulsada{background:var(--verde);border-color:var(--verde)}
+
   .pie{margin-top:14px;display:flex;gap:10px}
   .pie .secundario{flex:1}
 
@@ -216,6 +235,15 @@
     </div>
   </div>
   <div class="rejilla" id="rejilla"></div>
+  <!-- Las premium van aparte y plegables. Solo se pinta si la tienda las
+       tiene: Espana no, asi que alli ni aparece. -->
+  <div id="cajon" hidden>
+    <button id="cajonCab" type="button" aria-expanded="false" aria-controls="premium">
+      <span><span class="puntoOro"></span> Premium</span>
+      <span id="cajonChevron">ver</span>
+    </button>
+    <div class="rejilla premium" id="premium" hidden></div>
+  </div>
   <div id="ultimo"></div>
   <!-- Se enseña SOLO si la tablet tiene la extensión y el panel abierto. En un
        móvil suelto queda vacío y no ocupa nada: no hay que explicar una
@@ -268,31 +296,87 @@
    venta. Los €/kilo, el IVA y la hora de presentadora vivían aquí copiados y
    no se leían en ninguna línea: eran una segunda tabla de precios esperando a
    quedarse vieja. El único sitio donde están es costes-prendas.json. */
+/* ?pais=nl — CADA TIENDA TIENE SUS BOTONES Y SUS CUENTAS.
+   Espana y Holanda no venden lo mismo: en Holanda hay piel, vaqueros, chinos,
+   punto y faldas, y no hay ni camisetas lisas ni shorts. Y solo emite una
+   cuenta, asi que preguntar "desde que cuenta" no tiene sentido alli.
+   Sin ?pais=, es Espana: la tablet de Valencia no se entera de nada. */
+const PAIS = (new URLSearchParams(location.search).get('pais') || 'es').toLowerCase();
+
+const PAISES = {
+  es: {
+    /* Las cuentas desde las que se emite. El nombre tiene que ser EXACTAMENTE
+       el que sale en el Centro de vendedores, porque es con el que llegan
+       marcadas las prendas y es lo que permite no mezclar los dos directos. */
+    cuentas: [
+      { id: 'billysvlc',     nombre: 'billysvlc',     pie: 'la de siempre' },
+      { id: 'billystourvlc', nombre: 'billystourvlc', pie: 'la del tour' },
+      /* Estreno el 25 ago 2026. Se anade aqui y ya esta: los botones se pintan
+         de esta lista, y el servidor saca las cuentas del dia de los turnos que
+         llegan, no de una lista suya. */
+      { id: 'billystacos',   nombre: 'billystacos',   pie: 'la de los tacos' }
+    ],
+    categorias: [
+      { id:'camisetas_a', nombre:'Camisetas A'    },
+      { id:'camisetas_b', nombre:'Camisetas B'    },
+      { id:'sudaderas_a', nombre:'Sudaderas A'    },
+      { id:'sudaderas_b', nombre:'Sudaderas B'    },
+      { id:'polos_a',     nombre:'Polos A'        },
+      { id:'polos_b',     nombre:'Polos B'        },
+      { id:'shorts',      nombre:'Shorts deporte' },
+      { id:'trackjacket', nombre:'Track jacket'   },
+      { id:'trackpants',  nombre:'Trackpants'     },
+      { id:'chaquetas',   nombre:'Chaquetas'      }
+    ]
+  },
+
+  nl: {
+    cuentas: [
+      { id: 'billys_nl', nombre: 'billys_nl', pie: 'la de Holanda' }
+    ],
+    /* EL ORDEN NO ES POR PRECIO, ES POR SENTIDO. Cada fila de dos agrupa
+       prendas que se parecen —lo fino, el abrigo, el punto, lo de abajo— para
+       que la mano aprenda las posiciones y no haya que mirar la pantalla.
+       La camiseta de futbol va sola y al final: quedan pocas y asi no se pulsa
+       por inercia. Los ids son los mismos que en costes-prendas.json. */
+    categorias: [
+      { id:'camiseta',      nombre:'Camiseta'        },
+      { id:'camisa_polo',   nombre:'Camisa o polo'   },
+      { id:'track_top',     nombre:'Track top'       },
+      { id:'chaqueta',      nombre:'Chaqueta'        },
+      { id:'punto_marca',   nombre:'Jersey marca'    },
+      { id:'punto',         nombre:'Jersey vintage'  },
+      { id:'sudadera',      nombre:'Sudadera'        },
+      { id:'piel',          nombre:'Piel'            },
+      { id:'track_pant',    nombre:'Track pants'     },
+      { id:'vaquero',       nombre:'Vaquero'         },
+      { id:'chino',         nombre:'Chino'           },
+      { id:'vestido_falda', nombre:'Vestido o falda' },
+      { id:'futbol',        nombre:'Camiseta fútbol' },
+      /* PREMIUM, EN UN CAJON APARTE. No es estetica: valen entre 15 y 48 euros
+         la pieza, contra el euro que cuesta un chino. Un dedo que resbala en la
+         rejilla mete un error de 48 euros. Y sacarlos deja la pantalla de todos
+         los dias en un solo golpe de vista. */
+      { id:'burberry',        nombre:'Burberry',        premium:true },
+      { id:'barbour',         nombre:'Barbour',         premium:true },
+      { id:'nascar_gorda',    nombre:'Nascar gorda',    premium:true },
+      { id:'nascar_fina',     nombre:'Nascar fina',     premium:true },
+      { id:'carhartt_og',     nombre:'Carhartt OG',     premium:true },
+      { id:'carhartt_rework', nombre:'Carhartt rework', premium:true },
+      { id:'pantalon_billys', nombre:'Pantalón zona Billy\'s', premium:true }
+    ]
+  }
+};
+
+/* LOS PRECIOS NO ESTAN AQUI, Y ES A PROPOSITO.
+   Esta pantalla no calcula dinero: solo apunta que tipo de prenda es cada
+   venta. Los euros por kilo viven en costes-prendas.json y en ningun otro
+   sitio. Y ademas: quien vende no tiene por que ver lo que cuesta la ropa. */
 const CONFIG = {
   marca: 'Registro de prendas',
-  /* Las cuentas desde las que se emite. El nombre tiene que ser EXACTAMENTE el
-     que sale en el Centro de vendedores, porque es con el que llegan marcadas
-     las prendas y es lo que permite no mezclar los dos directos. */
-  cuentas: [
-    { id: 'billysvlc',     nombre: 'billysvlc',     pie: 'la de siempre' },
-    { id: 'billystourvlc', nombre: 'billystourvlc', pie: 'la del tour' },
-    /* Estreno el 25 ago 2026. Se anade aqui y ya esta: los botones se pintan
-       de esta lista, y el servidor saca las cuentas del dia de los turnos que
-       llegan, no de una lista suya. */
-    { id: 'billystacos',   nombre: 'billystacos',   pie: 'la de los tacos' }
-  ],
-  categorias: [
-    { id:'camisetas_a', nombre:'Camisetas A'    },
-    { id:'camisetas_b', nombre:'Camisetas B'    },
-    { id:'sudaderas_a', nombre:'Sudaderas A'    },
-    { id:'sudaderas_b', nombre:'Sudaderas B'    },
-    { id:'polos_a',     nombre:'Polos A'        },
-    { id:'polos_b',     nombre:'Polos B'        },
-    { id:'shorts',      nombre:'Shorts deporte' },
-    { id:'trackjacket', nombre:'Track jacket'   },
-    { id:'trackpants',  nombre:'Trackpants'     },
-    { id:'chaquetas',   nombre:'Chaquetas'      }
-  ]
+  pais: PAISES[PAIS] ? PAIS : 'es',
+  cuentas: (PAISES[PAIS] || PAISES.es).cuentas,
+  categorias: (PAISES[PAIS] || PAISES.es).categorias
 };
 
 const LLAVE_SESION     = 'billys_vend_sesion';
@@ -540,14 +624,23 @@ function arrancar() {
 function entrarTrabajo() {
   $('quienNombre').textContent = sesion.vendedora;
   $('rejilla').innerHTML = '';
-  for (const c of CONFIG.categorias) {
+  $('premium').innerHTML = '';
+  const hazBoton = (c, clase) => {
     const b = document.createElement('button');
-    b.className = 'cat';
+    b.className = clase;
     b.dataset.id = c.id;
     b.innerHTML = `<span>${c.nombre}</span><span class="n" data-n="${c.id}">0</span>`;
     b.onclick = () => marcar(c.id, b);
-    $('rejilla').appendChild(b);
+    return b;
+  };
+  const premium = CONFIG.categorias.filter((c) => c.premium);
+  for (const c of CONFIG.categorias.filter((c) => !c.premium)) {
+    $('rejilla').appendChild(hazBoton(c, 'cat'));
   }
+  for (const c of premium) $('premium').appendChild(hazBoton(c, 'cat premium'));
+  /* Si esta tienda no tiene premium —Espana no lo tiene— el cajon no existe.
+     Un desplegable vacio es una pregunta sin respuesta. */
+  $('cajon').hidden = !premium.length;
   pantalla('pTrabajo');
   refrescar();
   clearInterval(cronometro);
@@ -648,6 +741,20 @@ $('deshacer').onclick = () => {
   refrescar();
   subir();
 };
+
+/* El cajon empieza cerrado: lo de todos los dias tiene que caber de un vistazo,
+   y lo premium se pulsa poco. Abrirlo es un toque. */
+(function prepararCajon() {
+  const cab = $('cajonCab');
+  if (!cab) return;
+  cab.onclick = () => {
+    const caja = $('premium');
+    const abierto = !caja.hidden;
+    caja.hidden = abierto;
+    cab.setAttribute('aria-expanded', String(!abierto));
+    $('cajonChevron').textContent = abierto ? 'ver' : 'ocultar';
+  };
+})();
 
 function refrescar() {
   const cuenta = {};

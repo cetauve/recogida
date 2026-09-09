@@ -30,5 +30,58 @@
     { "id": "shorts",      "nombre": "Shorts deporte", "euroKilo": 7,   "piezasKilo": 6,   "costeSinIva": 1.217, "costeConIva": 1.472 }
   ],
 
+  "_paises": "DE AQUI PARA ABAJO, LO QUE CAMBIA POR PAIS. Lo de arriba es Espana y se queda donde estaba: quien no pida un pais concreto sigue viendo exactamente lo de siempre. Holanda no es 'lo mismo con otros precios': es otro surtido (piel, vaqueros, chinos, punto, faldas) y otra forma de contar el IVA.",
+
+  "_ivaAlReves": "OJO CON EL IVA, QUE EN LOS DOS PAISES SE CUENTA DISTINTO Y NO ES UN DESCUIDO. En Espana se compra CON IVA y se vende CON IVA, asi que los dos lados van con IVA y se comparan tal cual (factorCoste 1.21, factorVenta 1). En Holanda la compra vino SIN IVA, pero el precio de venta si lleva el 21% que se paga en Espana y no se recupera: por eso el coste va limpio (factorCoste 1) y del precio de venta hay que quitar el IVA antes de comparar (factorVenta 1.21). Con la formula de Espana aplicada a Holanda, el margen sale un 21% de los ingresos por encima de lo real.",
+
+  "_formulaPais": "costePieza = (euroKilo / piezasKilo + transportePorPieza) * factorCoste   ·   ingresoNeto = precioDeVenta / factorVenta   ·   margen = ingresoNeto - costePieza. Una categoria con `costePieza` puesto a mano se salta el euroKilo y las piezasKilo: es lo que pasa con las premium, que se compran por pieza y no por kilo.",
+
+  "paises": {
+    "es": {
+      "nombre": "España",
+      "transportePorPieza": 0.05,
+      "factorCoste": 1.21,
+      "factorVenta": 1,
+      "horaPresentadora": 9,
+      "_categorias": "Vacio a proposito: España usa la lista `categorias` de arriba, que es la que habia y la que leen reparto y cruce sin pedir pais."
+    },
+
+    "nl": {
+      "nombre": "Países Bajos",
+      "_transporte": "Cero. La ropa se recoge en Amsterdam y hay veinte minutos en coche hasta el almacen donde se vende, asi que no hay coste de transporte por pieza que repartir.",
+      "transportePorPieza": 0,
+      "_factorCoste": "Uno: la compra vino sin IVA.",
+      "factorCoste": 1,
+      "_factorVenta": "1.21: el precio de venta lleva el 21% que se paga en España y no se recupera, asi que se quita antes de comparar.",
+      "factorVenta": 1.21,
+      "_horaPresentadora": "Cero por decision de Aaron: el sueldo de quien vende en Holanda no entra en este calculo.",
+      "horaPresentadora": 0,
+      "_origen": "Precios del presupuesto de ReRags 1412475648 (3 mar 2026, 1.810 kg, 10.068 € sin IVA), mas los que Aaron anadio de viva voz: camisetas, jerseys de marca y las siete premium. Las piezas por kilo de track tops, sudaderas, camisas/polos y chaquetas vienen de la tabla espanola; el resto son estimaciones que Aaron dio por buenas.",
+      "categorias": [
+        { "id": "camiseta",      "nombre": "Camiseta",        "euroKilo": 8,     "piezasKilo": 6,   "_": "no venia en la factura, precio dicho por Aaron" },
+        { "id": "camisa_polo",   "nombre": "Camisa o polo",   "euroKilo": 8,     "piezasKilo": 4,   "_": "Designer Shirts 40kg + Designer Polo Shirts 100kg, los dos a 8" },
+        { "id": "track_top",     "nombre": "Track top",       "euroKilo": 9,     "piezasKilo": 2.5, "_": "80s/90s 80kg + Y2K 150kg, los dos a 9" },
+        { "id": "chaqueta",      "nombre": "Chaqueta",        "euroKilo": 6,     "piezasKilo": 1.5, "_": "Designer Jackets 300kg. Las de esqui ya no se compran" },
+        { "id": "punto_marca",   "nombre": "Jersey marca",    "euroKilo": 10,    "piezasKilo": 3,   "_": "no venia en la factura, precio dicho por Aaron" },
+        { "id": "punto",         "nombre": "Jersey vintage",  "euroKilo": 4.265, "piezasKilo": 2.5, "_": "MEDIA DE TRES: v-neck 2 (100kg) + printed 7,50 (20kg) + Coogi 7,50 (50kg). Se desvia mucho (el liso cuesta 0,80 y se le apunta 1,71; el Coogi cuesta 3,00) y esta aceptado a sabiendas porque no se vuelve a comprar" },
+        { "id": "sudadera",      "nombre": "Sudadera",        "euroKilo": 5.4,   "piezasKilo": 2,   "_": "capucha 5 (200kg) + cuello 7 (50kg)" },
+        { "id": "piel",          "nombre": "Piel",            "euroKilo": 3.75,  "piezasKilo": 1,   "_": "80s/90s 4,50 (150kg) + Y2K men 3,00 (150kg)" },
+        { "id": "track_pant",    "nombre": "Track pants",     "euroKilo": 7,     "piezasKilo": 2.5, "_": "Y2K Designer Track Pants 80kg" },
+        { "id": "vaquero",       "nombre": "Vaquero",         "euroKilo": 5.5,   "piezasKilo": 1.5, "_": "Levi's 5xx/6xx 80kg" },
+        { "id": "chino",         "nombre": "Chino",           "euroKilo": 1.99,  "piezasKilo": 2,   "_": "Chino Pants 100kg" },
+        { "id": "vestido_falda", "nombre": "Vestido o falda", "euroKilo": 4.4,   "piezasKilo": 3,   "_": "dresses 2 (20kg) + a-line 8 (10kg) + pleated 5 (20kg)" },
+        { "id": "futbol",        "nombre": "Camiseta fútbol", "euroKilo": 18,    "piezasKilo": 5,   "_": "quedan pocas: va la ultima de la rejilla para que no se pulse por inercia" },
+
+        { "id": "burberry",        "nombre": "Burberry",            "euroKilo": 25, "piezasKilo": 1.3, "premium": true },
+        { "id": "barbour",         "nombre": "Barbour",             "euroKilo": 18, "piezasKilo": 1.5, "premium": true },
+        { "id": "nascar_gorda",    "nombre": "Nascar gorda",        "costePieza": 48, "premium": true },
+        { "id": "nascar_fina",     "nombre": "Nascar fina",         "costePieza": 28, "premium": true },
+        { "id": "carhartt_og",     "nombre": "Carhartt OG",         "costePieza": 30, "premium": true },
+        { "id": "carhartt_rework", "nombre": "Carhartt rework",     "costePieza": 18, "premium": true },
+        { "id": "pantalon_billys", "nombre": "Pantalón zona Billy's", "costePieza": 15, "premium": true }
+      ]
+    }
+  },
+
   "_cambios": "v2 (10 ago 2026): lista nueva de Aaron. Aparece la division A/B en sudaderas, camisetas y polos. 'Chaquetones' pasa a llamarse 'Chaquetas' y baja de 7 a 7,5 e/kg con las mismas 1,5 piezas. Camisetas sube de 5 a 7 e/kg y baja de 7 a 6 piezas. Shorts sube de 5 a 7 e/kg y de 7 a 6 piezas. Sudaderas pasa de 3 e/kg y 2,5 piezas a dos calidades. Los ids han cambiado: lo marcado con la lista vieja conserva su id antiguo y saldra con el nombre en crudo."
 }
