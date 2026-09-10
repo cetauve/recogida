@@ -204,13 +204,7 @@ const VIAS = {
 
 let ULTIMO = null;
 let PRENDAS = [];          // las prendas del día en crudo, para el desglose por cuenta
-let SIN_NOMBRE = 0;        // las que llegaron en vivo y aún no tienen nombre de cuenta
-/* LO QUE DICE LA CONSOLA DE TIKTOK: { gmv, items, cuando }.
-   Lo manda el puente del directo con cada latido. No es lo mismo que lo nuestro
-   —su GMV suma los portes— y por eso se enseñan los dos: el 17 ago 2026 la
-   consola decía 1493,06 € y esta página 1353 €, y con un solo número delante eso
-   parece un fallo en vez de dos formas de contar. */
-let PANEL = null;
+let SIN_NOMBRE = 0;        // prendas sin nombre de cuenta: solo quedan de agosto
 let TIPOS = null;          // el análisis por categoría ya hecho, para reordenarlo sin recargar
 let ORDEN = 'margen';      // por qué columna se ordena la tabla de tipos
 
@@ -616,9 +610,9 @@ function bloqueCuentas(c) {
   if (lista.length < 2 && !lista.some((g) => g.envivo)) return '';
 
   return `<h2 style="font-size:19px;margin:22px 0 4px">Por cuenta</h2>
-    <p class="sub" style="margin-bottom:10px">Solo <b>${esc(cuentaConPanel(c))}</b>
-      manda sus ventas en vivo. Las de la otra cuenta aparecen cuando se lee el Centro de
-      vendedores, con el botón de su cuenta en el panel de la extensión.</p>
+    <p class="sub" style="margin-bottom:10px">Las prendas de cada cuenta aparecen cuando se
+      lee el Centro de vendedores, con el botón de esa cuenta en el panel de la extensión.
+      Si una cuenta emitió y no sale aquí, es que falta su lectura.</p>
     <table><thead><tr><th>Cuenta</th><th>Prendas</th><th>Vendido</th><th></th></tr></thead><tbody>
     ${lista.map((g) => `<tr>
       <td>${esc(g.id)}</td>
@@ -792,24 +786,18 @@ async function cargar() {
         (dia ? '&dia=' + dia : ''), { cache: 'no-store' });
       const jp = await rp.json();
       PRENDAS = (jp && jp.ok && jp.lotes) ? jp.lotes : [];
-      PANEL = (jp && jp.ok && jp.panel) ? jp.panel : null;
       /* Estas vienen del día entero, sin filtrar por cuenta: en la pantalla de
          un país hay que quitarles las del otro o el desglose por cuenta
-         enseñaría tiendas ajenas. Las que llegan sin nombre —en vivo— son de
-         quien tenga el panel, y eso lo decide `servidorCiego`. */
+         enseñaría tiendas ajenas. Las que llegan sin nombre son de agosto, de
+         cuando el directo mandaba sus ventas en vivo; se las queda quien tenga
+         el panel, y eso lo decide `servidorCiego`. */
       if (COSTES.emiten) {
         SIN_NOMBRE = PRENDAS.filter((l) => soloNumero(l.cuenta) || !l.cuenta).length;
         PRENDAS = PRENDAS.filter((l) => (soloNumero(l.cuenta) || !l.cuenta)
           ? !servidorCiego(j.cruce || {})
           : COSTES.emiten.includes(String(l.cuenta)));
       } else { SIN_NOMBRE = 0; }
-      /* EL NÚMERO DE LA CONSOLA ES DEL DÍA, NO DE ESTA TIENDA. El servidor
-         devuelve el último panel del día venga de donde venga, así que en la
-         pantalla de un país cuyo panel no es el suyo ese GMV sería el de la
-         otra tienda, y debajo saldría una comparación entera inventada. Se
-         quita: mejor sin número que con el número de otro. */
-      if (servidorCiego(j.cruce || {})) PANEL = null;
-    } catch (e) { PRENDAS = []; PANEL = null; SIN_NOMBRE = 0; }
+    } catch (e) { PRENDAS = []; SIN_NOMBRE = 0; }
     ULTIMO = j;
     pintar(j);
   } catch (e) {
@@ -855,13 +843,14 @@ function pintar(j) {
    * sí. Esto es lo que convierte una avería silenciosa en una visible. */
   if (c.ultimaVenta) {
     const min = Math.round((Date.now() - new Date(c.ultimaVenta)) / 60000);
-    const hayTurnoAbierto = (j.turnos || []).some((t) => !t.acabo);
-    if (!c.finDirecto && hayTurnoAbierto && min >= 15) {
-      html += `<div class="aviso rojo">
-        <b>La última prenda entró hace ${min} minutos</b> y hay un turno abierto.
-        Si el directo sigue vendiendo, es que <b>han dejado de llegar</b>.
-        Mira que el PC del almacén siga encendido y con el panel del directo abierto.</div>`;
-    }
+    /* AQUÍ SALTABA "han dejado de llegar prendas". Tenía sentido cuando las
+     * ventas entraban solas durante el directo: un número que no se movía era
+     * una avería silenciosa y esto la hacía visible.
+     *
+     * Ya no entra nada durante el directo —las prendas suben de golpe en el
+     * paso 2—, así que durante un directo entero esta alarma saltaría siempre y
+     * no diría nada. Una alarma que suena todos los días deja de leerse, y
+     * entonces no sirve el día que la avería es de verdad. */
     /* PASADOS LOS VEINTE MINUTOS ya no se puede saber si el directo terminó o
      * si se paró el envío, así que se deja de gritar y se cuenta lo que se ha
      * dado por hecho. Un aviso rojo que sale todas las noches al acabar deja
@@ -1030,20 +1019,23 @@ function pintar(j) {
      * Contar prendas no basta: diez camisetas de 1 € sin marcar no son lo
      * mismo que dos chaquetas de 30. Lo que decide es el dinero, así que el
      * % que manda es el de euros, no el de unidades. */
-    /* EL NÚMERO DE LA CONSOLA DE TIKTOK, EL PRIMERO Y EN GRANDE.
+    /* AQUÍ ESTABA EL NÚMERO DE LA CONSOLA DE TIKTOK, Y YA NO ESTÁ.
      *
-     * Aaron, 17 ago 2026: "lo que quiero ver en directo es el total que se está
-     * registrando como vendido en directo, que se puede ver en la consola del
-     * live". Ese número es el GMV, y ya lo lee el lector del panel: aquí se
-     * enseña tal cual, sin mezclarlo con el nuestro. Al lado va lo que se pagó
-     * por la ropa, que es lo que sirve para el coste y el margen, y la
-     * diferencia —portes y lo que aún no ha entrado— se dice debajo. */
-    const gmv = PANEL && PANEL.gmv != null ? Number(PANEL.gmv) : null;
-    const frescoPanel = PANEL && PANEL.cuando
-      ? Math.round((Date.now() - new Date(PANEL.cuando)) / 60000) : null;
+     * Lo pidió Aaron el 17 ago 2026 —"lo que quiero ver en directo es el total
+     * que se está registrando como vendido en el live"— y funcionaba mientras
+     * el puente del directo estaba abierto en el almacén: el lector mandaba el
+     * GMV con cada latido y aquí salía al lado de lo nuestro, con la diferencia
+     * explicada debajo (su GMV suma los portes; el nuestro no).
+     *
+     * Se quita el 10 sep 2026 con la lectura en vivo. Sin nadie con la pestaña
+     * puesta, lo último que llegó fueron 4 €, 6 € y "1 artículo": números que no
+     * son el GMV de nada. Un dato de adorno que está mal es peor que no tenerlo,
+     * porque alguien lo mira y decide con él.
+     *
+     * Si algún día vuelve el puente, esto vuelve: el servidor sigue guardando
+     * panel_gmv, panel_items y panel_en, y lo único que hay que rehacer es
+     * pintarlo. */
     html += `<div class="totales">
-      ${gmv != null ? `<div><b>${eur(gmv)}</b><span>en la consola de TikTok${
-        PANEL.items != null ? ' · ' + PANEL.items + ' art.' : ''}</span></div>` : ''}
       <div><b>${eur(c.euros)}</b><span>vendido en el directo</span></div>
       <div><b>${eur(c.eurosMarcados)}</b><span>vendido y marcado</span></div>
       <div><b class="${c.marcadoEurosPct < 75 ? 'neg' : 'bien'}">${c.marcadoEurosPct}%</b><span>del dinero, marcado</span></div>
@@ -1053,29 +1045,6 @@ function pintar(j) {
       <div><b>${eur(tPrendas ? (sinIva(tVenta) - tCoste) / tPrendas : 0)}</b><span>beneficio por prenda</span></div>
       <div><b class="${tNeto < 0 ? 'neg' : ''}">${eur(tHoras ? tNeto / tHoras : 0)}</b><span>beneficio por hora</span></div>
     </div>`;
-    /* LA DIFERENCIA ENTRE LOS DOS NÚMEROS, EXPLICADA Y NO ESCONDIDA.
-       Con esto se contesta en un vistazo lo que hoy costó media hora: cuánto de
-       la diferencia son portes y cuánto son prendas que aún no han entrado. */
-    if (gmv != null) {
-      const hueco = Math.round((gmv - c.euros) * 100) / 100;
-      const faltanArt = PANEL.items != null ? PANEL.items - c.lotes : null;
-      html += `<div class="aviso ${Math.abs(hueco) > 0 && faltanArt > 5 ? 'ambar' : ''}">
-        <b>La consola dice ${eur(gmv)} y aquí hay ${eur(c.euros)}: ${eur(Math.abs(hueco))}
-        de diferencia.</b> El GMV de TikTok suma <b>los portes</b> que paga cada comprador;
-        esto suma solo <b>la ropa</b>, que es lo que cuenta para coste y margen.
-        ${faltanArt != null ? (faltanArt > 0
-          ? `Y de artículos: la consola lleva <b>${PANEL.items}</b> y aquí hay <b>${c.lotes}</b>,
-             así que <b>${faltanArt}</b> ${faltanArt === 1 ? 'está' : 'están'} sin registrar todavía
-             —el panel las manda con unos segundos de retraso, y las que no se han pagado no entran—.`
-          : (faltanArt < 0
-            ? `De artículos vamos por delante: aquí hay <b>${c.lotes}</b> y la consola atribuye
-               <b>${PANEL.items}</b>. TikTok tarda en atribuir, no falta nada.`
-            : 'En artículos cuadran exactamente.')) : ''}
-        ${frescoPanel != null && frescoPanel > 3
-          ? `<br><b>Ojo:</b> el número de la consola es de hace ${frescoPanel} min. Si no se mueve,
-             mira que la pestaña del panel de TikTok siga abierta y leída.` : ''}
-      </div>`;
-    }
 
     /* Lo de "sin tarifa" se decía aquí, en la ficha de cada vendedora, en la
        tabla de tipos y en su nota: cuatro veces lo mismo. Se queda donde sirve
