@@ -39,6 +39,9 @@
   "paises": {
     "es": {
       "nombre": "España",
+      "_cuentas": "Desde donde se emite. `cuenta` es la que tiene panel de directo; `emiten` son todas. Las tres venden por la MISMA tienda de Espana: son cuentas de marketing, no tiendas. De aqui salen las pestanas de /reparto, para que la vista de un pais no ensene las cuentas del otro. Si se toca esta lista, se toca tambien en extension-billys/pais.js y en flujo.js.",
+      "cuenta": "billysvlc",
+      "emiten": ["billysvlc", "billystourvlc", "billystacos"],
       "transportePorPieza": 0.05,
       "factorCoste": 1.21,
       "factorVenta": 1,
@@ -48,6 +51,9 @@
 
     "nl": {
       "nombre": "Países Bajos",
+      "_cuentas": "Holanda emite solo desde billys_nl. Misma lista que en extension-billys/pais.js: si cambia, cambia en los dos sitios.",
+      "cuenta": "billys_nl",
+      "emiten": ["billys_nl"],
       "_transporte": "Cero. La ropa se recoge en Amsterdam y hay veinte minutos en coche hasta el almacen donde se vende, asi que no hay coste de transporte por pieza que repartir.",
       "transportePorPieza": 0,
       "_factorCoste": "Uno: la compra vino sin IVA.",

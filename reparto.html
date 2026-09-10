@@ -126,11 +126,18 @@
    font-size:14px;cursor:pointer;position:relative;top:1px}
   #pestanas button.on{background:var(--carta);color:var(--tinta)}
   #pestanas button .cuantas{opacity:.6;font-weight:600;margin-left:6px}
+  /* EL PAÍS, PEGADO AL TÍTULO Y NO EN UNA ESQUINA.
+     Las dos pantallas son iguales y los números no: quien la abra tiene que
+     saber de qué tienda son antes de leer ninguna cifra. */
+  #chipPais{font-size:14px;font-weight:800;letter-spacing:.02em;vertical-align:middle;
+    padding:4px 10px;border-radius:999px;border:1px solid #26302F;background:#141C1C;
+    color:#8DA09D;margin-left:10px;white-space:nowrap}
+  #chipPais.otro{border-color:#5CC7CC;color:#5CC7CC}
 </style>
 </head>
 <body>
 
-<h1>Reparto de prendas</h1>
+<h1>Reparto de prendas <span id="chipPais"></span></h1>
 <p class="sub" id="sub">Qué categoría tiene cada prenda vendida, según lo que marcaron.</p>
 
 <div class="fila">
@@ -161,6 +168,24 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) =>
    negocio de cualquiera que teclee la dirección. */
 const CODIGO = new URLSearchParams(location.search).get('d') || '';
 
+/* =========================================================================
+   DE QUÉ PAÍS ES ESTA PANTALLA
+   =========================================================================
+   España y Países Bajos son dos tiendas distintas, con OTRO surtido y OTRA
+   forma de contar el IVA. Los identificadores de categoría no se parecen en
+   nada —España marca `sudaderas_b`, Holanda marca `sudadera`—, así que abrir
+   esta página con la tabla de España para mirar un directo de Holanda no da
+   un número flojo: da un número que ignora Holanda entera y no lo dice, con
+   TODAS sus prendas cayendo en "sin tarifa".
+
+   El país llega en la dirección porque la extensión ya lo pone en el enlace:
+   quien elige España en su ordenador se lleva `?pais=es` en todos los
+   enlaces del equipo. SIN `?pais=` ES ESPAÑA, que es lo que había y lo que
+   siguen teniendo los enlaces viejos.
+   ========================================================================= */
+const PAIS = (new URLSearchParams(location.search).get('pais') || 'es')
+  .trim().toLowerCase() || 'es';
+
 const hhmm = (t) => {
   if (!t) return '';
   const d = new Date(t);
@@ -179,6 +204,7 @@ const VIAS = {
 
 let ULTIMO = null;
 let PRENDAS = [];          // las prendas del día en crudo, para el desglose por cuenta
+let SIN_NOMBRE = 0;        // las que llegaron en vivo y aún no tienen nombre de cuenta
 /* LO QUE DICE LA CONSOLA DE TIKTOK: { gmv, items, cuando }.
    Lo manda el puente del directo con cada latido. No es lo mismo que lo nuestro
    —su GMV suma los portes— y por eso se enseñan los dos: el 17 ago 2026 la
@@ -212,15 +238,41 @@ async function cargarCostes() {
   if (COSTES) return COSTES;
   try {
     const c = await (await fetch('/costes-prendas.json', { cache: 'no-store' })).json();
+    /* El bloque del país, si lo hay. España lo tiene con los mismos números
+       que había sueltos arriba, así que sin `?pais=` sale exactamente lo de
+       siempre. Un país desconocido cae en España en vez de quedarse sin
+       tabla: mejor los números de siempre que una pantalla en blanco. */
+    const p = (c.paises && (c.paises[PAIS] || c.paises.es)) || {};
+    /* Holanda trae su propia lista. España no la trae y usa la de arriba. */
+    const cats = (p.categorias && p.categorias.length) ? p.categorias : (c.categorias || []);
+    const transporte = p.transportePorPieza != null ? p.transportePorPieza : (c.transportePorPieza || 0);
+    const fCoste = p.factorCoste != null ? p.factorCoste : (1 + (c.iva || 0));
+    const fVenta = Number(p.factorVenta) > 0 ? Number(p.factorVenta) : 1;
     const porId = {};
-    for (const x of c.categorias || []) {
+    for (const x of cats) {
       porId[x.id] = {
         nombre: x.nombre,
-        coste: (x.euroKilo / x.piezasKilo + (c.transportePorPieza || 0)) * (1 + (c.iva || 0))
+        premium: !!x.premium,
+        /* Las premium se compran POR PIEZA, no por kilo: su coste está puesto
+           a mano y no pasa por la fórmula. */
+        coste: x.costePieza != null ? Number(x.costePieza)
+          : (x.euroKilo / x.piezasKilo + transporte) * fCoste
       };
     }
-    COSTES = { porId, hora: c.horaPresentadora || 0, actualizado: c.actualizado };
-  } catch (e) { COSTES = { porId: {}, hora: 0, error: e.message }; }
+    COSTES = {
+      porId,
+      hora: p.horaPresentadora != null ? p.horaPresentadora : (c.horaPresentadora || 0),
+      transporte, fCoste, fVenta,
+      pais: PAIS,
+      nombrePais: p.nombre || '',
+      cuenta: p.cuenta || null,
+      emiten: (p.emiten && p.emiten.length) ? p.emiten : null,
+      actualizado: c.actualizado
+    };
+  } catch (e) {
+    COSTES = { porId: {}, hora: 0, transporte: 0, fCoste: 1, fVenta: 1,
+               pais: PAIS, nombrePais: '', cuenta: null, emiten: null, error: e.message };
+  }
   return COSTES;
 }
 
@@ -231,6 +283,20 @@ const costeDe = (cat) => {
   const c = COSTES && COSTES.porId[cat];
   return c ? c.coste : null;
 };
+
+/* EL INGRESO CONTRA EL QUE SE COMPARA EL COSTE.
+   En España el precio de venta y el coste llevan los dos el IVA, así que se
+   comparan tal cual y esto no hace nada (factorVenta = 1): la página sale
+   número por número como salía.
+   En Holanda la ropa se compró SIN IVA pero el precio de venta lleva el 21%
+   que se paga en España y no se recupera, así que hay que quitarlo del
+   ingreso antes de compararlo con el coste. Con la fórmula de España, el
+   margen de Holanda salía un 21% de los ingresos por encima de lo real.
+
+   Lo VENDIDO se sigue enseñando entero —es el dinero que entró y es lo que se
+   compara con la consola de TikTok—. Esto solo toca el margen. */
+const sinIva = (v) => Number(v || 0) / ((COSTES && COSTES.fVenta) || 1);
+const CON_IVA_APARTE = () => !!(COSTES && COSTES.fVenta && COSTES.fVenta !== 1);
 const horasDe = (t) => (t && t.empezo && t.acabo)
   ? Math.max((new Date(t.acabo) - new Date(t.empezo)) / 3600000, 0.01) : null;
 
@@ -295,12 +361,16 @@ function analizarTipos(c) {
     if (cp == null) { g.sinTarifa++; sinTarifa++; }
     else {
       g.coste += cp; g.conTarifa++;
-      if (p < cp) { g.bajoCoste++; bajoCoste.push({ ...f, coste: cp, perdida: cp - p }); }
+      /* Se compara contra el ingreso limpio, no contra el precio de la etiqueta:
+         en Holanda una prenda de 10 € deja 8,26 € y el coste es el de verdad. */
+      const nt = sinIva(p);
+      if (nt < cp) { g.bajoCoste++; bajoCoste.push({ ...f, coste: cp, neto: nt, perdida: cp - nt }); }
     }
   }
 
   const lista = Object.values(m).map((g) => {
-    const margen = g.venta - g.coste;
+    const ingreso = sinIva(g.venta);          // en España es g.venta tal cual
+    const margen = ingreso - g.coste;
     return {
       ...g,
       margen,
@@ -309,7 +379,7 @@ function analizarTipos(c) {
       costeUd: g.conTarifa ? g.coste / g.conTarifa : null,
       /* Cuánto de cada euro vendido se queda. Es lo que compara bien una
          chaqueta de 20 € con una camiseta de 3 €: el margen suelto no. */
-      pct: g.venta ? Math.round(margen / g.venta * 100) : 0
+      pct: ingreso ? Math.round(margen / ingreso * 100) : 0
     };
   });
 
@@ -447,13 +517,15 @@ function bloqueTipos(t) {
         Entre todas se dejaron <b class="neg">${eur(perdido)}</b>. No es un error del sistema:
         es el precio al que se remataron.</p>
       <table><thead><tr><th>Hora</th><th>Ficha</th><th>Tipo</th><th>Vendedora</th>
-        <th>Precio</th><th>Coste</th><th>Diferencia</th></tr></thead><tbody>
+        <th>Precio${CON_IVA_APARTE() ? '<br><span class="et no">y sin IVA</span>' : ''}</th>
+        <th>Coste</th><th>Diferencia</th></tr></thead><tbody>
         ${ver.map((f) => `<tr>
           <td class="n">${hhmm(f.en)}</td>
           <td class="n">${f.lote == null ? '—' : '#' + f.lote}</td>
           <td>${esc(nombreCat(f.categoria))}</td>
           <td>${esc(f.vendedora)}</td>
-          <td class="n">${eur(f.precio)}</td>
+          <td class="n">${eur(f.precio)}${CON_IVA_APARTE()
+            ? `<br><span class="et no">${eur(f.neto)} sin IVA</span>` : ''}</td>
           <td class="n">${eur(f.coste)}</td>
           <td class="n neg">−${eur(f.perdida)}</td>
         </tr>`).join('')}
@@ -499,8 +571,30 @@ const rotuloCuenta = (c) => soloNumero(c) ? 'sin leer' : (c || '');
  * UNA cuenta, así que una prenda que llega en vivo sin nombre SÍ se sabe de
  * quién es: de la cuenta con panel. Lo que le falta no es la cuenta, es el
  * nombre de la prenda, y eso no cambia de quién es la venta. */
+/* Y la cuenta con panel es la del PAÍS que se está mirando. El servidor no
+   sabe todavía de países —eso llega con la columna `pais` en las tablas— y
+   responde siempre `billysvlc`, que en la pantalla de Holanda es el nombre de
+   otra tienda. */
+const cuentaConPanel = (c) => {
+  const srv = (c && c.cuentaConPanel) || 'billysvlc';
+  const em = COSTES && COSTES.emiten;
+  /* Si lo que dice el servidor no es de este país, se enseña el de este país:
+     poner `billysvlc` en la pantalla de Holanda es nombrar otra tienda. */
+  return (em && !em.includes(srv)) ? ((COSTES && COSTES.cuenta) || srv) : srv;
+};
+/* EL SERVIDOR TODAVÍA NO SABE DE PAÍSES.
+   Una prenda que llega en vivo no trae nombre de cuenta —trae el identificador
+   del producto— y el servidor se la apunta a la cuenta con panel, que es
+   `billysvlc`. En la pantalla de Holanda eso quiere decir que las prendas que
+   aún no se han leído del Centro de vendedores cuentan como España y aquí no
+   salen. No se rellenan ni se estiman: se dicen. Se arregla de verdad con la
+   columna `pais` en las tablas, que es otro cambio. */
+const servidorCiego = (c) => {
+  const em = COSTES && COSTES.emiten;
+  return !!(em && !em.includes((c && c.cuentaConPanel) || 'billysvlc'));
+};
 const cuentaDePrenda = (l, c) => (soloNumero(l && l.cuenta) || !(l && l.cuenta))
-  ? ((c && c.cuentaConPanel) || 'la cuenta del panel')
+  ? cuentaConPanel(c)
   : String(l.cuenta);
 
 function bloqueCuentas(c) {
@@ -516,7 +610,7 @@ function bloqueCuentas(c) {
   if (lista.length < 2 && !lista.some((g) => g.envivo)) return '';
 
   return `<h2 style="font-size:19px;margin:22px 0 4px">Por cuenta</h2>
-    <p class="sub" style="margin-bottom:10px">Solo <b>${esc((c && c.cuentaConPanel) || 'billysvlc')}</b>
+    <p class="sub" style="margin-bottom:10px">Solo <b>${esc(cuentaConPanel(c))}</b>
       manda sus ventas en vivo. Las de la otra cuenta aparecen cuando se lee el Centro de
       vendedores, con el botón de su cuenta en el panel de la extensión.</p>
     <table><thead><tr><th>Cuenta</th><th>Prendas</th><th>Vendido</th><th></th></tr></thead><tbody>
@@ -553,7 +647,7 @@ function bloqueMix(c) {
   const lista = Object.values(m);
   if (!lista.length) return '';
   for (const g of lista) {
-    g.margenUd = g.conTarifa ? (g.ventaConTarifa - g.coste) / g.conTarifa : null;
+    g.margenUd = g.conTarifa ? (sinIva(g.ventaConTarifa) - g.coste) / g.conTarifa : null;
     g.top = Object.entries(g.cats).sort((a, b) => b[1] - a[1]).slice(0, 3);
   }
   lista.sort((a, b) => (b.margenUd == null ? -1e9 : b.margenUd) - (a.margenUd == null ? -1e9 : a.margenUd));
@@ -582,18 +676,44 @@ function bloqueMix(c) {
    Se recuerda la elegida en este navegador: quien mira siempre billysvlc no
    tiene que volver a pulsar cada mañana.
    ======================================================================== */
+/* La elegida se recuerda POR PAÍS. Con una sola memoria, mirar Holanda dejaba
+   `billys_nl` guardado y al volver a España la página abría en una cuenta que
+   ese día no existe. España conserva la clave de siempre para no perder la
+   que ya tiene guardada cada navegador. */
+const CLAVE_CUENTA = PAIS === 'es' ? 'billys_reparto_cuenta' : 'billys_reparto_cuenta_' + PAIS;
 let CUENTA = null;
-try { CUENTA = localStorage.getItem('billys_reparto_cuenta') || null; } catch (e) {}
+try { CUENTA = localStorage.getItem(CLAVE_CUENTA) || null; } catch (e) {}
+
+/* Las cuentas que emiten en este país. Mientras el servidor no sepa de países,
+   esto es lo que separa una tienda de la otra: si la lista está en
+   costes-prendas.json se respeta, y si no, sale todo como salía. */
+const delPais = (cuentas) => {
+  const em = COSTES && COSTES.emiten;
+  return em ? (cuentas || []).filter((x) => em.includes(String(x))) : (cuentas || []);
+};
 
 function pintarPestanas(c) {
   const caja = $('pestanas');
-  const cuentas = (c && c.cuentas) || [];
+  const cuentas = delPais((c && c.cuentas) || []);
   /* Con una sola cuenta no se pintan: serían una pestaña sola, que no es una
      pestaña, es un adorno. */
   if (cuentas.length < 2) { caja.innerHTML = ''; return; }
   caja.innerHTML = cuentas.map((x) => `<button data-c="${esc(x)}"${
     x === (c.cuenta || cuentas[0]) ? ' class="on"' : ''}>${esc(x)}${
-    x === c.cuentaConPanel ? '' : '<span class="cuantas">sin panel</span>'}</button>`).join('');
+    x === cuentaConPanel(c) ? '' : '<span class="cuantas">sin panel</span>'}</button>`).join('');
+}
+
+/* El rótulo del país, al lado del título. Sin `?pais=` es España y se enseña
+   igual: la pregunta "¿de qué tienda es esto?" tiene que tener respuesta
+   siempre, no solo cuando la respuesta es rara. */
+function pintarChipPais() {
+  const caja = $('chipPais');
+  if (!caja) return;
+  const banderas = { es: '🇪🇸', nl: '🇳🇱' };
+  const nombre = (COSTES && COSTES.nombrePais) || (PAIS === 'es' ? 'España' : PAIS.toUpperCase());
+  caja.textContent = (banderas[PAIS] || '') + ' ' + nombre;
+  caja.className = PAIS === 'es' ? '' : 'otro';
+  document.title = 'Reparto · ' + nombre;
 }
 
 async function cargar() {
@@ -607,6 +727,14 @@ async function cargar() {
   }
   try {
     await cargarCostes();
+    pintarChipPais();
+    /* UNA CUENTA GUARDADA DE OTRO PAÍS NO VALE. Pasa al cambiar de tienda en la
+       extensión con la página abierta, y filtrar por una cuenta que en este
+       país no existe deja la pantalla en blanco sin decir por qué. */
+    if (COSTES.emiten && CUENTA && !COSTES.emiten.includes(CUENTA)) {
+      CUENTA = null;
+      try { localStorage.removeItem(CLAVE_CUENTA); } catch (e2) {}
+    }
     const r = await fetch('/api/toques?d=' + encodeURIComponent(CODIGO) +
       '&cruce=1' + (dia ? '&dia=' + dia : '') +
       (CUENTA ? '&cuenta=' + encodeURIComponent(CUENTA) : ''), { cache: 'no-store' });
@@ -615,8 +743,32 @@ async function cargar() {
     /* Si no había ninguna elegida, se abre en la que tiene panel: es la que se
        mira durante el directo. */
     const cc = j.cruce || {};
-    if (!CUENTA && (cc.cuentas || []).length > 1) {
-      CUENTA = cc.cuentaConPanel || cc.cuentas[0];
+    const propias = delPais(cc.cuentas || []);
+    /* EL DÍA TIENE DATOS PERO NINGUNO ES DE ESTE PAÍS.
+       Antes esto enseñaba el directo de España con la cara de ser el de
+       Holanda. Ahora se para aquí: un número de otra tienda es peor que
+       ninguno. */
+    if (COSTES.emiten && (cc.cuentas || []).length && !propias.length) {
+      pintarPestanas(cc);
+      $('salida').innerHTML = `<div class="aviso ambar">
+        <b>Este día no tiene nada de ${esc(COSTES.nombrePais || PAIS)}.</b><br>
+        Lo que hay es de ${esc((cc.cuentas || []).join(', '))}, que
+        ${(cc.cuentas || []).length === 1 ? 'no es una cuenta' : 'no son cuentas'} de este país.
+        Aquí solo se enseña <b>${esc((COSTES.emiten || []).join(', '))}</b>: los precios,
+        las categorías y el IVA son otros, y mezclarlos daría un margen que no es de nadie.
+        <br><br>Elige otro día, o abre la página de ${esc(
+          (cc.cuentas || []).some((x) => x === 'billysvlc') ? 'España' : 'el otro país')}
+        desde el panel de la extensión.</div>`;
+      return;
+    }
+    /* Con una lista de país, aunque solo haya UNA cuenta se pide filtrado: es
+       lo que impide que se cuelen los turnos y los toques del otro país, que
+       el servidor todavía guarda en el mismo día. Sin lista de país (España
+       por defecto) manda la regla de siempre: filtrar solo si hay más de una. */
+    const hayQueElegir = COSTES.emiten ? propias.length >= 1 : propias.length > 1;
+    if (!CUENTA && hayQueElegir) {
+      CUENTA = propias.includes(cc.cuentaConPanel) ? cc.cuentaConPanel
+        : (propias.includes(cuentaConPanel(cc)) ? cuentaConPanel(cc) : propias[0]);
       return cargar();          // se vuelve a pedir, ya filtrado
     }
     pintarPestanas(cc);
@@ -628,7 +780,23 @@ async function cargar() {
       const jp = await rp.json();
       PRENDAS = (jp && jp.ok && jp.lotes) ? jp.lotes : [];
       PANEL = (jp && jp.ok && jp.panel) ? jp.panel : null;
-    } catch (e) { PRENDAS = []; PANEL = null; }
+      /* Estas vienen del día entero, sin filtrar por cuenta: en la pantalla de
+         un país hay que quitarles las del otro o el desglose por cuenta
+         enseñaría tiendas ajenas. Las que llegan sin nombre —en vivo— son de
+         quien tenga el panel, y eso lo decide `servidorCiego`. */
+      if (COSTES.emiten) {
+        SIN_NOMBRE = PRENDAS.filter((l) => soloNumero(l.cuenta) || !l.cuenta).length;
+        PRENDAS = PRENDAS.filter((l) => (soloNumero(l.cuenta) || !l.cuenta)
+          ? !servidorCiego(j.cruce || {})
+          : COSTES.emiten.includes(String(l.cuenta)));
+      } else { SIN_NOMBRE = 0; }
+      /* EL NÚMERO DE LA CONSOLA ES DEL DÍA, NO DE ESTA TIENDA. El servidor
+         devuelve el último panel del día venga de donde venga, así que en la
+         pantalla de un país cuyo panel no es el suyo ese GMV sería el de la
+         otra tienda, y debajo saldría una comparación entera inventada. Se
+         quita: mejor sin número que con el número de otro. */
+      if (servidorCiego(j.cruce || {})) PANEL = null;
+    } catch (e) { PRENDAS = []; PANEL = null; SIN_NOMBRE = 0; }
     ULTIMO = j;
     pintar(j);
   } catch (e) {
@@ -643,6 +811,20 @@ function pintar(j) {
     j.total + ' marcadas por ' + (c.porVendedora.length || 0) + ' vendedoras';
 
   let html = '';
+
+  /* LO QUE ESTA PANTALLA NO PUEDE VER TODAVÍA.
+     Solo sale donde hace falta: en España el panel del directo ES el de la
+     cuenta que se mira, así que esto no aparece. */
+  if (servidorCiego(c) && SIN_NOMBRE) {
+    html += `<div class="aviso ambar">
+      <b>${pl(SIN_NOMBRE, 'prenda del día está', 'prendas del día están')} sin nombre de cuenta</b>
+      y no ${SIN_NOMBRE === 1 ? 'entra' : 'entran'} en estos números.
+      Son las que llegan <b>en vivo</b> desde el panel del directo: traen el número del
+      producto, no el de la tienda, y el servidor todavía se las apunta a
+      <b>${esc(c.cuentaConPanel || 'billysvlc')}</b>.
+      <br>Aparecen aquí en cuanto se hace <b>la lectura del Centro de vendedores</b> (paso 2
+      de la extensión), que es cuando cada prenda recibe el nombre de su cuenta.</div>`;
+  }
 
   /* CUÁNDO ENTRÓ LA ÚLTIMA PRENDA.
    *
@@ -800,7 +982,7 @@ function pintar(j) {
     tHoras += horasVivas(t, c) || 0;
   }
   const tPersonal = tHoras * (COSTES ? COSTES.hora : 0);
-  const tNeto = tVenta - tCoste - tPersonal;
+  const tNeto = sinIva(tVenta) - tCoste - tPersonal;
 
   if (tPrendas) {
     /* EL DINERO DEL DIRECTO ENTERO, MARCADO O NO.
@@ -828,7 +1010,7 @@ function pintar(j) {
       <div><b>${eur(tCoste)}</b><span>coste ropa</span></div>
       <div><b>${eur(tPersonal)}</b><span>coste presentadoras</span></div>
       <div><b class="${tNeto < 0 ? 'neg' : 'bien'}">${eur(tNeto)}</b><span>beneficio de lo marcado</span></div>
-      <div><b>${eur(tPrendas ? (tVenta - tCoste) / tPrendas : 0)}</b><span>beneficio por prenda</span></div>
+      <div><b>${eur(tPrendas ? (sinIva(tVenta) - tCoste) / tPrendas : 0)}</b><span>beneficio por prenda</span></div>
       <div><b class="${tNeto < 0 ? 'neg' : ''}">${eur(tHoras ? tNeto / tHoras : 0)}</b><span>beneficio por hora</span></div>
     </div>`;
     /* LA DIFERENCIA ENTRE LOS DOS NÚMEROS, EXPLICADA Y NO ESCONDIDA.
@@ -881,7 +1063,7 @@ function pintar(j) {
       ? hhmm(t.empezo) + '–' + (fin ? hhmm(fin) : 'sigue')
       : 'sin turno apuntado';
     const hv = horasVivas(t, c);
-    const bruto = q.ventaConTarifa - q.coste;        // solo lo que tiene coste conocido
+    const bruto = sinIva(q.ventaConTarifa) - q.coste;  // solo lo que tiene coste conocido
     const neto = bruto - (hv || 0) * (COSTES ? COSTES.hora : 0);
 
     html += `<div class="quien">
@@ -1024,16 +1206,29 @@ function pintar(j) {
       <tr><td>Toques que no cuadraron con ninguna prenda</td><td class="n">${c.sinCruzar}</td></tr>
     </tbody></table>
 
-    <h3>Cómo se calcula el dinero</h3>
+    <h3>Cómo se calcula el dinero${COSTES && COSTES.nombrePais
+      ? ' en ' + esc(COSTES.nombrePais) : ''}</h3>
     <p class="nota">
-      <b>Coste de una prenda</b> = (€/kilo ÷ piezas/kilo + 0,05 € de transporte) × 1,21 de IVA.
-      Sale de <code>costes-prendas.json</code> y se recalcula con la fórmula, no se copia.<br>
-      <b>Beneficio de una prenda</b> = lo que se vendió − lo que costó comprarla.<br>
-      <b>Beneficio de un turno</b> = beneficio de sus prendas − sus horas × ${eur(COSTES ? COSTES.hora : 0)}.
-      Solo sale cuando el turno ha terminado.<br>
+      <b>Coste de una prenda</b> = (€/kilo ÷ piezas/kilo${(COSTES && COSTES.transporte)
+        ? ' + ' + eur(COSTES.transporte) + ' de transporte' : ''}) × ${String(
+        (COSTES ? COSTES.fCoste : 1.21)).replace('.', ',')}.
+      Sale de <code>costes-prendas.json</code> y se recalcula con la fórmula, no se copia.
+      Las prendas <b>premium</b> —las que se compran por pieza y no por kilo— llevan su
+      coste puesto a mano y no pasan por esa fórmula.<br>
+      <b>Beneficio de una prenda</b> = lo que deja la venta − lo que costó comprarla.<br>
+      <b>Beneficio de un turno</b> = beneficio de sus prendas${(COSTES && COSTES.hora)
+        ? ' − sus horas × ' + eur(COSTES.hora) : ''}.
+      Solo sale cuando el turno ha terminado.${(COSTES && !COSTES.hora)
+        ? ' Aquí el sueldo de quien vende no entra en el cálculo, por decisión de Aaron.' : ''}<br>
       <b>Beneficio del directo</b> = todo lo anterior sumado.<br><br>
-      Con IVA en los dos lados, porque el precio de TikTok ya lo lleva. La hora de
-      presentadora va <b>sin</b> IVA: un salario no lo lleva.<br><br>
+      ${CON_IVA_APARTE()
+        ? `<b>El IVA aquí va al revés que en España, y no es un descuido.</b> La ropa se compró
+           <b>sin</b> IVA, así que el coste va limpio; pero el precio de venta lleva el 21% que
+           se paga en España y no se recupera, así que del precio se quita antes de comparar:
+           una prenda de 10 € deja ${eur(sinIva(10))}. <b>Vendido</b> se sigue enseñando entero,
+           que es el dinero que entró; lo que va sin IVA es el margen.`
+        : `Con IVA en los dos lados, porque el precio de TikTok ya lo lleva. La hora de
+           presentadora va <b>sin</b> IVA: un salario no lo lleva.`}<br><br>
       <b>Solo entra lo marcado.</b> Sin categoría no hay coste, y sin coste no hay margen.
       Por eso el beneficio es el de <b>lo marcado</b>, no el del directo entero: si hoy
       se marcó el ${c.marcadoEurosPct}% del dinero, esto es el margen de ese ${c.marcadoEurosPct}%.
@@ -1057,7 +1252,7 @@ function pintar(j) {
         <td>${esc((COSTES && COSTES.porId[f.categoria] && COSTES.porId[f.categoria].nombre) || f.categoria || '')}</td>
         <td class="n">${f.precio == null ? '' : eur(f.precio)}</td>
         <td class="n">${costeDe(f.categoria) == null ? '—' : eur(costeDe(f.categoria))}</td>
-        <td class="n">${(f.precio == null || costeDe(f.categoria) == null) ? '' : eur(Number(f.precio) - costeDe(f.categoria))}</td>
+        <td class="n">${(f.precio == null || costeDe(f.categoria) == null) ? '' : eur(sinIva(f.precio) - costeDe(f.categoria))}</td>
         <td>${v ? `<span class="et ${v.et}">${v.txt}</span>` : '<span class="et no">sin cruzar</span>'}</td>
       </tr>`;
     }
@@ -1089,12 +1284,12 @@ $('csv').onclick = () => {
     f.categoria || '', f.precio == null ? '' : String(f.precio).replace('.', ','),
     costeDe(f.categoria) == null ? '' : costeDe(f.categoria).toFixed(3).replace('.', ','),
     (f.precio == null || costeDe(f.categoria) == null) ? ''
-      : (Number(f.precio) - costeDe(f.categoria)).toFixed(3).replace('.', ','),
+      : (sinIva(f.precio) - costeDe(f.categoria)).toFixed(3).replace('.', ','),
     (VIAS[f.metodo] || {}).txt || 'sin cruzar'
   ].map((x) => '"' + String(x).replace(/"/g, '""') + '"').join(';')));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + lineas.join('\n')], { type: 'text/csv' }));
-  a.download = 'reparto-' + ULTIMO.dia + '.csv';
+  a.download = 'reparto-' + (PAIS === 'es' ? '' : PAIS + '-') + ULTIMO.dia + '.csv';
   a.click();
 };
 
@@ -1106,7 +1301,7 @@ $('dia').addEventListener('change', cargar);
 $('pestanas').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   CUENTA = b.dataset.c;
-  try { localStorage.setItem('billys_reparto_cuenta', CUENTA); } catch (err) {}
+  try { localStorage.setItem(CLAVE_CUENTA, CUENTA); } catch (err) {}
   cargar();
 });
 
