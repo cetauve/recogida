@@ -27,9 +27,29 @@ const TROZO = 400;
  * Estuvo en 90 segundos y con eso un toque se llevaba una prenda que aún no se
  * había vendido. Lo cazó probar-tiempo.js. NO SUBIR. */
 const MARGEN_DELANTE_MS = 5000;
-/* Y hacia atrás: una prenda vendida hace más de diez minutos ya no es la que
- * acaba de marcar nadie. */
-const VENTANA_ATRAS_MS = 10 * 60000;
+/* Y hacia atrás: hasta dónde se mira antes de rendirse.
+ *
+ * OJO CON LO QUE ESTE NÚMERO ES Y LO QUE NO ES. No es un margen de precisión.
+ * Quien elige la prenda es la regla de "la última vendida que no tenga dueño";
+ * esto solo dice cuándo dejar de mirar. En un directo normal la última sin
+ * dueño es de hace unos segundos y este número no pinta nada. Solo aparece
+ * cuando hay un parón: si alguien pulsa y lo último libre es de hace un rato
+ * largo, eso no es lo que acaba de marcar y se queda sin prenda.
+ *
+ * DIEZ MINUTOS ERA DEMASIADO GENEROSO. Una marca suelta se pegaba a una prenda
+ * de hace un cuarto de hora y contaba como buena.
+ *
+ * CUATRO MINUTOS SALE DE MEDIR, NO DE ESTIMAR. Los huecos reales entre venta y
+ * venta dentro de una misma cuenta, 3.227 medidos en seis días de septiembre:
+ * la mitad por debajo de 78 segundos, tres de cada cuatro por debajo de 110,
+ * nueve de cada diez por debajo de 162, y 99 de cada 100 por debajo de 6
+ * minutos y medio. Con cuatro minutos no se tira ninguna marca legítima de un
+ * rato lento del directo, y se corta lo que no tiene sentido.
+ *
+ * NO BAJARLO A MINUTO Y MEDIO: el 37% de los huecos reales pasan de 90
+ * segundos, así que ahí empezarían a caerse marcas buenas de gente que pulsó
+ * bien en un momento flojo. */
+const VENTANA_ATRAS_MS = 4 * 60000;
 
 /* =========================================================================
    CUÁNDO SE DA UN DIRECTO POR TERMINADO
