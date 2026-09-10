@@ -418,7 +418,32 @@ const DIA = new URLSearchParams(location.search).get('dia') || '';
  *
  * SI NO VIENE, SE USA ?dia= COMO ANTES, y si tampoco viene, el servidor pone el
  * dia de hoy. Un enlace viejo sigue funcionando igual que ayer. */
-const JUEGO = new URLSearchParams(location.search).get('juego') || '';
+/* EL JUEGO PUEDE NO VENIR EN EL ENLACE, Y ENTONCES HAY QUE ADIVINARLO BIEN.
+ *
+ * El 10 sep 2026: se copia el enlace del almacen desde el panel de Paises
+ * Bajos y se abre el almacen de ESPAÑA, con sus 125 paquetes y sus cuentas.
+ * El motivo es que el panel solo pone `&juego=` si en ESE ordenador ya se ha
+ * hecho un paso 2; si no, el enlace va con el pais pero sin llave, y sin llave
+ * esto pedia la fecha pelada, que es justo como se llama el juego de España.
+ * O sea: el pais viajaba en la direccion y no lo miraba nadie.
+ *
+ * Ahora, sin llave, se prueba primero la del pais —`nl-2026-09-10`— y solo si
+ * no existe se cae a la fecha pelada. En España al reves, porque su juego se
+ * sigue llamando por la fecha a secas y hay enlaces viejos por ahi.
+ *
+ * La llave que salga se adopta para TODO: las tarjetas, la cola y el avance
+ * guardado en el movil. Si no, el almacen seria de un juego y la cola de otro,
+ * que es como el 5 sep acabaron 191 paquetes de dos paises en la misma cola. */
+let JUEGO = new URLSearchParams(location.search).get('juego') || '';
+const PAIS = (new URLSearchParams(location.search).get('pais') || '').trim().toLowerCase();
+/* El dia del negocio en hora de Valencia, que es el que usa el servidor. */
+const HOY_ES = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+const llavesAProbar = () => {
+  if (JUEGO) return [JUEGO];
+  const base = DIA || HOY_ES;
+  if (!base) return [];
+  return (PAIS && PAIS !== 'es') ? [PAIS + '-' + base, base] : [base, 'es-' + base];
+};
 
 /* Lo que identifica a este juego, se llame como se llame el parametro. */
 const LLAVE = () => JUEGO || DIA || '';
@@ -431,9 +456,22 @@ let PENDIENTE = null;     // datos nuevos que aún no toca meter
 
 async function desdeApi(){
   if (!CODIGO) return null;
+  for (const llave of llavesAProbar()) {
+    const j = await unJuego(llave);
+    if (j) {
+      /* La llave buena se adopta: a partir de aqui la cola y el avance van con
+         ella, no con la que se probo primero. */
+      JUEGO = llave;
+      return j;
+    }
+  }
+  return null;
+}
+
+async function unJuego(llave){
   try {
-    const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) + colaEnLaUrl(),
-                          { cache: 'no-store' });
+    const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) +
+                          '&juego=' + encodeURIComponent(llave), { cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
     if (!j || !j.hay || !j.datos || !(j.datos.tandas || []).length) return null;
@@ -522,8 +560,23 @@ function tirarLoViejo(){
 function verMenu(){
   /* Si llegaron tandas nuevas mientras alguien empaquetaba, entran aquí: al
    * volver al menú no está a medias de nada. */
-  if (PENDIENTE) { DATOS = PENDIENTE; GENERADO = PENDIENTE.generado; PENDIENTE = null;
-                   document.title = 'Recogida · ' + DATOS.titulo; }
+  if (PENDIENTE) {
+    DATOS = PENDIENTE; GENERADO = PENDIENTE.generado; PENDIENTE = null;
+    document.title = 'Recogida · ' + DATOS.titulo;
+    /* LO QUE LLEGA DEL SERVIDOR VIENE SIN REPARTIR POR DIRECTO, y sin esto cada
+     * refresco borraba los rotulos: quien recoge se quedaba otra vez con dos
+     * numeros 20 y sin saber cual es cual. Repartirlo de nuevo sale de lo
+     * guardado en este movil, asi que no cuesta ni una llamada. */
+    separarDirectos().then((k) => {
+      if (!k) return;
+      DIRECTOS_SEPARADOS = k;
+      if ($('menu').classList.contains('on')) pintarMenu();
+    });
+  }
+  pintarMenu();
+}
+
+function pintarMenu(){
   tandaActual = null;
   ['barra','pila','pie','fin'].forEach(x => $(x).classList.remove('on'));
   $('menu').classList.add('on');
@@ -1394,22 +1447,46 @@ async function abrirTanda(ti){
 const CLAVE_DIRECTOS = 'billys_directos_';
 const ESPERA_DIRECTOS_MS = 10000;
 
-/* Los pedidos pendientes de esa cuenta, repartidos por directo. Devuelve null
- * si solo hubo uno —que es la respuesta util, no un fallo— y lanza si no se ha
- * podido preguntar, para no guardar un "no hay" que no se sabe. */
-async function mapaDeDirectos(cuenta){
+async function pedidosDe(cuenta, estado){
   const corta = new AbortController();
   const reloj = setTimeout(() => corta.abort(), ESPERA_DIRECTOS_MS);
   let j = null;
   try {
     const r = await fetch('/api/tiktok-pedidos?d=' + encodeURIComponent(CODIGO) +
-      '&cuenta=' + encodeURIComponent(cuenta), { cache: 'no-store', signal: corta.signal });
+      '&cuenta=' + encodeURIComponent(cuenta) +
+      (estado ? '&estado=' + encodeURIComponent(estado) : ''),
+      { cache: 'no-store', signal: corta.signal });
     j = await r.json();
   } finally { clearTimeout(reloj); }
   if (!j || !j.ok || !Array.isArray(j.pedidos)) throw new Error('sin pedidos');
+  return j.pedidos;
+}
 
+/* Los pedidos de esa cuenta repartidos por directo. Devuelve null si solo hubo
+ * uno —que es la respuesta util, no un fallo— y lanza si no se ha podido
+ * preguntar, para no guardar un "no hay" que no se sabe.
+ *
+ * `mios` es la lista de pedidos que salen en las tarjetas de este juego, y no
+ * es un adorno: la cuenta lleva meses vendiendo y en lo ya etiquetado hay
+ * directos de otros dias. Sin ese filtro, los dos directos del 9 sep salian
+ * numerados 3 y 4 porque delante habia dos del 5 y del 6. */
+async function mapaDeDirectos(cuenta, mios){
+  /* PRIMERO LO PENDIENTE DE ENVIAR, que es lo normal mientras se recoge. */
+  let pedidos = await pedidosDe(cuenta, '');
+  const cubre = () => mios.every(id => pedidos.some(p => p.pedido === id));
+
+  /* Y SI NO ESTAN TODOS, LO YA ETIQUETADO.
+   * En cuanto se crea la etiqueta el pedido sale de AWAITING_SHIPMENT, asi que
+   * imprimir dejaba esto sin nada que mirar justo cuando iba a empezar la
+   * recogida: el 10 sep, cero pedidos y las tarjetas otra vez sin directo. */
+  if (mios.length && !cubre()) {
+    try { pedidos = pedidos.concat(await pedidosDe(cuenta, 'AWAITING_COLLECTION')); }
+    catch (e) { /* con lo que haya */ }
+  }
+
+  const suyos = mios.length ? pedidos.filter(p => mios.includes(p.pedido)) : pedidos;
   const cuando = {}, porPedido = {};
-  for (const p of j.pedidos) {
+  for (const p of suyos) {
     for (const x of (p.prendas || [])) {
       if (!x.productoId || x.num == null) continue;
       (porPedido[p.pedido] = porPedido[p.pedido] || []).push({ num: Number(x.num), prod: String(x.productoId) });
@@ -1506,9 +1583,14 @@ async function separarDirectos(){
 
   let tocado = 0, cambiado = false;
   for (const cuenta of cuentas) {
+    /* Los pedidos que salen en las tarjetas de ESTE juego y de ESTA cuenta. */
+    const mios = [...new Set([].concat(...DATOS.tandas.map(t =>
+      [].concat(...(t.compradores || [])
+        .filter(c => (c.porCuenta || []).some(x => String(x.cuenta) === cuenta))
+        .map(c => Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []))))))];
     let m = Object.prototype.hasOwnProperty.call(caja.cuentas, cuenta) ? caja.cuentas[cuenta] : undefined;
     if (m === undefined) {
-      try { m = await mapaDeDirectos(cuenta); caja.cuentas[cuenta] = m; cambiado = true; }
+      try { m = await mapaDeDirectos(cuenta, mios); caja.cuentas[cuenta] = m; cambiado = true; }
       catch (e) { m = null; }               // no se ha podido preguntar: ni se guarda ni se pinta
     }
     if (m) tocado += repartirPorDirecto(cuenta, m);
