@@ -70,7 +70,17 @@ module.exports = puerta(async (req, res) => {
         /* Provisional = leída en vivo del panel del directo, donde no se
          * conoce el nombre de la cuenta (solo el productId). Vale para ver el
          * cruce mientras se emite; la sustituye la lectura del final. */
-        provisional: !!b.provisional
+        /* SE ACABÓ LA LECTURA EN VIVO. Antes el puente del directo iba metiendo
+         * las ventas según pasaban, sin nombre de cuenta, y luego el paso 2 las
+         * volvía a meter bien: dos filas por prenda y una limpieza al leer para
+         * quedarse con la buena. Ya no se hace, así que aquí no entra ninguna
+         * provisional más, mande lo que mande quien llame. Lo que llegue, llega
+         * como definitivo o no llega.
+         *
+         * La limpieza al LEER se queda donde está a propósito: en agosto sí
+         * entraron prendas por esa vía y sin ella esos días vuelven a salir con
+         * las prendas dobles y el margen de entonces se estropea. */
+        provisional: false
       }))
       .filter((x) => x.num !== null);
 
