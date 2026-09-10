@@ -963,10 +963,29 @@ function pintar(j) {
       llevan categoría y entran en el cálculo.</div>`;
   }
 
+  /* LAS MARCAS QUE SE QUEDAN SIN PRENDA, CON NOMBRE Y APELLIDOS.
+     Una marca sin prenda no cuenta para nadie: ni para el margen ni para el
+     trabajo de quien la hizo. Decir solo cuántas son no sirve para arreglarlo;
+     decir de quién son, sí, porque casi siempre es una persona concreta
+     marcando a destiempo y no un fallo repartido. */
   if (c.sinCruzar) {
-    html += `<div class="aviso ambar"><b>${c.sinCruzar} toques sin prenda.</b>
-      Alguien pulsó cuando no había ninguna venta cerca. Suele ser un doble toque
-      o una prenda que se acabó devolviendo.</div>`;
+    const deQuien = {};
+    for (const f of (c.filas || [])) {
+      if (f.lote == null) deQuien[f.vendedora] = (deQuien[f.vendedora] || 0) + 1;
+    }
+    const lista = Object.entries(deQuien).sort((a, b) => b[1] - a[1]);
+    const marcasDe = {};
+    for (const f of (c.filas || [])) marcasDe[f.vendedora] = (marcasDe[f.vendedora] || 0) + 1;
+    html += `<div class="aviso ambar"><b>${pl(c.sinCruzar, 'marca se ha quedado', 'marcas se han quedado')}
+      sin prenda</b> y no ${c.sinCruzar === 1 ? 'cuenta' : 'cuentan'} para nada.
+      Pulsaron cuando no había ninguna venta cerca en su cuenta: un doble toque, una prenda
+      que se acabó devolviendo, o alguien marcando a destiempo.
+      ${lista.length ? '<br>' + lista.map(([v, n]) =>
+        `<span class="et no">${esc(v)} ${n} de ${marcasDe[v] || n}</span>`).join(' ') : ''}
+      ${lista.some(([v, n]) => marcasDe[v] && n / marcasDe[v] > 0.4)
+        ? `<br><span class="sub">Cuando a alguien se le cae más de la mitad, no es mala suerte:
+           o está marcando en la cuenta equivocada, o va por detrás del directo.</span>` : ''}
+      </div>`;
   }
 
   /* ----------------------------------------------------------- EL DINERO
