@@ -11,7 +11,11 @@
     boton grande de la cola salia transparente: el CSS los llamaba --rojo y
     --linea y en :root solo estaba --red. Se anaden como alias para no tener
     que tocar las quince reglas que ya los usan. */
- --rojo:#C8321F;--linea:#2A3B52}
+ --rojo:#C8321F;--linea:#2A3B52;
+ /* El color del segundo directo. Cian a proposito: sobre el azul de la tarjeta
+    no se puede confundir con el rojo ni a dos metros, que es la distancia a la
+    que se mira esto. */
+ --cian:#2BB3C0}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
  font:16px/1.4 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
@@ -102,6 +106,15 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 .rack{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
  opacity:.55;text-align:center}
 .grupo .numeros{max-height:none;overflow:visible;margin-bottom:0}
+/* DOS DIRECTOS EN LA MISMA CUENTA. Cuando pasa, el rotulo deja de ser un
+   apunte y pasa a ser lo unico que impide coger la prenda de otra persona:
+   se ve entero, y el numero se pinta del color de su directo. */
+.rack.dir{opacity:1;font-size:13px}
+.rack.dir1{color:var(--red)}
+.rack.dir2{color:var(--cian)}
+.rack.dir3{color:var(--verde)}
+.grupo.dir2 .n{background:var(--cian)}
+.grupo.dir3 .n{background:var(--verde)}
 .n{background:var(--red);color:#fff;border-radius:14px;font-weight:900;
  font-variant-numeric:tabular-nums;padding:10px 14px;min-width:60px}
 .n.solo{font-size:clamp(54px,17vw,90px);padding:14px 26px;border-radius:22px;line-height:1}
@@ -324,6 +337,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g,
   (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 let DATOS = EMBEBIDOS;
+let DIRECTOS_SEPARADOS = 0;  // tarjetas repartidas entre dos directos de la misma cuenta
 let tandaActual = null;      // índice de la tanda elegida
 let FICHAS = [];             // compradores de esa tanda
 let i = 0, historial = [], incidencias = [];
@@ -515,7 +529,11 @@ function verMenu(){
   $('menu').classList.add('on');
   $('menuTitulo').textContent = DATOS.titulo || 'Recogida';
   const total = DATOS.tandas.reduce((s,t) => s + t.compradores.length, 0);
-  $('menuSub').textContent = total + ' paquetes · elige tu tanda';
+  /* Quien empieza a recoger tiene que saberlo ANTES de la primera tarjeta, no
+     al encontrarse dos numeros 20. */
+  $('menuSub').innerHTML = total + ' paquetes · elige tu tanda' +
+    (DIRECTOS_SEPARADOS ? '<br><b style="color:var(--cian)">Hoy hubo dos directos:' +
+      ' cada número lleva el suyo</b>' : '');
   /* La fecha se enseñaba en crudo, tipo 2026-08-15T16:15:59.924Z. Lo que hace
      falta saber es de cuándo son estas tandas, y eso se lee mejor en hora. */
   const cuandoSalio = (() => {
@@ -1345,6 +1363,147 @@ async function abrirTanda(ti){
   pintar();
 }
 
+
+/* ===========================================================================
+ * DOS DIRECTOS EN LA MISMA CUENTA
+ * ===========================================================================
+ * El 9 sep 2026 en Amsterdam se abrieron DOS subastas seguidas con la misma
+ * cuenta. Cada subasta es un anuncio nuevo y cada anuncio numera desde el 1,
+ * asi que ese dia hubo diecisiete numeros repetidos: dos prendas 23, dos
+ * prendas 20, cada una de un comprador distinto. Con el numero pelado en la
+ * tarjeta no hay forma de acertar, y acertar a medias es meter en una bolsa la
+ * prenda de otro.
+ *
+ * ESTO YA ESTABA RESUELTO PARA DOS CUENTAS. Desde el 11 ago la tarjeta agrupa
+ * los numeros bajo el nombre de su cuenta, porque cada cuenta es un rack. Un
+ * segundo directo es exactamente el mismo problema con otro nombre, asi que se
+ * reusa la misma caja: cada directo se pinta como si fuera su propio rack.
+ *
+ * DE DONDE SALE EL DATO. Un directo es un producto de subasta temporal, y cada
+ * pedido trae el `productoId` del suyo. La lista de pedidos ya la sirve el paso
+ * 2 con el mismo codigo de lectura que usa esta pagina, asi que no hace falta
+ * ni columna nueva ni nada guardado: se pregunta, se reparte y se guarda en
+ * este movil para no volver a preguntarlo.
+ *
+ * SOLO SE ENCIENDE SI HACE FALTA. Si la cuenta hizo un solo directo ese dia
+ * —que es lo normal— no cambia nada: ni rotulo, ni color, ni la llamada de mas
+ * la segunda vez. Y si la pregunta falla, la tarjeta sale como salia siempre.
+ * Ningun numero se pierde por el camino: lo que no se pueda colocar se queda en
+ * su grupo de siempre.
+ * ======================================================================== */
+const CLAVE_DIRECTOS = 'billys_directos_';
+const ESPERA_DIRECTOS_MS = 10000;
+
+/* Los pedidos pendientes de esa cuenta, repartidos por directo. Devuelve null
+ * si solo hubo uno —que es la respuesta util, no un fallo— y lanza si no se ha
+ * podido preguntar, para no guardar un "no hay" que no se sabe. */
+async function mapaDeDirectos(cuenta){
+  const corta = new AbortController();
+  const reloj = setTimeout(() => corta.abort(), ESPERA_DIRECTOS_MS);
+  let j = null;
+  try {
+    const r = await fetch('/api/tiktok-pedidos?d=' + encodeURIComponent(CODIGO) +
+      '&cuenta=' + encodeURIComponent(cuenta), { cache: 'no-store', signal: corta.signal });
+    j = await r.json();
+  } finally { clearTimeout(reloj); }
+  if (!j || !j.ok || !Array.isArray(j.pedidos)) throw new Error('sin pedidos');
+
+  const cuando = {}, porPedido = {};
+  for (const p of j.pedidos) {
+    for (const x of (p.prendas || [])) {
+      if (!x.productoId || x.num == null) continue;
+      (porPedido[p.pedido] = porPedido[p.pedido] || []).push({ num: Number(x.num), prod: String(x.productoId) });
+      const t = Number(p.creado) || 0;
+      if (cuando[x.productoId] == null || t < cuando[x.productoId]) cuando[x.productoId] = t;
+    }
+  }
+  /* El directo 1 es el que empezo antes. Es el orden en el que se colgaron las
+   * prendas, que es como estan en el almacen. */
+  const orden = Object.keys(cuando).sort((a, b) => cuando[a] - cuando[b]);
+  return orden.length > 1 ? { orden, porPedido } : null;
+}
+
+/* Parte los numeros de cada tarjeta de esa cuenta en un grupo por directo. */
+function repartirPorDirecto(cuenta, m){
+  const cual = {};
+  m.orden.forEach((id, k) => { cual[id] = k + 1; });
+  let tocado = 0;
+
+  for (const t of (DATOS.tandas || [])) {
+    for (const c of (t.compradores || [])) {
+      const suyo = (c.porCuenta || []).find(x => String(x.cuenta) === cuenta);
+      if (!suyo || !Array.isArray(suyo.numeros) || !suyo.numeros.length) continue;
+
+      /* SE REPARTE DESDE LOS PEDIDOS, NO DESDE LA LISTA DE NUMEROS. Un
+       * comprador puede llevarse la 20 en los dos directos: son dos prendas
+       * distintas, no un numero repetido, y recorrer la lista buscando "la 20"
+       * las mandaria a las dos al mismo sitio. */
+      const quedan = suyo.numeros.slice();
+      const bolsas = {};
+      const pedidos = Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []);
+      for (const ped of pedidos) {
+        for (const par of (m.porPedido[ped] || [])) {
+          const k = quedan.indexOf(par.num);
+          if (k < 0) continue;                 // ese numero ya no esta en la tarjeta
+          quedan.splice(k, 1);
+          const d = cual[par.prod];
+          if (!d) continue;
+          (bolsas[d] = bolsas[d] || []).push(par.num);
+        }
+      }
+      const dirs = Object.keys(bolsas);
+      if (!dirs.length) continue;
+
+      const nuevos = dirs.sort().map(d => ({
+        cuenta: cuenta + ' · directo ' + d,
+        dir: Number(d),
+        numeros: bolsas[d].sort((a, b) => a - b)
+      }));
+      /* Lo que no se ha podido colocar sigue estando: con su cuenta a secas,
+       * como toda la vida. Preferimos un numero sin apellido a un numero que
+       * desaparece de la tarjeta. */
+      if (quedan.length) nuevos.push({ cuenta, numeros: quedan.sort((a, b) => a - b) });
+
+      c.porCuenta = (c.porCuenta || []).filter(x => String(x.cuenta) !== cuenta).concat(nuevos);
+      tocado++;
+    }
+  }
+  return tocado;
+}
+
+async function separarDirectos(){
+  if (!CODIGO || !DATOS || !Array.isArray(DATOS.tandas)) return 0;
+  const cuentas = [...new Set([].concat(...DATOS.tandas.map(t =>
+    [].concat(...(t.compradores || []).map(c =>
+      (c.porCuenta || []).map(x => String(x.cuenta || '')))))))].filter(Boolean);
+  if (!cuentas.length) return 0;
+
+  /* Guardado por juego Y por hora de calculo: cada paso 2 rehace las tandas, y
+   * si el segundo directo empezo despues de la ultima consulta hay que volver a
+   * preguntar en vez de arrastrar un "aqui solo hubo uno" que ya no es verdad. */
+  const llave = CLAVE_DIRECTOS + (DATOS.juego || DATOS.dia || '');
+  let caja = null;
+  try { caja = JSON.parse(localStorage.getItem(llave) || 'null'); } catch (e) {}
+  if (!caja || typeof caja !== 'object' || caja.generado !== (DATOS.generado || '')) {
+    caja = { generado: DATOS.generado || '', cuentas: {} };
+  }
+
+  let tocado = 0, cambiado = false;
+  for (const cuenta of cuentas) {
+    let m = Object.prototype.hasOwnProperty.call(caja.cuentas, cuenta) ? caja.cuentas[cuenta] : undefined;
+    if (m === undefined) {
+      try { m = await mapaDeDirectos(cuenta); caja.cuentas[cuenta] = m; cambiado = true; }
+      catch (e) { m = null; }               // no se ha podido preguntar: ni se guarda ni se pinta
+    }
+    if (m) tocado += repartirPorDirecto(cuenta, m);
+  }
+  if (cambiado) { try { localStorage.setItem(llave, JSON.stringify(caja)); } catch (e) {} }
+  /* Con dos directos, el rotulo de la tarjeta tiene que salir aunque solo haya
+   * una cuenta: es lo que lo distingue. */
+  if (tocado) DATOS.variasCuentas = true;
+  return tocado;
+}
+
 // --------------------------------------------------------------- tarjetas
 const claseNum = (n) => n===1 ? 'solo' : (n<=6 ? 'pocos' : 'muchos');
 
@@ -1371,8 +1530,8 @@ function bloqueNumeros(f){
   const chips = (nums) => `<div class="numeros">${nums.map(n=>`<span class="n ${c}">${n}</span>`).join('')}</div>`;
   const g = (f.porCuenta || []).filter(x => x.numeros && x.numeros.length);
   if (!g.length || (!DATOS.variasCuentas && g.length < 2)) return chips(f.numeros);
-  return `<div class="grupos">${g.map(x => `<div class="grupo">
-      <div class="rack">${x.cuenta || 'sin cuenta'}</div>
+  return `<div class="grupos">${g.map(x => `<div class="grupo${x.dir ? ' dir' + x.dir : ''}">
+      <div class="rack${x.dir ? ' dir dir' + x.dir : ''}">${x.cuenta || 'sin cuenta'}</div>
       ${chips(x.numeros)}
     </div>`).join('')}</div>`;
 }
@@ -1919,8 +2078,11 @@ async function arrancar(){
     return;
   }
   $('alMenu').style.display = ''; $('reiniciar').style.display = '';
-  /* Ya se sabe de qué día son las tandas: fuera el avance de los días
-     anteriores, que es lo que pintaba las tandas de hoy como hechas. */
+  /* ANTES DE PINTAR NADA. Si esa cuenta hizo dos directos, los numeros de la
+     tarjeta son ambiguos hasta que se reparten, y una tarjeta ambigua ya
+     pintada es una prenda mal cogida. La primera vez cuesta unos segundos;
+     despues sale de este movil. */
+  DIRECTOS_SEPARADOS = await separarDirectos();
   tirarLoViejo();
   document.title = 'Recogida · ' + DATOS.titulo;
   verMenu();
