@@ -267,11 +267,17 @@ async function cargarCostes() {
       nombrePais: p.nombre || '',
       cuenta: p.cuenta || null,
       emiten: (p.emiten && p.emiten.length) ? p.emiten : null,
+      /* Los demás países, solo para poder decir de QUIÉN es lo que hay cuando
+         un día no tiene nada de este. "Abre la página del otro país" no ayuda
+         a nadie; "abre la de España" sí. */
+      otros: Object.entries(c.paises || {})
+        .filter(([k, v]) => k !== PAIS && v && v.emiten && v.emiten.length)
+        .map(([k, v]) => ({ pais: k, nombre: v.nombre || k.toUpperCase(), emiten: v.emiten })),
       actualizado: c.actualizado
     };
   } catch (e) {
     COSTES = { porId: {}, hora: 0, transporte: 0, fCoste: 1, fVenta: 1,
-               pais: PAIS, nombrePais: '', cuenta: null, emiten: null, error: e.message };
+               pais: PAIS, nombrePais: '', cuenta: null, emiten: null, otros: [], error: e.message };
   }
   return COSTES;
 }
@@ -756,9 +762,16 @@ async function cargar() {
         ${(cc.cuentas || []).length === 1 ? 'no es una cuenta' : 'no son cuentas'} de este país.
         Aquí solo se enseña <b>${esc((COSTES.emiten || []).join(', '))}</b>: los precios,
         las categorías y el IVA son otros, y mezclarlos daría un margen que no es de nadie.
-        <br><br>Elige otro día, o abre la página de ${esc(
-          (cc.cuentas || []).some((x) => x === 'billysvlc') ? 'España' : 'el otro país')}
-        desde el panel de la extensión.</div>`;
+        <br><br>${(() => {
+          /* De quién es lo que hay. Se dice por su nombre, que es lo que le
+             sirve a quien tenga que ir a buscarlo. */
+          const suyos = (COSTES.otros || []).filter((o) =>
+            (cc.cuentas || []).some((x) => o.emiten.includes(String(x))));
+          return suyos.length
+            ? `Eso es de <b>${esc(suyos.map((o) => o.nombre).join(' y '))}</b>: elige otro día, o abre
+               ${suyos.length === 1 ? 'esa página' : 'esas páginas'} desde el panel de la extensión.`
+            : 'Elige otro día, o abre la página que toque desde el panel de la extensión.';
+        })()}</div>`;
       return;
     }
     /* Con una lista de país, aunque solo haya UNA cuenta se pide filtrado: es
@@ -807,8 +820,16 @@ async function cargar() {
 
 function pintar(j) {
   const c = j.cruce || { filas: [], porVendedora: [], lotes: 0, sinMarcar: 0, sinCruzar: 0 };
+  /* LAS MARCAS DE LA CUENTA QUE SE ESTÁ MIRANDO, NO LAS DEL DÍA ENTERO.
+     `j.total` es el recuento crudo del día y no lo filtra nadie, así que con
+     una pestaña puesta decía las marcas de las dos cuentas debajo de las
+     prendas de una. En la pantalla de Holanda eso salía como "43 prendas
+     vendidas · 304 marcadas por 0 vendedoras": las 304 eran de España y la
+     línea se contradecía sola. Sin pestaña puesta —un día de una sola cuenta—
+     los dos números son el mismo y no cambia nada. */
+  const marcas = c.cuenta ? (c.filas || []).length : j.total;
   $('sub').textContent = j.dia + ' · ' + c.lotes + ' prendas vendidas · ' +
-    j.total + ' marcadas por ' + (c.porVendedora.length || 0) + ' vendedoras';
+    marcas + ' marcadas por ' + (c.porVendedora.length || 0) + ' vendedoras';
 
   let html = '';
 
