@@ -1431,23 +1431,32 @@ function repartirPorDirecto(cuenta, m){
 
   for (const t of (DATOS.tandas || [])) {
     for (const c of (t.compradores || [])) {
-      const suyo = (c.porCuenta || []).find(x => String(x.cuenta) === cuenta);
-      if (!suyo || !Array.isArray(suyo.numeros) || !suyo.numeros.length) continue;
+      /* TODOS los grupos de esa cuenta, no el primero. La extension ya parte
+       * los numeros de un comprador en varios trozos con el MISMO nombre de
+       * cuenta —cuatro pedidos sueltos salen en dos grupos de billys_nl— y
+       * quedarse con el primero borraba el resto: la tarjeta de Y***ne decia
+       * "4 PRENDAS" y ensenaba dos numeros. Se juntan y se reparten a la vez. */
+      const mios = (c.porCuenta || []).filter(x =>
+        String(x.cuenta) === cuenta && Array.isArray(x.numeros) && x.numeros.length);
+      if (!mios.length) continue;
 
       /* SE REPARTE DESDE LOS PEDIDOS, NO DESDE LA LISTA DE NUMEROS. Un
        * comprador puede llevarse la 20 en los dos directos: son dos prendas
        * distintas, no un numero repetido, y recorrer la lista buscando "la 20"
        * las mandaria a las dos al mismo sitio. */
-      const quedan = suyo.numeros.slice();
+      const todos = [].concat(...mios.map(x => x.numeros));
+      const quedan = todos.slice();
       const bolsas = {};
       const pedidos = Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []);
       for (const ped of pedidos) {
         for (const par of (m.porPedido[ped] || [])) {
+          /* El directo se mira ANTES de sacar el numero de la lista: si no se
+           * sabe de cual es, tiene que quedarse donde estaba. */
+          const d = cual[par.prod];
+          if (!d) continue;
           const k = quedan.indexOf(par.num);
           if (k < 0) continue;                 // ese numero ya no esta en la tarjeta
           quedan.splice(k, 1);
-          const d = cual[par.prod];
-          if (!d) continue;
           (bolsas[d] = bolsas[d] || []).push(par.num);
         }
       }
@@ -1462,7 +1471,14 @@ function repartirPorDirecto(cuenta, m){
       /* Lo que no se ha podido colocar sigue estando: con su cuenta a secas,
        * como toda la vida. Preferimos un numero sin apellido a un numero que
        * desaparece de la tarjeta. */
-      if (quedan.length) nuevos.push({ cuenta, numeros: quedan.sort((a, b) => a - b) });
+      if (quedan.length) nuevos.push({ cuenta, numeros: quedan.slice().sort((a, b) => a - b) });
+
+      /* EL SEGURO, Y NO SOBRA. Si lo repartido no es exactamente lo que habia,
+       * esta tarjeta se queda como estaba. Una tarjeta sin apellidos se recoge
+       * despacio; una tarjeta a la que le falta un numero se recoge mal y nadie
+       * se entera hasta que el paquete llega corto. */
+      const orden = (v) => v.slice().sort((a, b) => a - b).join(',');
+      if (orden(todos) !== orden([].concat(...nuevos.map(x => x.numeros)))) continue;
 
       c.porCuenta = (c.porCuenta || []).filter(x => String(x.cuenta) !== cuenta).concat(nuevos);
       tocado++;
