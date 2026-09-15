@@ -93,16 +93,62 @@ module.exports = puerta(async (req, res) => {
   const enSegundos = (s) => (s ? new Date(Date.now() + Number(s) * 1000) : null);
 
   /* Con el token ya en la mano, preguntamos que tienda es. Si esto falla no
-   * tiramos la autorizacion: el token vale y la cifra se puede pedir luego. */
+   * tiramos la autorizacion: el token vale y la cifra se puede pedir luego.
+   *
+   * EL 15 SEP 2026 ESTO GUARDO ALEMANIA COMO SI FUERA ESPAÑA.
+   * TikTok devuelve TODAS las tiendas a las que llega ese permiso, y aqui se
+   * cogia lista[0] sin mirar. Como la cuenta de vendedor tiene enlazadas
+   * España, Holanda y Alemania, la primera era España: billys_de quedo con
+   * el id y la cifra de Valencia, y la pantalla dijo que todo habia ido bien.
+   * Pedir el almacen aleman habria devuelto los pedidos de Valencia.
+   *
+   * Ahora la region se saca del nombre que viaja en el enlace: billys_de es
+   * DE, billys_nl es NL, y se busca ESA tienda en la lista. Los nombres sin
+   * sufijo de dos letras (billysvlc) siguen como antes.
+   *
+   * Y SI NO CUADRA, NO SE GUARDA. Es la parte que importa: un fallo que se ve
+   * cuesta cinco minutos y uno que se guarda en silencio cuesta un dia de
+   * prendas enviadas al pais equivocado. */
+  const regionPedida = (() => {
+    const trozos = cuenta.split(/[_-]/);
+    const ultimo = trozos[trozos.length - 1];
+    return (trozos.length > 1 && /^[a-z]{2}$/.test(ultimo)) ? ultimo.toUpperCase() : null;
+  })();
+
   let tienda = {};
   let fallo = '';
+  let lista = [];
   try {
     const r = await T.tiendasDe(d.access_token);
-    const lista = (r && r.data && r.data.shops) || [];
-    tienda = lista[0] || {};
-    if (!lista.length) fallo = 'El token vale pero no ha devuelto ninguna tienda.';
+    lista = (r && r.data && r.data.shops) || [];
   } catch (e) {
     fallo = String((e && e.message) || e);
+  }
+
+  const comoSalen = () => lista.map((x) =>
+    '  ' + aTexto(x.name) + '  ·  region ' + aTexto(x.region) + '  ·  id ' + aTexto(x.id)).join('\n');
+
+  if (!fallo && !lista.length) fallo = 'El token vale pero no ha devuelto ninguna tienda.';
+
+  if (!fallo && regionPedida) {
+    const suya = lista.find((x) => aTexto(x.region).toUpperCase() === regionPedida);
+    if (!suya) {
+      return pagina(res, 'No he guardado nada, y es a proposito',
+        `<p>Has autorizado como <b>${escapar(cuenta)}</b>, o sea que esperaba una tienda de
+         <b>${escapar(regionPedida)}</b>, y TikTok no ha devuelto ninguna de ese pais.</p>
+         <p>Esto es lo que ha devuelto:</p>
+         <pre>${escapar(comoSalen())}</pre>
+         <p>Antes de repetir: mira que en el Centro de vendedores este seleccionada la tienda
+         de ese pais, y que ese mercado este publicado en <b>Target sellers</b> de la app.</p>`,
+        '#ff6b6b');
+    }
+    tienda = suya;
+  } else if (!fallo) {
+    tienda = lista[0] || {};
+    if (lista.length > 1) {
+      fallo = 'OJO: el permiso llega a ' + lista.length + ' tiendas y se ha guardado la primera.\n' +
+              comoSalen() + '\nSi querias otra, autoriza con un nombre acabado en el pais (billys_de).';
+    }
   }
 
   await T.guardar(cuenta, {
