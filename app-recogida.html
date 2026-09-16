@@ -94,6 +94,15 @@ html,body{height:100%;overflow:hidden;background:#0E1723;color:var(--bone);
 .nombre{font-size:clamp(26px,7.5vw,40px);font-weight:900;line-height:1.05;letter-spacing:-.02em;
  margin-bottom:2px;word-break:break-word}
 .usuario{font-size:13px;opacity:.45;margin-bottom:14px}
+/* AVISO DE VARIAS ETIQUETAS.
+   TikTok dice que caben 20 pedidos en un bulto, pero a veces parte a un
+   comprador en varios y entonces salen varias etiquetas para la misma persona.
+   Quien empaqueta lo tiene que ver ANTES de ponerse, no al final cuando le
+   sobra una etiqueta y no sabe de quien es. Por eso va arriba, grande y en
+   ambar, con el mismo peso visual que un regalo. */
+.etq{font-size:clamp(15px,4.2vw,20px);font-weight:900;letter-spacing:.04em;text-transform:uppercase;
+ border-radius:14px;padding:9px 16px;margin-bottom:12px;background:#E8B84B;color:#2A1F05;
+ box-shadow:0 0 0 3px rgba(232,184,75,.25)}
 .numeros{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-content:center;
  max-height:46vh;overflow:auto;margin-bottom:12px}
 /* Dos cuentas emitiendo contra el mismo almacén: cada una numera sus fichas
@@ -1647,10 +1656,24 @@ function regaloHTML(f){
     ★ ${x.tier || 'regalo'}${x.num != null ? ' · ganó con la #' + x.num : ''}</span>`).join('')}</div>`;
 }
 
+/* CUANTAS ETIQUETAS LLEVA ESTA PERSONA.
+ *
+ * Con una sola no se pinta nada: es el caso normal y ocupar sitio con ello
+ * seria ruido. Con dos o mas se avisa, porque es justo cuando quien empaqueta
+ * se equivoca. El numero lo calcula el paso 3 mirando en cuantos bultos ha
+ * partido TikTok a esa persona, y llega dentro de la tarjeta. Las tarjetas
+ * viejas no traen el dato, y entonces esto no pinta nada, como siempre. */
+function etiquetasHTML(f){
+  const n = Number(f.etiquetas || 1);
+  if (!(n > 1)) return '';
+  return `<div class="etq">Atención &middot; ${n} etiquetas</div>`;
+}
+
 function tarjetaHTML(f, cl){
   return `<div class="tarjeta ${cl||''}">
     <div class="sello ok">LISTO</div><div class="sello no">INCIDENCIA</div>
     ${regaloHTML(f)}
+    ${etiquetasHTML(f)}
     <div class="nombre">${f.apodo}</div>
     <div class="usuario">${f.usuario||''}</div>
     ${bloqueNumeros(f)}
