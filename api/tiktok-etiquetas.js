@@ -485,6 +485,39 @@ module.exports = puerta(async (req, res) => {
             return paso;
           }
           if (c.paquete) { id = c.paquete; paso.paquete = id; }
+
+          /* ===============================================================
+           * JUNTAR NO ES QUE TIKTOK DIGA QUE SI - 16 sep 2026
+           * ===============================================================
+           * EL FALLO QUE SE COMIO 28 PRENDAS EN UNA SOLA MAÑANA, con el panel
+           * diciendo "140 de 140" en verde.
+           *
+           * A un comprador con muchas prendas TikTok lo parte en varios lotes.
+           * Al pedir juntar un lote contesta code 0 -o sea, que si- pero a
+           * veces NO junta nada y no devuelve bulto nuevo. Entonces `id` se
+           * quedaba siendo el bulto original, que lleva UN pedido, y se
+           * mandaba ese: una etiqueta de una prenda y las otras seis del lote
+           * tiradas en el perchero sin que nadie lo supiera. Paso con pilarpinna
+           * el 14 sep (12 prendas, se juntaron 9) y con dos compradores el 16
+           * sep (24 y 4 prendas sin etiqueta).
+           *
+           * Asi que ya no nos fiamos de lo que diga: se abre el bulto y se
+           * cuenta que estan TODOS los pedidos que hemos pedido juntar. Si
+           * falta uno, no se manda nada. Vale mas una tanda con fallos en rojo
+           * -que se reintentan solos a la vuelta siguiente- que una tanda verde
+           * que ha dejado prendas atras. */
+          const det = await T.comoCuenta(cuenta, { camino: DETALLE(id) });
+          const dentro = (((det && det.data) || {}).orders || []).map((o) => aTexto(o.id));
+          const faltan = it.pedidos.filter((p) => !dentro.includes(p));
+          paso.dentroDelBulto = dentro.length;
+          if (faltan.length) {
+            paso.ok = false;
+            paso.faltan = faltan;
+            paso.mensaje = 'TikTok ha dicho que juntaba, pero el bulto solo lleva ' +
+              dentro.length + ' de los ' + it.pedidos.length + ' pedidos de este comprador. ' +
+              'NO lo envio: mandarlo asi deja ' + faltan.length + ' prendas sin etiqueta.';
+            return paso;
+          }
         }
 
         /* 1. Enviar: esto es lo que crea la etiqueta y cierra el paquete. El
