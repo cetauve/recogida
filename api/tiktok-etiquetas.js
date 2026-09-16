@@ -794,7 +794,9 @@ module.exports = puerta(async (req, res) => {
     if (!paquetes.has(clave)) {
       paquetes.set(clave, {
         paquete: idPaquete, comprador: nombre, pedidos: [], prendas: 0,
-        numeros: [], piezas: [], aCombinar: grupo, yaTieneEtiqueta: false
+        numeros: [], piezas: [], aCombinar: grupo, yaTieneEtiqueta: false,
+        /* Pedido a pedido, no de golpe: ver el comentario de abajo. */
+        conEtiqueta: [], sinEtiqueta: [], paqueteSinEtiqueta: ''
       });
     }
     const p = paquetes.get(clave);
@@ -804,17 +806,42 @@ module.exports = puerta(async (req, res) => {
      * enviarlo otra vez: solo recoger su PDF para el taco. Se mira el estado
      * del pedido y tambien el numero de seguimiento, porque TikTok tarda unos
      * segundos en cambiar el estado y el seguimiento aparece antes. */
-    if (/COLLECTION|TRANSIT|DELIVER|COMPLET/i.test(aTexto(o.status))) p.yaTieneEtiqueta = true;
+    /* EL 14 SEP 2026 ESTO DEJO DOS PRENDAS SIN ETIQUETA Y SIN QUE NADIE SE
+     * ENTERARA, y el fallo estaba justo aqui.
+     *
+     * `yaTieneEtiqueta` era del PAQUETE y se ponia en cuanto UN pedido traia
+     * numero de seguimiento. Como el paquete es el comprador entero, a una
+     * clienta que compro antes y despues de imprimir el primer taco le quedaron
+     * los pedidos nuevos DENTRO de un paquete marcado como ya enviado, y el
+     * paso 3 se salta entero lo marcado. Sus dos prendas nunca tuvieron
+     * etiqueta, la app las seguia enseñando para recoger, y en TikTok siguen
+     * pendientes de envio.
+     *
+     * Ahora se mira PEDIDO A PEDIDO. Un paquete solo cuenta como enviado si
+     * TODOS los suyos lo estan; si hay mezcla, los que faltan salen por su
+     * nombre para poder etiquetarlos. */
+    let esteYaVa = /COLLECTION|TRANSIT|DELIVER|COMPLET/i.test(aTexto(o.status));
     for (const l of vivas) {
       const n = parseInt(aTexto(l.seller_sku).replace(/[^\d]/g, ''), 10);
       if (Number.isFinite(n)) p.numeros.push(n);
       p.piezas.push({ num: Number.isFinite(n) ? n : null, rack: aTexto(l.product_id) });
-      if (aTexto(l.tracking_number)) p.yaTieneEtiqueta = true;
+      if (aTexto(l.tracking_number)) esteYaVa = true;
     }
+    (esteYaVa ? p.conEtiqueta : p.sinEtiqueta).push(aTexto(o.id));
+    /* El id de bulto de un pedido QUE AUN NO VA. `p.paquete` es el del primer
+     * pedido que entro, y en un paquete a medias ese puede ser justo uno de los
+     * que ya salieron: enviar con ese id seria enviar lo ya enviado y dejar lo
+     * de la clienta otra vez en el perchero. */
+    if (!esteYaVa && !p.paqueteSinEtiqueta) p.paqueteSinEtiqueta = idPaquete;
   }
 
   const lista = [...paquetes.values()].filter((p) => p.prendas > 0);
-  for (const p of lista) p.numeros.sort((a, b) => a - b);
+  for (const p of lista) {
+    p.numeros.sort((a, b) => a - b);
+    /* Enviado del todo, no "enviado un poco". */
+    p.yaTieneEtiqueta = p.sinEtiqueta.length === 0 && p.conEtiqueta.length > 0;
+    p.mixto = p.conEtiqueta.length > 0 && p.sinEtiqueta.length > 0;
+  }
 
   /* EL ORDEN DEL TACO TIENE QUE SER EL DE LAS TARJETAS.
    *
@@ -862,6 +889,10 @@ module.exports = puerta(async (req, res) => {
                                   prendas: p.prendas, del: p.numeros[0], al: p.numeros[p.numeros.length - 1],
                                   cierre: p.cierre, aCombinar: p.aCombinar,
                                   yaTieneEtiqueta: p.yaTieneEtiqueta,
+                                  /* Mezcla de enviado y sin enviar: los que faltan van
+                                   * aqui para que el paso 3 pueda etiquetar SOLO esos. */
+                                  mixto: !!p.mixto, sinEtiqueta: p.sinEtiqueta,
+                                  paqueteSinEtiqueta: p.paqueteSinEtiqueta || '',
                                   /* TODOS los numeros de prenda, no solo el primero y
                                    * el ultimo: son los que van en la tarjeta de quien
                                    * recoge, y sin ellos no se puede armar la tarjeta
@@ -922,6 +953,10 @@ module.exports = puerta(async (req, res) => {
       /* Lo que se ahorra: cada pedido que se junta con otro es un porte menos. */
       portesQueSeAhorran: lista.filter((p) => p.aCombinar).reduce((a, p) => a + p.pedidos.length - 1, 0),
       paquetesQueYaTienenEtiqueta: lista.filter((p) => p.yaTieneEtiqueta).length,
+      /* LO QUE HAY QUE MIRAR CUANDO SE IMPRIME DOS VECES EL MISMO DIA. */
+      paquetesAMedias: lista.filter((p) => p.mixto).length,
+      prendasSinEtiquetaEnEsosPaquetes: lista.filter((p) => p.mixto)
+        .reduce((a, p) => a + p.sinEtiqueta.length, 0),
       pedidosSinPaquete: sueltos.length,
       paquetesFueraDeTanda: sinTanda.length
     },
