@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0E1723">
+<title>Billy's · almacén</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap">
+<style>
+/* ===========================================================================
+   LA APP NUEVA DE RECOGIDA · DEMO
+   ===========================================================================
+   Dos cosas cambian respecto a la que está en marcha:
+
+   1. LA TARJETA ES UN BULTO, NO UNA CUENTA. Es lo que rompió el 16 y el 17 de
+      septiembre: una cuenta de TikTok puede acabar en varios bultos, y la
+      tarjeta enseñaba una cosa mientras la impresora sacaba otra. Aquí una
+      tarjeta es exactamente una etiqueta y una bolsa.
+
+   2. SE MARCA LA CATEGORÍA AL RECOGER. Es el único momento del día en que
+      alguien tiene la prenda en la mano. Si no se dice ahí lo que es, el coste
+      real de cada directo no se sabe nunca.
+
+   Un solo mundo visual, oscuro, porque es el de las otras pantallas del
+   almacén y se usa con el móvil en la mano entre percheros.
+   ========================================================================= */
+:root{
+  color-scheme:dark;
+  --fondo:#0E1723; --navy:#1E2E42; --navy2:#16232F; --bone:#F4F0E8;
+  --rojo:#C8321F; --verde:#35B57C; --ambar:#F0C24E; --cian:#2BB3C0;
+  --linea:#34496A; --tenue:#A9BACE;
+  /* UN COLOR POR PERCHERO. Con dos percheros que numeran los dos desde el 1,
+     el número solo no dice nada: el 20 rojo y el 20 azul son prendas distintas
+     y están en sitios distintos. El color hace el trabajo antes de que a nadie
+     le dé tiempo a leer el rótulo. */
+  --p1:#C8321F; --p1txt:#F4F0E8; --p1rot:#FF8A75;
+  --p2:#1FA9C4; --p2txt:#04222B; --p2rot:#63D6EA;
+  --p3:#A365D6; --p3txt:#190826; --p3rot:#C79BEC;
+  --arriba:#5C8FD6; --abajo:#D98A4A; --exterior:#7FB893;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0}
+html,body{height:100%}
+body{background:var(--fondo);color:var(--bone);
+  font:16px/1.35 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  user-select:none;-webkit-user-select:none}
+.app{max-width:540px;margin:0 auto;min-height:100%;
+  padding-inline:16px;padding-block:0 18px;display:flex;flex-direction:column}
+[hidden]{display:none!important}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+:focus-visible{outline:2px solid var(--cian);outline-offset:2px}
+
+/* ---------------------------------------------------- la barra de arriba */
+.barra{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;
+  background:linear-gradient(var(--fondo) 78%,transparent);
+  padding-block:12px 10px;display:flex;flex-direction:column;gap:8px}
+.barra .fila{display:flex;align-items:baseline;gap:10px}
+.tanda{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tenue);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cuenta{font-weight:900;font-variant-numeric:tabular-nums;font-size:15px}
+.coste{font-variant-numeric:tabular-nums;font-size:15px;font-weight:900;color:var(--verde)}
+.coste small{display:block;font-size:9px;font-weight:800;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--tenue);text-align:right;line-height:1.4}
+.progreso{height:3px;background:var(--linea);border-radius:2px;overflow:hidden}
+.progreso i{display:block;height:100%;background:var(--verde);transition:width .15s}
+
+/* ------------------------------------------------------------ la tarjeta */
+.tarjeta{background:var(--navy);border:1px solid var(--linea);border-radius:18px;
+  padding:16px 15px 15px;display:flex;flex-direction:column;gap:12px}
+.quien{display:flex;align-items:flex-start;gap:10px}
+.nombre{font-size:clamp(21px,5.6vw,27px);font-weight:900;letter-spacing:-.02em;
+  line-height:1.08;text-wrap:balance;flex:1;min-width:0;word-break:break-word}
+.bolsa{flex:none;text-align:right;line-height:1.2}
+.bolsa b{display:block;font-size:12px;font-weight:900;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ambar)}
+.bolsa span{font-size:10.5px;color:var(--tenue);font-weight:600}
+
+/* El aviso solo aparece cuando de verdad hay dos bolsas del mismo comprador.
+   Si no, sobra: un aviso que sale siempre deja de leerse. */
+.aviso{border:2px solid var(--ambar);border-radius:12px;padding:9px 12px;
+  background:color-mix(in srgb,var(--ambar) 10%,transparent);
+  font-size:13px;line-height:1.35;color:var(--bone)}
+.aviso b{color:var(--ambar)}
+
+.perchero{font-size:11px;font-weight:900;letter-spacing:.11em;text-transform:uppercase;
+  display:flex;align-items:center;gap:7px;margin-bottom:7px;line-height:1}
+.perchero i{font-style:normal;width:11px;height:11px;border-radius:3px;flex:none}
+.perchero.p1{color:var(--p1rot)} .perchero.p1 i{background:var(--p1)}
+.perchero.p2{color:var(--p2rot)} .perchero.p2 i{background:var(--p2)}
+.perchero.p3{color:var(--p3rot)} .perchero.p3 i{background:var(--p3)}
+/* Una raya del color del perchero al lado del grupo entero: el bloque se
+   reconoce aunque el rótulo se quede fuera de pantalla al bajar. */
+.grupo{border-left:4px solid var(--linea);padding-left:10px}
+.grupo.p1{border-left-color:var(--p1)}
+.grupo.p2{border-left-color:var(--p2)}
+.grupo.p3{border-left-color:var(--p3)}
+.grupo + .grupo{margin-top:14px}
+.nums{display:flex;flex-wrap:wrap;gap:8px}
+.num{background:var(--p1);color:var(--p1txt);border:2px solid transparent;border-radius:13px;
+  padding:7px 9px 6px;min-width:64px;display:flex;flex-direction:column;
+  align-items:center;gap:2px;line-height:1}
+.num u{text-decoration:none;font-weight:900;font-size:23px;font-variant-numeric:tabular-nums}
+.num em{font-style:normal;font-size:9.5px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.03em;min-height:12px;opacity:.85}
+.num.p1{background:var(--p1);color:var(--p1txt)}
+.num.p2{background:var(--p2);color:var(--p2txt)}
+.num.p3{background:var(--p3);color:var(--p3txt)}
+.num.foco{border-color:var(--ambar);box-shadow:0 0 0 3px color-mix(in srgb,var(--ambar) 30%,transparent)}
+/* Ya recogida: se apaga el relleno, pero el BORDE se queda del color de su
+   perchero. Se ve que está hecha sin perder de dónde salió. */
+.num.hecho{background:var(--navy2);color:var(--verde)}
+.num.hecho.p1{border-color:var(--p1)}
+.num.hecho.p2{border-color:var(--p2)}
+.num.hecho.p3{border-color:var(--p3)}
+.num.hecho em{opacity:1}
+.num:active{transform:scale(.96)}
+
+/* ------------------------------------------------------- las categorías */
+.marcar{margin-top:14px;display:flex;flex-direction:column;gap:0}
+.pregunta{font-size:13px;color:var(--tenue);line-height:1.35;margin-bottom:2px}
+.pregunta b{color:var(--bone);font-weight:800}
+.familia{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--tenue);margin:13px 0 7px;display:flex;align-items:center;gap:7px;line-height:1}
+.familia i{font-style:normal;width:8px;height:8px;border-radius:2px;flex:none}
+.rejilla{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.cat{border:2px solid var(--linea);background:var(--navy);border-radius:13px;
+  padding:8px 3px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:5px;min-height:76px}
+.cat svg{width:32px;height:32px;display:block;flex:none}
+.cat b{font-size:12px;font-weight:800;letter-spacing:-.01em;line-height:1.05;text-align:center}
+.cat.puesta{border-color:var(--cian);background:color-mix(in srgb,var(--cian) 20%,var(--navy))}
+.cat:active{transform:scale(.96)}
+
+/* ------------------------------------------------------------- el final */
+.fin{display:flex;flex-direction:column;gap:14px;padding-block:8px}
+.fin h1{font-size:clamp(24px,6.5vw,32px);font-weight:900;letter-spacing:-.025em;
+  line-height:1.08;text-wrap:balance}
+.sub{color:var(--tenue);font-size:14px;line-height:1.45}
+.cifras{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cifra{background:var(--navy);border:1px solid var(--linea);border-radius:14px;
+  padding:12px 10px;display:flex;flex-direction:column;gap:3px}
+.cifra u{text-decoration:none;font-size:23px;font-weight:900;font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em;line-height:1}
+.cifra span{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--tenue);line-height:1.25}
+.cifra.verde u{color:var(--verde)}
+.tabla{width:100%;border-collapse:collapse;background:var(--navy);
+  border:1px solid var(--linea);border-radius:14px;overflow:hidden}
+.tabla th,.tabla td{padding:9px 12px;text-align:left;font-size:14px;
+  border-bottom:1px solid var(--linea)}
+.tabla th{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--tenue);font-weight:800}
+.tabla td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:800}
+.tabla tr:last-child td{border-bottom:0}
+.nota{background:var(--navy2);border:1px solid var(--linea);border-radius:14px;
+  padding:14px;font-size:13.5px;line-height:1.45;color:var(--tenue);
+  display:flex;flex-direction:column;gap:8px}
+.nota b{color:var(--bone)}
+.nota ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.accion{width:100%;padding:15px;border-radius:14px;font-weight:800;font-size:16px;
+  background:var(--navy);border:2px solid var(--cian);color:var(--bone);text-align:center}
+.accion.fuera{border-color:var(--linea);color:var(--tenue);font-weight:700;font-size:14px;padding:12px}
+.pie{margin-top:auto;padding-top:16px;font-size:11.5px;color:var(--tenue);line-height:1.5}
+
+@media (max-height:760px){
+  .tarjeta{padding:13px 13px 12px;gap:10px}
+  .num{min-width:58px;padding:6px 8px 5px} .num u{font-size:20px}
+  .familia{margin:10px 0 6px}
+  .cat{min-height:66px;gap:4px} .cat svg{width:28px;height:28px}
+}
+@media (prefers-reduced-motion:reduce){
+  .num:active,.cat:active{transform:none} .progreso i{transition:none}
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<g id="i-camiseta"><path d="M11 4 Q16 8.5 21 4 L26.5 6.5 L31 12.5 L27 15.5 L24.5 13 V29 H7.5 V13 L5 15.5 L1 12.5 L5.5 6.5 Z"/></g>
+<g id="i-sudadera"><path d="M10.2 8 Q9.6 1 16 1 Q22.4 1 21.8 8 Q16 5 10.2 8 Z"/>
+<path d="M11.2 7.4 Q16 11 20.8 7.4 L26 9.5 L28.8 25 H24.5 V29 H7.5 V25 H3.2 L6 9.5 Z"/>
+<rect x="11.5" y="20" width="9" height="5" rx="1.2" fill="#0E1723"/></g>
+<!-- CAMISA · cerrada y de una pieza, con cuello de puntas y botones.
+     Tiene que distinguirse de la CHAQUETA de un vistazo: la chaqueta va
+     abierta y son dos mitades; la camisa es un cuerpo entero. -->
+<g id="i-camisa"><path d="M11.5 4 L16 8.4 L20.5 4 L26 6.2 L28.8 24 H24.5 V29 H7.5 V24 H3.2 L6 6.2 Z"/>
+<path d="M12.6 4.1 L16 9.2 L19.4 4.1 L17.6 3.2 L16 5.9 L14.4 3.2 Z" fill="#0E1723"/>
+<circle cx="16" cy="13" r="1.15" fill="#0E1723"/>
+<circle cx="16" cy="18" r="1.15" fill="#0E1723"/>
+<circle cx="16" cy="23" r="1.15" fill="#0E1723"/></g>
+<g id="i-polo"><path d="M11 4 L16 9.5 L21 4 L26.5 6.5 L31 12.5 L27 15.5 L24.5 13 V29 H7.5 V13 L5 15.5 L1 12.5 L5.5 6.5 Z"/>
+<path d="M11.4 4.2 L16 10.2 L20.6 4.2 L18.2 3.1 L16 6.8 L13.8 3.1 Z" fill="#0E1723"/>
+<rect x="15.2" y="9.6" width="1.6" height="5.5" fill="#0E1723"/></g>
+<g id="i-punto"><path d="M11.2 4 Q16 8.6 20.8 4 L26 6.2 L28.8 22 H24.5 V29 H7.5 V22 H3.2 L6 6.2 Z"/>
+<rect x="7.5" y="25.5" width="17" height="3.5" fill="#0E1723"/>
+<rect x="3.4" y="19" width="4.6" height="3" fill="#0E1723"/>
+<rect x="24" y="19" width="4.6" height="3" fill="#0E1723"/></g>
+<g id="i-nba"><path d="M11.5 4 Q16 8.8 20.5 4 L24.5 5.6 Q22.2 9.2 22.2 14 V29 H9.8 V14 Q9.8 9.2 7.5 5.6 Z"/>
+<text x="16" y="25" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="900"
+ text-anchor="middle" fill="#0E1723">23</text></g>
+<g id="i-futbol"><path d="M11 4 Q16 8.5 21 4 L26.5 6.5 L31 12.5 L27 15.5 L24.5 13 V29 H7.5 V13 L5 15.5 L1 12.5 L5.5 6.5 Z"/>
+<text x="16" y="25" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="900"
+ text-anchor="middle" fill="#0E1723">10</text></g>
+<g id="i-vaquero"><path d="M8.5 3 H23.5 L24.5 29 H18.5 L16 15 L13.5 29 H7.5 Z"/>
+<rect x="8.6" y="5.6" width="14.8" height="2" fill="#0E1723"/>
+<path d="M9.4 9 Q12.4 12 13.6 9 Z" fill="#0E1723"/>
+<path d="M22.6 9 Q19.6 12 18.4 9 Z" fill="#0E1723"/></g>
+<g id="i-trackpants"><path d="M8.5 3 H23.5 L24.5 29 H18.5 L16 15 L13.5 29 H7.5 Z"/>
+<rect x="9.4" y="6" width="1.6" height="21" fill="#0E1723"/><rect x="21" y="6" width="1.6" height="21" fill="#0E1723"/></g>
+<g id="i-shorts"><path d="M8.5 4 H23.5 L24.5 18.5 H18.5 L16 11.5 L13.5 18.5 H7.5 Z"/>
+<rect x="9.4" y="7" width="1.6" height="9" fill="#0E1723"/><rect x="21" y="7" width="1.6" height="9" fill="#0E1723"/></g>
+<g id="i-chaqueta"><path d="M11.2 5.5 L15 11 V29 H7.5 V25 H3.2 L6 8 Z"/><path d="M20.8 5.5 L17 11 V29 H24.5 V25 H28.8 L26 8 Z"/>
+<path d="M11.6 5.8 L15 10.6 L13.2 14 L9.8 7.4 Z" fill="#0E1723"/><path d="M20.4 5.8 L17 10.6 L18.8 14 L22.2 7.4 Z" fill="#0E1723"/></g>
+<g id="i-chaleco"><path d="M11.5 4 Q16 8.6 20.5 4 L24.5 5.6 Q22 9 22 14 V29 H10 V14 Q10 9 7.5 5.6 Z"/>
+<rect x="10" y="15" width="12" height="1.6" fill="#0E1723"/>
+<rect x="10" y="21" width="12" height="1.6" fill="#0E1723"/></g>
+<g id="i-trackjacket"><path d="M11 5 H21 L26 9.5 L28.8 25 H24.5 V29 H7.5 V25 H3.2 L6 9.5 Z"/>
+<rect x="11" y="3.2" width="10" height="2.6" rx="1"/><rect x="15.2" y="5" width="1.6" height="24" fill="#0E1723"/>
+<rect x="5.2" y="11" width="1.4" height="13" fill="#0E1723"/><rect x="25.4" y="11" width="1.4" height="13" fill="#0E1723"/></g>
+<g id="i-anoraksra"><path d="M11 5 H21 L26 9 L28.4 20 H24.6 L23.4 16.5 Q21.6 19.6 21.6 22 V29 H10.4 V22
+ Q10.4 19.6 8.6 16.5 L7.4 20 H3.6 L6 9 Z"/>
+<rect x="15.2" y="5" width="1.6" height="24" fill="#0E1723"/>
+<path d="M10.4 20.4 Q16 22.6 21.6 20.4 L21.6 22.6 Q16 24.8 10.4 22.6 Z" fill="#0E1723"/></g>
+<g id="i-nose"><path d="M16 4.5 a7 7 0 0 1 7 7 q0 4-4 6 -2 1-2 4 h-2.4 q0-4.4 2.2-5.6 3-1.8 3-4.6 a3.8 3.8 0 0 0-7.6 0 H9.6 a6.4 6.4 0 0 1 6.4-6.8 Z"/>
+<circle cx="16" cy="27" r="2.1"/></g>
+</defs></svg>
+
+<style>
+/* El menú de tandas: es la primera pantalla y la que más se abre. */
+.menu{display:flex;flex-direction:column;gap:12px;padding-block:14px 0}
+.menu h1{font-size:clamp(23px,6vw,30px);font-weight:900;letter-spacing:-.025em;line-height:1.08}
+.tandas{display:flex;flex-direction:column;gap:9px}
+.tbot{display:flex;align-items:center;gap:12px;padding:14px 15px;border-radius:14px;
+  background:var(--navy);border:1px solid var(--linea);text-align:left;width:100%}
+.tbot .tt{flex:1;min-width:0}
+.tbot b{display:block;font-size:16px;font-weight:800;letter-spacing:-.01em}
+.tbot span{font-size:12.5px;color:var(--tenue);font-weight:600}
+.tbot .marca{flex:none;font-size:12px;font-weight:900;font-variant-numeric:tabular-nums;
+  padding:5px 9px;border-radius:99px;background:var(--navy2);color:var(--tenue);
+  border:1px solid var(--linea)}
+.tbot.lista{border-color:var(--verde)}
+.tbot.lista .marca{background:color-mix(in srgb,var(--verde) 18%,var(--navy));
+  color:var(--verde);border-color:var(--verde)}
+.tbot.media .marca{background:color-mix(in srgb,var(--ambar) 16%,var(--navy));
+  color:var(--ambar);border-color:var(--ambar)}
+.volver{align-self:flex-start;font-size:13px;font-weight:700;color:var(--tenue);
+  padding:7px 11px;border:1px solid var(--linea);border-radius:10px;background:var(--navy2)}
+.copiado{font-size:13px;color:var(--verde);font-weight:700;min-height:18px}
+.dudas{display:flex;flex-wrap:wrap;gap:7px}
+.duda{font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;
+  background:var(--navy);border:1px solid var(--ambar);color:var(--ambar)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="barra" id="barra" hidden>
+    <div class="fila">
+      <span class="tanda" id="tanda"></span>
+      <span class="cuenta" id="cuenta"></span>
+      <span class="coste" id="coste">0,00 €<small id="estado">Guardado</small></span>
+    </div>
+    <div class="progreso"><i id="tripa" style="width:0%"></i></div>
+  </div>
+  <section id="pantalla"></section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+  const eur = (n) => n.toFixed(2).replace('.', ',') + ' €';
+  const vibrar = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+
+  /* ======================================================================
+     DE DÓNDE SALEN LAS TANDAS
+     ======================================================================
+     Del servidor, igual que la app de recoger. El enlace lleva el código de
+     lectura y, si se quiere una recogida concreta, su juego:
+
+       app-almacen.html?d=CODIGO                 la recogida de hoy
+       app-almacen.html?d=CODIGO&juego=es-2026-09-21   esa y no otra
+
+     Sin juego se prueba el de hoy en hora de Valencia, que es el día con el
+     que trabaja el servidor. Así hay un enlace que no caduca y siempre abre
+     lo último que se ha impreso. */
+  const P = new URLSearchParams(location.search);
+  const CODIGO = P.get('d') || '';
+  const PAIS = (P.get('pais') || '').trim().toLowerCase();
+  const DIA = P.get('dia') || '';
+  const HOY_ES = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+  let JUEGO = P.get('juego') || '';
+  const llavesAProbar = () => {
+    if (JUEGO) return [JUEGO];
+    const base = DIA || HOY_ES;
+    if (!base) return [];
+    return (PAIS && PAIS !== 'es') ? [PAIS + '-' + base, base] : [base, 'es-' + base];
+  };
+
+  let DATOS = null, TANDAS = [], PRENDAS = 0, PERCHEROS = [], VARIOS = false;
+  let GENERADO = '', VALIDAS = new Set();
+
+  /* LAS CATEGORÍAS, con el coste por prenda con IVA y porte dentro. Estos son
+     los precios de España, sacados de las facturas de compra, así que aquí el
+     euro vale tanto como el recuento. */
+  const CATS = [
+    { id:'sudadera',  n:'Sudadera',   fam:'arriba',   ico:'sudadera',    coste:1.87 },
+    { id:'camiseta',  n:'Camiseta',   fam:'arriba',   ico:'camiseta',    coste:0.33 },
+    { id:'polo',      n:'Polo',       fam:'arriba',   ico:'polo',        coste:0.67 },
+    { id:'punto',     n:'Punto',      fam:'arriba',   ico:'punto',       coste:5.65 },
+    { id:'nba',       n:'NBA',        fam:'arriba',   ico:'nba',         coste:4.08 },
+    { id:'futbol',    n:'Fútbol',     fam:'arriba',   ico:'futbol',      coste:6.10 },
+    /* CAMISA · 20 sep. Factura 20250279, línea 41, "American brands",
+       12,00 €/kg, 75 kg. Es la única línea de camisa que entra.
+       Con 5 camisas por kilo: (12 + 0,2096) ÷ 5 × 1,21 = 2,95 €.
+       Las 5 por kilo son estimación mía por el peso, NO están pesadas.
+       Va la última de su familia a propósito: así ningún botón de los que ya
+       estaban cambia de sitio. */
+    { id:'camisa',    n:'Camisa',     fam:'arriba',   ico:'camisa',      coste:2.95 },
+    { id:'shorts',    n:'Shorts',     fam:'abajo',    ico:'shorts',      coste:1.05 },
+    /* TRACK PANTS · añadida el 20 sep.
+       Está en la factura 20250279: línea 47, "90s SPORT TROUSER", 7,50 €/kg,
+       100 kg, 750 €. Con 2,5 prendas por kilo y la misma fórmula que el resto
+       —(€/kg + 0,2096 de porte) ÷ prendas/kg × 1,21— salen 3,73 €.
+       Lo único estimado son las 2,5 prendas por kilo, que vienen de la lista
+       vieja y no de pesar. */
+    { id:'trackpant', n:'Track pant', fam:'abajo',    ico:'trackpants',  coste:3.73 },
+    /* VAQUERO · 20 sep. Factura 20250279, línea 52, código TROSKIN,
+       "Skinny 5 Series Jeans", 2,00 €/kg, 225 kg, 450 €. Es la única línea de
+       vaquero que entra, así que el botón se llama por la prenda y no por el
+       código: quien lo tiene en la mano ve un vaquero.
+       Con 2 por kilo: (2,00 + 0,2096) ÷ 2 × 1,21 = 1,34 €.
+       Las 2 por kilo son estimación mía; un skinny pesa menos que un 501. */
+    { id:'vaquero',   n:'Vaquero',    fam:'abajo',    ico:'vaquero',     coste:1.34 },
+    { id:'chaqueta',  n:'Chaqueta',   fam:'exterior', ico:'chaqueta',    coste:6.07 },
+    { id:'chaleco',   n:'Chaleco',    fam:'exterior', ico:'chaleco',     coste:3.73 },
+    { id:'trackjkt',  n:'Track jkt',  fam:'exterior', ico:'trackjacket', coste:2.52 },
+    { id:'anoraksra', n:'Anorak sra', fam:'exterior', ico:'anoraksra',   coste:11.14 },
+    { id:'nose',      n:'No sé',      fam:'exterior', ico:'nose',        coste:null }
+  ];
+  const FAM = [
+    { id:'arriba',   n:'De arriba', color:'#5C8FD6' },
+    { id:'abajo',    n:'De abajo',  color:'#D98A4A' },
+    { id:'exterior', n:'Exterior',  color:'#7FB893' }
+  ];
+  const COLOR = { arriba:'#5C8FD6', abajo:'#D98A4A', exterior:'#7FB893' };
+  const deId = (id) => CATS.find((c) => c.id === id);
+
+  const piezas = (b) => b.g.flatMap(([p, nums]) => nums.map((n) => ({ n, p })));
+
+  /* ======================================================================
+     DOS PERCHEROS CON LOS MISMOS NÚMEROS
+     ======================================================================
+     Tal cual estaba en la app de recoger, que lleva funcionando desde el 17 de
+     septiembre. No se toca: si un día hay que arreglarlo, se arregla en los
+     dos sitios a la vez o dejan de decir lo mismo.
+
+     Cada anuncio numera sus prendas desde el 1. Con dos directos seguidos en
+     la misma cuenta, la 20 de uno y la 20 del otro son prendas distintas y
+     están en percheros distintos. Esto pregunta a TikTok de qué anuncio es
+     cada pedido y, SOLO si los números se pisan de verdad, parte la tarjeta.
+     ====================================================================== */
+  const CLAVE_DIRECTOS = 'billys_directos_';
+  const ESPERA_DIRECTOS_MS = 10000;
+
+  async function pedidosDe(cuenta, estado){
+    const corta = new AbortController();
+    const reloj = setTimeout(() => corta.abort(), ESPERA_DIRECTOS_MS);
+    let j = null;
+    try {
+      const r = await fetch('/api/tiktok-pedidos?d=' + encodeURIComponent(CODIGO) +
+        '&cuenta=' + encodeURIComponent(cuenta) +
+        (estado ? '&estado=' + encodeURIComponent(estado) : ''),
+        { cache: 'no-store', signal: corta.signal });
+      j = await r.json();
+    } finally { clearTimeout(reloj); }
+    if (!j || !j.ok || !Array.isArray(j.pedidos)) throw new Error('sin pedidos');
+    return j.pedidos;
+  }
+
+  /* Los pedidos de esa cuenta repartidos por directo. Devuelve null si solo hubo
+   * uno —que es la respuesta util, no un fallo— y lanza si no se ha podido
+   * preguntar, para no guardar un "no hay" que no se sabe.
+   *
+   * `mios` es la lista de pedidos que salen en las tarjetas de este juego, y no
+   * es un adorno: la cuenta lleva meses vendiendo y en lo ya etiquetado hay
+   * directos de otros dias. Sin ese filtro, los dos directos del 9 sep salian
+   * numerados 3 y 4 porque delante habia dos del 5 y del 6. */
+  async function mapaDeDirectos(cuenta, mios){
+    /* PRIMERO LO PENDIENTE DE ENVIAR, que es lo normal mientras se recoge. */
+    let pedidos = await pedidosDe(cuenta, '');
+    const cubre = () => mios.every(id => pedidos.some(p => p.pedido === id));
+
+    /* Y SI NO ESTAN TODOS, LO YA ETIQUETADO.
+     * En cuanto se crea la etiqueta el pedido sale de AWAITING_SHIPMENT, asi que
+     * imprimir dejaba esto sin nada que mirar justo cuando iba a empezar la
+     * recogida: el 10 sep, cero pedidos y las tarjetas otra vez sin directo. */
+    if (mios.length && !cubre()) {
+      try { pedidos = pedidos.concat(await pedidosDe(cuenta, 'AWAITING_COLLECTION')); }
+      catch (e) { /* con lo que haya */ }
+    }
+
+    const suyos = mios.length ? pedidos.filter(p => mios.includes(p.pedido)) : pedidos;
+    const cuando = {}, porPedido = {};
+    for (const p of suyos) {
+      for (const x of (p.prendas || [])) {
+        if (!x.productoId || x.num == null) continue;
+        (porPedido[p.pedido] = porPedido[p.pedido] || []).push({ num: Number(x.num), prod: String(x.productoId) });
+        const t = Number(p.creado) || 0;
+        if (cuando[x.productoId] == null || t < cuando[x.productoId]) cuando[x.productoId] = t;
+      }
+    }
+    /* DOS ANUNCIOS NO SON DOS PERCHEROS - 17 sep 2026.
+     *
+     * EL FALLO: la tarjeta decia "billysvlc . directo 1" un dia en el que solo
+     * hubo UN directo. Aqui se contaban anuncios, y un mismo directo se cuelga a
+     * veces en dos anuncios (pasa cuando hay que cambiar algo del envio a media
+     * subasta). Dos anuncios, dos "directos", y quien recoge buscando un perchero
+     * que no existe.
+     *
+     * Lo que de verdad hay que separar no son los anuncios: son los NUMEROS
+     * REPETIDOS. Si el segundo anuncio siguio numerando donde lo dejo el primero
+     * -2, 3, 4...- no hay ninguna prenda 20 por duplicado, las prendas estan
+     * todas en el mismo perchero y el rotulo sobra. Solo cuando el mismo numero
+     * existe en dos anuncios hace falta ponerle apellido, que es justo el caso
+     * de los dos directos seguidos del 9 sep.
+     *
+     * Asi que la pregunta pasa a ser "?chocan los numeros?" en vez de "?hay dos
+     * anuncios?". Si no chocan, esto devuelve null y la tarjeta sale como
+     * siempre. */
+    const numerosDe = {};
+    for (const lista of Object.values(porPedido)) {
+      for (const par of lista) (numerosDe[par.prod] = numerosDe[par.prod] || new Set()).add(par.num);
+    }
+    const deQuien = new Map();
+    let chocan = false;
+    for (const prod of Object.keys(numerosDe)) {
+      for (const n of numerosDe[prod]) {
+        if (deQuien.has(n) && deQuien.get(n) !== prod) { chocan = true; break; }
+        deQuien.set(n, prod);
+      }
+      if (chocan) break;
+    }
+
+    /* El perchero 1 es el que empezo antes. Es el orden en el que se colgaron las
+     * prendas, que es como estan en el almacen. */
+    const orden = Object.keys(cuando).sort((a, b) => cuando[a] - cuando[b]);
+    return (orden.length > 1 && chocan) ? { orden, porPedido } : null;
+  }
+
+  /* Parte los numeros de cada tarjeta de esa cuenta en un grupo por directo. */
+  function repartirPorDirecto(cuenta, m){
+    const cual = {};
+    m.orden.forEach((id, k) => { cual[id] = k + 1; });
+    let tocado = 0;
+
+    for (const t of (DATOS.tandas || [])) {
+      for (const c of (t.compradores || [])) {
+        /* TODOS los grupos de esa cuenta, no el primero. La extension ya parte
+         * los numeros de un comprador en varios trozos con el MISMO nombre de
+         * cuenta —cuatro pedidos sueltos salen en dos grupos de billys_nl— y
+         * quedarse con el primero borraba el resto: la tarjeta de Y***ne decia
+         * "4 PRENDAS" y ensenaba dos numeros. Se juntan y se reparten a la vez. */
+        const mios = (c.porCuenta || []).filter(x =>
+          String(x.cuenta) === cuenta && Array.isArray(x.numeros) && x.numeros.length);
+        if (!mios.length) continue;
+
+        /* SE REPARTE DESDE LOS PEDIDOS, NO DESDE LA LISTA DE NUMEROS. Un
+         * comprador puede llevarse la 20 en los dos directos: son dos prendas
+         * distintas, no un numero repetido, y recorrer la lista buscando "la 20"
+         * las mandaria a las dos al mismo sitio. */
+        const todos = [].concat(...mios.map(x => x.numeros));
+        const quedan = todos.slice();
+        const bolsas = {};
+        const pedidos = Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []);
+        for (const ped of pedidos) {
+          for (const par of (m.porPedido[ped] || [])) {
+            /* El directo se mira ANTES de sacar el numero de la lista: si no se
+             * sabe de cual es, tiene que quedarse donde estaba. */
+            const d = cual[par.prod];
+            if (!d) continue;
+            const k = quedan.indexOf(par.num);
+            if (k < 0) continue;                 // ese numero ya no esta en la tarjeta
+            quedan.splice(k, 1);
+            (bolsas[d] = bolsas[d] || []).push(par.num);
+          }
+        }
+        const dirs = Object.keys(bolsas);
+        if (!dirs.length) continue;
+
+        const nuevos = dirs.sort().map(d => ({
+          /* "perchero", no "directo": lo que quien recoge tiene delante es un
+           * perchero, y ademas no siempre son dos directos -a veces es un directo
+           * colgado en dos anuncios con numeros repetidos-. */
+          cuenta: cuenta + ' · perchero ' + d,
+          dir: Number(d),
+          numeros: bolsas[d].sort((a, b) => a - b)
+        }));
+        /* Lo que no se ha podido colocar sigue estando: con su cuenta a secas,
+         * como toda la vida. Preferimos un numero sin apellido a un numero que
+         * desaparece de la tarjeta. */
+        if (quedan.length) nuevos.push({ cuenta, numeros: quedan.slice().sort((a, b) => a - b) });
+
+        /* EL SEGURO, Y NO SOBRA. Si lo repartido no es exactamente lo que habia,
+         * esta tarjeta se queda como estaba. Una tarjeta sin apellidos se recoge
+         * despacio; una tarjeta a la que le falta un numero se recoge mal y nadie
+         * se entera hasta que el paquete llega corto. */
+        const orden = (v) => v.slice().sort((a, b) => a - b).join(',');
+        if (orden(todos) !== orden([].concat(...nuevos.map(x => x.numeros)))) continue;
+
+        c.porCuenta = (c.porCuenta || []).filter(x => String(x.cuenta) !== cuenta).concat(nuevos);
+        tocado++;
+      }
+    }
+    return tocado;
+  }
+
+  async function separarDirectos(){
+    if (!CODIGO || !DATOS || !Array.isArray(DATOS.tandas)) return 0;
+    const cuentas = [...new Set([].concat(...DATOS.tandas.map(t =>
+      [].concat(...(t.compradores || []).map(c =>
+        (c.porCuenta || []).map(x => String(x.cuenta || '')))))))].filter(Boolean);
+    if (!cuentas.length) return 0;
+
+    /* Guardado por juego Y por hora de calculo: cada paso 2 rehace las tandas, y
+     * si el segundo directo empezo despues de la ultima consulta hay que volver a
+     * preguntar en vez de arrastrar un "aqui solo hubo uno" que ya no es verdad. */
+    const llave = CLAVE_DIRECTOS + (DATOS.juego || DATOS.dia || '');
+    let caja = null;
+    try { caja = JSON.parse(localStorage.getItem(llave) || 'null'); } catch (e) {}
+    if (!caja || typeof caja !== 'object' || caja.generado !== (DATOS.generado || '')) {
+      caja = { generado: DATOS.generado || '', cuentas: {} };
+    }
+
+    let tocado = 0, cambiado = false;
+    for (const cuenta of cuentas) {
+      /* Los pedidos que salen en las tarjetas de ESTE juego y de ESTA cuenta. */
+      const mios = [...new Set([].concat(...DATOS.tandas.map(t =>
+        [].concat(...(t.compradores || [])
+          .filter(c => (c.porCuenta || []).some(x => String(x.cuenta) === cuenta))
+          .map(c => Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []))))))];
+      let m = Object.prototype.hasOwnProperty.call(caja.cuentas, cuenta) ? caja.cuentas[cuenta] : undefined;
+      if (m === undefined) {
+        try { m = await mapaDeDirectos(cuenta, mios); caja.cuentas[cuenta] = m; cambiado = true; }
+        catch (e) { m = null; }               // no se ha podido preguntar: ni se guarda ni se pinta
+      }
+      if (m) tocado += repartirPorDirecto(cuenta, m);
+    }
+    if (cambiado) { try { localStorage.setItem(llave, JSON.stringify(caja)); } catch (e) {} }
+    /* Con dos directos, el rotulo de la tarjeta tiene que salir aunque solo haya
+     * una cuenta: es lo que lo distingue. */
+    if (tocado) DATOS.variasCuentas = true;
+    return tocado;
+  }
+
+  /* UNA TARJETA ES UNA BOLSA Y UNA ETIQUETA, no una cuenta de TikTok.
+     Es lo que rompió el 16 y el 17 de septiembre: una misma cuenta puede
+     acabar en varios paquetes -TikTok parte por dirección de envío- y la
+     tarjeta enseñaba una cosa mientras la impresora sacaba otra. Cuando el
+     servidor dice que esa persona lleva varios bultos, aquí salen varias
+     tarjetas, cada una con las prendas de SU bolsa. */
+  function construir(d) {
+    const salida = [];
+    for (const ta of (d.tandas || [])) {
+      const bolsas = [];
+      for (const c of (ta.compradores || [])) {
+        const grupos = (c.porCuenta || [])
+          .filter((x) => x.numeros && x.numeros.length)
+          .map((x) => ({ dir: Number(x.dir || 1), quedan: x.numeros.slice() }));
+        const base = grupos.length
+          ? grupos : [{ dir: 1, quedan: (c.numeros || []).slice() }];
+        const trozos = (c.bultos && c.bultos.length > 1)
+          ? c.bultos.map((b) => (b.numeros || []).slice()) : [null];
+
+        for (const nums of trozos) {
+          const sacos = base.map((r) => ({ dir: r.dir, numeros: [] }));
+          if (nums === null) {
+            base.forEach((r, k) => { sacos[k].numeros = r.quedan.slice(); });
+          } else {
+            /* Se reparte GASTANDO: cada número se lleva el primer perchero que
+               aún lo tenga libre. Con dos percheros un comprador puede llevarse
+               la 20 de los dos, y son prendas distintas. */
+            for (const n of nums) {
+              const k = base.findIndex((r) => r.quedan.indexOf(n) >= 0);
+              if (k < 0) continue;
+              base[k].quedan.splice(base[k].quedan.indexOf(n), 1);
+              sacos[k].numeros.push(n);
+            }
+          }
+          const g = sacos.filter((x) => x.numeros.length)
+            .map((x) => [x.dir, x.numeros.slice().sort((a, b) => a - b)]);
+          if (g.length) bolsas.push({ q: c.apodo || '', d: trozos.length, g });
+        }
+      }
+      if (bolsas.length) salida.push({ e: ta.etiqueta || 'Tanda', b: bolsas });
+    }
+    return salida;
+  }
+
+  /* CUÁNTOS PERCHEROS HAY DE VERDAD. Con uno solo, el rótulo del perchero
+     sobra y estorba: el número ya es único. Con dos o más, el color y el
+     rótulo son lo que evita coger la prenda equivocada. */
+  function prepararTandas() {
+    TANDAS.forEach((ta) => ta.b.forEach((b) => { b.piezas = piezas(b); }));
+    PRENDAS = TANDAS.reduce((a, ta) => a + ta.b.reduce((s, b) => s + b.piezas.length, 0), 0);
+    PERCHEROS = [...new Set(TANDAS.flatMap((ta) =>
+      ta.b.flatMap((b) => b.g.map((g) => g[0]))))].sort((a, b) => a - b);
+    VARIOS = PERCHEROS.length > 1;
+    VALIDAS = new Set(TANDAS.flatMap((ta) =>
+      ta.b.flatMap((b) => b.piezas.map((z) => 'p' + z.p + '.' + z.n))));
+  }
+
+  /* ======================================================================
+     DÓNDE SE GUARDA LO MARCADO
+     ======================================================================
+     EN EL SERVIDOR, y el móvil es solo la copia. El 20 de septiembre vivía
+     solo en el móvil y Aaron perdió dos tandas enteras ya marcadas al salirse
+     de la app. El almacén del navegador se va con la pestaña y nadie se entera
+     hasta que ya no está.
+
+     Ahora:
+       · se escribe fuera en cuanto se toca un botón
+       · se lee al abrir, aunque sea otro móvil u otro navegador
+       · dos personas marcando a la vez se ven la una a la otra
+       · sin servidor se sigue trabajando contra el móvil y la pantalla LO DICE
+         en vez de fingir que va bien
+
+     LA LLAVE ES EL PERCHERO Y EL NÚMERO -p1.15-, no la posición en la lista.
+     Cada paso 2 rehace las tandas y las tarjetas cambian de sitio; con la
+     posición, volver a imprimir habría movido lo marcado a prendas que no son.
+     El número dentro de su perchero es la prenda, hoy y mañana. */
+  let CLAVE = '', MARCA = {};
+  let ESTADO = 'local', DONDE = 'menu';
+  let RESCATADAS = 0, PRIMERA = true;
+  let escribiendo = false, pendiente = {};
+
+  const enElMovil = () => { try { localStorage.setItem(CLAVE, JSON.stringify(MARCA)); } catch (e) {} };
+
+  function poner(e) { if (ESTADO === e) return; ESTADO = e; pintarEstado(); }
+  function pintarEstado() {
+    const n = document.getElementById('estado');
+    if (!n) return;
+    const t = { bien:  ['Guardado',            'var(--verde)'],
+                yendo: ['Guardando',           'var(--tenue)'],
+                local: ['Solo en este móvil',  'var(--ambar)'],
+                mal:   ['Sin guardar fuera',   'var(--p1rot)'] }[ESTADO] || ['', 'var(--tenue)'];
+    n.textContent = t[0]; n.style.color = t[1];
+  }
+
+  /* Se manda SOLO lo que ha cambiado, no la tanda entera: así dos móviles
+     marcando a la vez no se pisan, y el servidor une llave a llave. */
+  async function alServidor() {
+    if (!CODIGO || !JUEGO) { poner('local'); return; }
+    if (escribiendo) return;
+    const envio = pendiente; pendiente = {};
+    if (!Object.keys(envio).length) return;
+    escribiendo = true;
+    poner('yendo');
+    try {
+      const r = await fetch('/api/marcado?d=' + encodeURIComponent(CODIGO), {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ juego: JUEGO, marcas: envio }) });
+      const j = await r.json();
+      if (!j || !j.ok) throw new Error('no ok');
+      unir(j.marcas || {});
+      poner('bien');
+    } catch (e) {
+      /* Lo que no ha entrado se vuelve a intentar, no se tira. */
+      Object.assign(pendiente, envio, pendiente);
+      poner('mal');
+    } finally {
+      escribiendo = false;
+      if (Object.keys(pendiente).length) setTimeout(alServidor, 400);
+    }
+  }
+
+  /* Lo de fuera manda, pero nunca borra lo nuestro que aún no ha salido. */
+  function unir(fuera) {
+    let cambio = false;
+    for (const k of Object.keys(fuera)) {
+      if (Object.prototype.hasOwnProperty.call(pendiente, k)) continue;
+      if (MARCA[k] !== fuera[k]) { MARCA[k] = fuera[k]; cambio = true; }
+    }
+    if (cambio) { enElMovil(); repintar(); }
+    return cambio;
+  }
+
+  const guardar = () => { enElMovil(); alServidor(); };
+
+  /* Repinta lo que haya en pantalla sin sacar a nadie de donde estaba. */
+  function repintar() {
+    if (DONDE === 'bolsa') pintar();
+    else if (DONDE === 'resumen') resumen();
+    else menu();
+  }
+
+  async function leerMarcas(primera) {
+    if (!CODIGO || !JUEGO) { poner('local'); return; }
+    try {
+      const r = await fetch('/api/marcado?d=' + encodeURIComponent(CODIGO) +
+        '&juego=' + encodeURIComponent(JUEGO), { cache: 'no-store' });
+      const j = await r.json();
+      if (!j || !j.ok) throw new Error('no ok');
+      const fuera = j.marcas || {};
+      /* EL RESCATE. Si en este móvil había marcas de la versión vieja que el
+         servidor no tiene, se suben en vez de perderse. */
+      if (primera) {
+        const mias = Object.keys(MARCA).filter((k) => fuera[k] !== MARCA[k] && VALIDAS.has(k));
+        if (mias.length) {
+          RESCATADAS = mias.length;
+          for (const k of mias) pendiente[k] = MARCA[k];
+          alServidor();
+        }
+      }
+      unir(fuera);
+      if (!Object.keys(pendiente).length) poner('bien');
+    } catch (e) { poner('mal'); }
+  }
+
+  /* La prenda es su número dentro de su perchero. Ver arriba. */
+  const llave = (t, b, k) => {
+    const z = TANDAS[t].b[b].piezas[k];
+    return 'p' + z.p + '.' + z.n;
+  };
+  const puesto = (t, b, k) => MARCA[llave(t, b, k)] || null;
+
+  const hechasDe = (t) => TANDAS[t].b.reduce((a, b, bi) =>
+    a + b.piezas.filter((_, k) => puesto(t, bi, k)).length, 0);
+  const prendasDe = (t) => TANDAS[t].b.reduce((a, b) => a + b.piezas.length, 0);
+  /* SE CUENTA LO QUE HAY EN LAS TANDAS, prenda a prenda, no las llaves
+     guardadas. Si el paso 2 se vuelve a pasar y una prenda ya no sale, su
+     marca sigue en el servidor pero aquí no suma, y los dos números de la
+     pantalla -lo hecho y el total- hablan siempre de lo mismo. */
+  const todasLasPiezas = () => TANDAS.flatMap((ta, t) =>
+    ta.b.flatMap((b, bi) => b.piezas.map((_, k) => puesto(t, bi, k))));
+  const costeTodo = () => todasLasPiezas().reduce((a, id) => {
+    const c = id && deId(id); return a + (c && c.coste ? c.coste : 0); }, 0);
+  const hechasTodo = () => todasLasPiezas().filter(Boolean).length;
+
+  let T = 0, B = 0, foco = 0;
+
+  /* ------------------------------------------------------------- el menú */
+  function menu() {
+    DONDE = 'menu';
+    $('barra').hidden = true;
+    const total = hechasTodo();
+    const BOLSAS = TANDAS.reduce((a, ta) => a + ta.b.length, 0);
+    $('pantalla').innerHTML = `
+      <div class="menu">
+        <h1>${esc(DATOS.titulo || 'Recogida')}</h1>
+        <p class="sub">${BOLSAS} bolsas, ${PRENDAS} prendas. Las bolsas van en el mismo
+          orden que las hojas del taco que ya está impreso.</p>
+        <div class="cifras">
+          <div class="cifra"><u>${total}/${PRENDAS}</u><span>marcadas</span></div>
+          <div class="cifra verde"><u>${eur(costeTodo())}</u><span>coste</span></div>
+          <div class="cifra"><u>${TANDAS.length}</u><span>tandas</span></div>
+        </div>
+        <div class="tandas">
+          ${TANDAS.map((ta, k) => {
+            const h = hechasDe(k), p = prendasDe(k);
+            const clase = h === p ? ' lista' : (h ? ' media' : '');
+            return `<button class="tbot${clase}" data-t="${k}">
+              <span class="tt"><b>${esc(ta.e)}</b>
+                <span>${ta.b.length} ${ta.b.length === 1 ? 'bolsa' : 'bolsas'} · ${p} prendas</span></span>
+              <span class="marca">${h}/${p}</span></button>`;
+          }).join('')}
+        </div>
+        ${total ? `<button class="accion" id="resumen">Ver el resumen</button>` : ''}
+        ${RESCATADAS ? `<div class="nota" style="border-color:var(--verde)">
+          <div><b>He rescatado ${RESCATADAS} ${RESCATADAS === 1 ? 'prenda' : 'prendas'} que estaban
+          guardadas solo en este ordenador</b>, y ya están en el servidor. Desde ahora se ven
+          también desde el móvil y no se pueden perder al cerrar.</div></div>` : ''}
+        <div class="nota">
+          ${VARIOS ? `<div><b>Hay ${PERCHEROS.length} percheros y los números se repiten.</b>
+            Mira el color antes que el número.</div>` : `<div><b>Un solo perchero.</b> Todo es
+            del mismo anuncio, así que cada número está una sola vez.</div>`}
+          <div>Lo que marcas se guarda fuera, no en el móvil. Puedes cerrar, cambiar de
+            móvil o repartiros la tanda entre varias: arriba a la derecha pone
+            <b>Guardado</b> cuando está a salvo.</div>
+        </div>
+        <p class="pie">Los euros llevan IVA y porte dentro y salen de las facturas de compra.</p>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+
+  /* ---------------------------------------------------------- una bolsa */
+  function pintarBarra() {
+    $('tanda').textContent = TANDAS[T].e;
+    $('cuenta').textContent = hechasDe(T) + '/' + prendasDe(T);
+    $('coste').innerHTML = eur(costeTodo()) + '<small id="estado"></small>';
+    pintarEstado();
+    $('tripa').style.width = (hechasDe(T) / prendasDe(T) * 100) + '%';
+  }
+
+  function pintar() {
+    DONDE = 'bolsa';
+    const ta = TANDAS[T], b = ta.b[B];
+    const marcaAhora = puesto(T, B, foco);
+    const pieza = b.piezas[foco];
+
+    let k = -1;
+    const cuerpo = b.g.map(([p, nums]) => `
+      <div class="grupo p${p}">
+        ${VARIOS ? `<div class="perchero p${p}"><i></i>Perchero ${p}</div>` : ''}
+        <div class="nums">${nums.map((n) => { k++; const kk = k; const id = puesto(T, B, kk);
+          return `<button class="num p${p}${kk === foco ? ' foco' : ''}${id ? ' hecho' : ''}"
+            data-k="${kk}"><u>${n}</u><em>${id ? esc(deId(id).n) : ''}</em></button>`;
+        }).join('')}</div>
+      </div>`).join('');
+
+    const rejilla = FAM.map((f) => `
+      <div class="familia"><i style="background:${f.color}"></i>${f.n}</div>
+      <div class="rejilla">${CATS.filter((c) => c.fam === f.id).map((c) => `
+        <button class="cat${marcaAhora === c.id ? ' puesta' : ''}" data-cat="${c.id}">
+          <svg viewBox="0 0 32 32" fill="${COLOR[c.fam]}"><use href="#i-${c.ico}"></use></svg>
+          <b>${c.n}</b>
+        </button>`).join('')}</div>`).join('');
+
+    $('pantalla').innerHTML = `
+      <div class="tarjeta">
+        <div class="quien">
+          <div class="nombre">${esc(b.q)}</div>
+          <div class="bolsa"><b>${B + 1} de ${ta.b.length}</b>
+            <span>hoja ${B + 1} del taco</span></div>
+        </div>
+        ${b.d > 1 ? `<div class="aviso">A esta persona TikTok le ha hecho <b>${b.d} bultos</b>.
+          Esta bolsa lleva <b>su propia etiqueta</b>: no metas en ella lo de la otra.</div>` : ''}
+        ${cuerpo}
+      </div>
+      <div class="marcar">
+        <p class="pregunta">Tienes la <b>${pieza.n}</b>${VARIOS ? ` del
+          <b style="color:var(--p${pieza.p}rot)">perchero ${pieza.p}</b>` : ''} en la mano. ¿Qué es?</p>
+        ${rejilla}
+      </div>
+      <div style="display:flex;gap:9px;margin-top:14px">
+        <button class="accion fuera" id="atras" style="flex:1"${B === 0 ? ' disabled' : ''}>Bolsa anterior</button>
+        <button class="accion fuera" id="salir" style="flex:1">Salir a las tandas</button>
+      </div>`;
+    pintarBarra();
+  }
+
+  function siguiente() {
+    const ta = TANDAS[T], b = ta.b[B];
+    const libre = b.piezas.findIndex((_, k) => !puesto(T, B, k));
+    if (libre >= 0) { foco = libre; pintar(); return; }
+    if (B + 1 < ta.b.length) { B++; foco = 0; pintar(); window.scrollTo(0, 0); return; }
+    resumen();
+  }
+
+  /* ------------------------------------------------------------ resumen */
+  function resumen() {
+    DONDE = 'resumen';
+    $('barra').hidden = true;
+    const cuenta = {};
+    todasLasPiezas().forEach((id) => { if (id) cuenta[id] = (cuenta[id] || 0) + 1; });
+    const filas = Object.entries(cuenta).map(([id, n]) => ({ c: deId(id), n }))
+      .filter((f) => f.c).sort((a, b) => (b.c.coste || 0) * b.n - (a.c.coste || 0) * a.n);
+    const sinSaber = cuenta.nose || 0;
+    /* Dónde está cada "No sé", para poder volver sin buscarla a mano. */
+    const dudas = [];
+    TANDAS.forEach((ta, t) => ta.b.forEach((b, bi) => b.piezas.forEach((z, k) => {
+      if (puesto(t, bi, k) === 'nose') dudas.push({ t, b: bi, k, n: z.n });
+    })));
+    const texto = 'Billy\'s · ' + JUEGO + '\n' +
+      filas.map((f) => f.c.n + ': ' + f.n).join('\n') +
+      '\nTOTAL: ' + hechasTodo() + ' prendas · ' + eur(costeTodo());
+
+    $('pantalla').innerHTML = `
+      <div class="fin">
+        <button class="volver" id="alMenu">Volver a las tandas</button>
+        <h1>Lo marcado hasta ahora</h1>
+        <div class="cifras">
+          <div class="cifra"><u>${hechasTodo()}/${PRENDAS}</u><span>prendas</span></div>
+          <div class="cifra verde"><u>${eur(costeTodo())}</u><span>coste</span></div>
+          <div class="cifra"><u>${filas.length}</u><span>categorías</span></div>
+        </div>
+        <table class="tabla"><thead><tr>
+          <th>Categoría</th><th class="n">Prendas</th><th class="n">Coste</th>
+        </tr></thead><tbody>
+          ${filas.map((f) => `<tr><td>${f.c.n}</td><td class="n">${f.n}</td>
+            <td class="n">${f.c.coste == null ? '—' : eur(f.c.coste * f.n)}</td></tr>`).join('')}
+        </tbody></table>
+        ${sinSaber ? `<div class="nota"><div><b>${sinSaber}
+          ${sinSaber === 1 ? 'prenda ha ido' : 'prendas han ido'} a "No sé".</b> Toca una para
+          volver a ella y cambiarla.</div>
+          <div class="dudas">${dudas.map((d) => `<button class="duda"
+            data-ir="${d.t}.${d.b}.${d.k}">T${d.t + 1} · bolsa ${d.b + 1} · nº ${d.n}</button>`).join('')}</div>
+          </div>` : ''}
+        <button class="accion" id="copiar">Copiar el resumen</button>
+        <div class="copiado" id="copiado"></div>
+        <p class="pie">Esto se guarda fuera y se actualiza solo. Cópialo cuando quieras
+          pasarlo a una hoja.</p>
+      </div>`;
+    $('alMenu').addEventListener('click', menu);
+    $('copiar').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(texto); $('copiado').textContent = 'Copiado.'; }
+      catch (e) { $('copiado').textContent = 'No he podido copiar. Haz una captura de la tabla.'; }
+    });
+    window.scrollTo(0, 0);
+  }
+
+  /* --------------------------------------------------------------- click */
+  $('pantalla').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-t]');
+    if (t) { T = Number(t.dataset.t); B = 0; foco = 0;
+      const ta = TANDAS[T];
+      /* Se abre por la primera bolsa que quede sin acabar. */
+      const pend = ta.b.findIndex((b, bi) => b.piezas.some((_, k) => !puesto(T, bi, k)));
+      B = pend >= 0 ? pend : 0;
+      foco = Math.max(0, ta.b[B].piezas.findIndex((_, k) => !puesto(T, B, k)));
+      $('barra').hidden = false; pintar(); window.scrollTo(0, 0); return; }
+
+    const ir = e.target.closest('[data-ir]');
+    if (ir) { const [t, b, k] = ir.dataset.ir.split('.').map(Number);
+      T = t; B = b; foco = k; $('barra').hidden = false; pintar(); window.scrollTo(0, 0); return; }
+    if (e.target.closest('#resumen')) { resumen(); return; }
+    if (e.target.closest('#salir')) { menu(); return; }
+    if (e.target.closest('#atras')) { if (B > 0) { B--; foco = 0; pintar(); window.scrollTo(0, 0); } return; }
+
+    const num = e.target.closest('.num');
+    if (num) { foco = Number(num.dataset.k); pintar(); return; }
+
+    const cat = e.target.closest('.cat');
+    if (!cat) return;
+    vibrar(14);
+    MARCA[llave(T, B, foco)] = cat.dataset.cat;
+    guardar();
+    siguiente();
+  });
+
+  /* ------------------------------------------------------------ arranque */
+  function decir(t, s) {
+    $('barra').hidden = true;
+    $('pantalla').innerHTML = `<div class="menu"><h1>${esc(t)}</h1>
+      <p class="sub">${esc(s)}</p></div>`;
+  }
+
+  async function unJuego(l) {
+    try {
+      const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) +
+        '&juego=' + encodeURIComponent(l), { cache: 'no-store' });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!j || !j.hay || !j.datos || !(j.datos.tandas || []).length) return null;
+      j.datos.generado = j.datos.generado || j.generado || '';
+      j.datos.juego = j.juego || l;
+      return j.datos;
+    } catch (e) { return null; }
+  }
+
+  async function bajarTandas() {
+    for (const l of llavesAProbar()) {
+      const d = await unJuego(l);
+      if (d) { JUEGO = d.juego || l; return d; }
+    }
+    return null;
+  }
+
+  async function arrancar() {
+    if (!CODIGO) { decir('Falta el código', 'Este enlace no lleva el código de lectura. Pide el bueno.'); return; }
+    decir('Un momento', 'Bajando la recogida.');
+    const d = await bajarTandas();
+    if (!d) {
+      decir('Todavía no hay nada',
+        'No hay ninguna recogida preparada para esta fecha. En cuanto se pase el paso 2 aparece aquí sola.');
+      setTimeout(arrancar, 20000);
+      return;
+    }
+    DATOS = d; GENERADO = d.generado || '';
+    /* Si hubo dos directos en la misma cuenta, esto parte los percheros antes
+       de montar las tarjetas. Tarda unos segundos y puede fallar sin romper
+       nada: si falla, las prendas salen todas juntas como siempre. */
+    try { await separarDirectos(); } catch (e) {}
+    TANDAS = construir(d);
+    prepararTandas();
+    CLAVE = 'billys_marcado_' + JUEGO;
+    try { MARCA = JSON.parse(localStorage.getItem(CLAVE) || '{}') || {}; } catch (e) { MARCA = {}; }
+    menu();
+    await leerMarcas(PRIMERA);
+    PRIMERA = false;
+    menu();
+
+    /* Cada medio minuto se mira lo que han marcado los demás. No se recarga la
+       pantalla de nadie a medio paquete: unir() solo repinta si algo cambió. */
+    setInterval(() => { if (!document.hidden) leerMarcas(false); }, 30000);
+  }
+
+  arrancar();
+})();
+</script>
+</body>
+</html>

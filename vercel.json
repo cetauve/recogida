@@ -6,6 +6,7 @@
   },
   "rewrites": [
     { "source": "/recogida", "destination": "/app-recogida.html" },
+    { "source": "/almacen", "destination": "/app-almacen.html" },
     { "source": "/vendedoras", "destination": "/app-vendedoras.html" },
     { "source": "/reparto", "destination": "/reparto.html" },
     { "source": "/manifiesto", "destination": "/manifiesto.html" },
