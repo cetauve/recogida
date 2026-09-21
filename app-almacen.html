@@ -248,6 +248,51 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .dudas{display:flex;flex-wrap:wrap;gap:7px}
 .duda{font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;
   background:var(--navy);border:1px solid var(--ambar);color:var(--ambar)}
+
+/* ---------------------------------------------------- quién soy y qué hago */
+.campo{width:100%;padding:14px;border-radius:13px;background:var(--navy);
+  border:1px solid var(--linea);color:var(--bone);font:inherit;font-weight:700}
+.modos{display:flex;gap:9px}
+.modoBtn{flex:1;padding:14px 10px;border-radius:13px;background:var(--navy);
+  border:2px solid var(--linea);color:var(--tenue);font-weight:800;font-size:15px}
+.modoBtn.on{border-color:var(--cian);color:var(--bone);
+  background:color-mix(in srgb,var(--cian) 18%,var(--navy))}
+.nombresHoy{display:flex;flex-wrap:wrap;gap:7px}
+.nombresHoy button{font-size:13px;font-weight:700;padding:7px 11px;border-radius:10px;
+  background:var(--navy2);border:1px solid var(--linea);color:var(--tenue)}
+.nombresHoy button.yo{border-color:var(--cian);color:var(--bone)}
+.quienSoyBarra{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tenue);
+  font-weight:700}
+.quienSoyBarra b{color:var(--bone)}
+
+/* ------------------------------------------------------------------ la cola */
+.colaNum{font-size:clamp(40px,12vw,64px);font-weight:900;line-height:1;
+  letter-spacing:-.03em;color:var(--ambar)}
+.deQuien{font-size:12.5px;color:var(--tenue);line-height:1.4}
+.deQuien b{color:var(--bone)}
+.rescate{border:2px solid var(--ambar);border-radius:12px;padding:9px 12px;
+  background:color-mix(in srgb,var(--ambar) 10%,transparent);font-size:13px;line-height:1.35}
+.vacia{background:var(--navy2);border:1px dashed var(--linea);border-radius:14px;
+  padding:22px 16px;text-align:center;color:var(--tenue);font-size:14px;line-height:1.5}
+.qLinea{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;
+  background:var(--navy);border:1px solid var(--linea);margin-bottom:7px}
+.qLinea > b{font-size:17px;font-weight:900;font-variant-numeric:tabular-nums;
+  min-width:30px;text-align:right}
+.qLinea .qq{flex:1;min-width:0;font-size:14px;font-weight:700}
+.qLinea .qq small{display:block;font-size:11px;color:var(--tenue);font-weight:600;
+  margin-top:2px}
+.qLinea button{font-size:12px;font-weight:800;padding:7px 9px;border-radius:9px;
+  background:var(--navy2);border:1px solid var(--linea);color:var(--tenue);flex:none}
+.qLinea.parado{border-color:var(--ambar)}
+.qLinea.parado button{border-color:var(--ambar);color:var(--ambar)}
+.qLinea.atascado{border-color:var(--p1rot)}
+.qLinea h3,.colaQueda h3{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--tenue);font-weight:800;margin:14px 0 7px}
+#susurro{position:fixed;left:16px;right:16px;bottom:16px;z-index:50;
+  background:var(--navy);border:1px solid var(--ambar);border-radius:13px;padding:13px 15px;
+  font-size:13.5px;line-height:1.4;color:var(--bone);box-shadow:0 8px 30px rgba(0,0,0,.5);
+  opacity:0;transform:translateY(8px);transition:.18s;pointer-events:none}
+#susurro.on{opacity:1;transform:none}
 </style>
 </head>
 <body>
@@ -566,14 +611,14 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
       for (const c of (ta.compradores || [])) {
         const grupos = (c.porCuenta || [])
           .filter((x) => x.numeros && x.numeros.length)
-          .map((x) => ({ dir: Number(x.dir || 1), quedan: x.numeros.slice() }));
+          .map((x) => ({ cuenta: x.cuenta || '', dir: Number(x.dir || 1), quedan: x.numeros.slice() }));
         const base = grupos.length
-          ? grupos : [{ dir: 1, quedan: (c.numeros || []).slice() }];
+          ? grupos : [{ cuenta: '', dir: 1, quedan: (c.numeros || []).slice() }];
         const trozos = (c.bultos && c.bultos.length > 1)
           ? c.bultos.map((b) => (b.numeros || []).slice()) : [null];
 
         for (const nums of trozos) {
-          const sacos = base.map((r) => ({ dir: r.dir, numeros: [] }));
+          const sacos = base.map((r) => ({ cuenta: r.cuenta, dir: r.dir, numeros: [] }));
           if (nums === null) {
             base.forEach((r, k) => { sacos[k].numeros = r.quedan.slice(); });
           } else {
@@ -589,7 +634,30 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
           }
           const g = sacos.filter((x) => x.numeros.length)
             .map((x) => [x.dir, x.numeros.slice().sort((a, b) => a - b)]);
-          if (g.length) bolsas.push({ q: c.apodo || '', d: trozos.length, g });
+          if (!g.length) continue;
+          /* CADA BOLSA NECESITA SU PROPIO NOMBRE EN LA COLA, porque la cola
+             guarda una fila por pedido y dos bolsas de la misma persona
+             chocarían. La primera se queda con su pedido de verdad; las
+             siguientes llevan un apellido. No se inventa un pedido de otro:
+             se dice que es la bolsa 2 de ese. */
+          const k = bolsas.length;
+          const suyas = bolsas.filter((x) => x.raiz === c.pedido).length;
+          const id = suyas ? c.pedido + '#' + (suyas + 1) : String(c.pedido || ('b' + k));
+          const numeros = g.flatMap((x) => x[1]);
+          bolsas.push({
+            q: c.apodo || '', d: trozos.length, g,
+            ped: id, raiz: c.pedido,
+            /* La ficha que viaja a la cola, con la misma forma de siempre para
+               que el panel y la app vieja sigan entendiéndola. */
+            ficha: {
+              apodo: c.apodo || '', usuario: '', pedido: id,
+              pedidos: c.pedidos || (c.pedido ? [c.pedido] : []),
+              numeros, etiquetas: trozos.length, bultos: null,
+              regalos: c.regalos || [],
+              porCuenta: sacos.filter((x) => x.numeros.length)
+                .map((x) => ({ cuenta: x.cuenta, dir: x.dir, numeros: x.numeros.slice().sort((a, b) => a - b) }))
+            }
+          });
         }
       }
       if (bolsas.length) salida.push({ e: ta.etiqueta || 'Tanda', b: bolsas });
@@ -697,6 +765,9 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 
   /* Repinta lo que haya en pantalla sin sacar a nadie de donde estaba. */
   function repintar() {
+    /* A quien empaqueta no se le repinta la pantalla porque alguien marque una
+       prenda al otro lado del almacén. */
+    if (DONDE === 'cola' || DONDE === 'quien') return;
     if (DONDE === 'bolsa') pintar();
     else if (DONDE === 'resumen') resumen();
     else menu();
@@ -747,6 +818,160 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 
   let T = 0, B = 0, foco = 0;
 
+  /* ======================================================================
+     QUIÉN SOY Y QUÉ HAGO
+     ======================================================================
+     La cola apunta quién recogió y quién empaquetó cada bolsa. Sin nombre no
+     se puede repartir el trabajo ni saber a quién preguntarle si falta algo.
+     Se guarda en el móvil: se pone una vez al empezar el turno. */
+  let MODO = '', QUIEN = '';
+  try { MODO = localStorage.getItem('billys_modo') || ''; } catch (e) {}
+  try { QUIEN = localStorage.getItem('billys_quien') || ''; } catch (e) {}
+  let NOMBRES_HOY = [];
+
+  /* ¿Esto es la misma persona escrita de otra manera? "yasmin" y "Yasmine" no
+     son el mismo texto, pero casi siempre son la misma. Se PREGUNTA, no se
+     decide solo: "Ana" y "Anna" pueden ser dos de verdad. */
+  const sinAdornos = (x) => String(x || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  function pareceElMismo(a, b) {
+    const x = sinAdornos(a), y = sinAdornos(b);
+    if (!x || !y) return false;
+    if (x === y) return true;
+    if (x.length < 3 || y.length < 3) return false;
+    const largo = x.length > y.length ? x : y, corto = x.length > y.length ? y : x;
+    if (largo.startsWith(corto) && largo.length - corto.length <= 2) return true;
+    if (x.length === y.length) {
+      let d = 0;
+      for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) d++;
+      if (d === 1) return true;
+    }
+    return false;
+  }
+  function comoSeEscribe(n) {
+    const puesto = String(n || '').trim();
+    if (!puesto) return '';
+    const clavado = NOMBRES_HOY.find((x) => sinAdornos(x) === sinAdornos(puesto));
+    if (clavado) return clavado.trim();
+    const parecido = NOMBRES_HOY.find((x) => pareceElMismo(x, puesto));
+    if (parecido && confirm('Hoy ya est\u00e1 trabajando ' + parecido + '.\n\n¿Eres tú?\n\n' +
+        'Si le das a Aceptar, tus paquetes van con los de ' + parecido + '.')) return parecido;
+    return puesto;
+  }
+  /* Se rellena con cualquier respuesta de la cola, que ya se pide sola. */
+  function apuntarNombres(j) {
+    const vistos = new Map(NOMBRES_HOY.map((n) => [n.trim().toLowerCase(), n]));
+    for (const n of [...((j.tandas || []).map((t) => t.quien)),
+                     ...((j.gente || []).map((g) => g.quien)),
+                     ...((j.paquetes || []).flatMap((p) => [p.quien_abrio, p.quien_cierra])),
+                     ...((j.queda || []).flatMap((p) => [p.quien_abrio, p.quien_cierra]))]) {
+      const k = String(n || '').trim().toLowerCase();
+      if (k && !vistos.has(k)) vistos.set(k, String(n).trim());
+    }
+    NOMBRES_HOY = [...vistos.values()];
+  }
+
+  /* Un aviso que no para el trabajo: se ve unos segundos y se va. */
+  function susurro(texto) {
+    let caja = document.getElementById('susurro');
+    if (!caja) { caja = document.createElement('div'); caja.id = 'susurro'; document.body.appendChild(caja); }
+    caja.textContent = texto;
+    caja.classList.add('on');
+    clearTimeout(susurro.reloj);
+    susurro.reloj = setTimeout(() => caja.classList.remove('on'), 6000);
+  }
+
+  /* ======================================================================
+     LA COLA DE EMPAQUETADO
+     ======================================================================
+     Quién recoge EMPUJA: cada bolsa terminada entra aquí. Quien empaqueta no
+     elige, pide "el siguiente" y el servidor reparte. Con tres personas
+     doblando, es lo único que evita que dos hagan la misma bolsa.
+
+     Todo lo que se recoge entra y coge número, incidencias incluidas. Una
+     incidencia entra PARADA: no se le da a nadie, pero existe y se ve. El 17
+     de agosto se acabó el turno con 21 paquetes recogidos que no existían
+     para nadie porque las incidencias se quedaban en el móvil de quien las
+     vio.
+
+     Es la misma cola de siempre, el mismo /api/cola: esta app y la vieja
+     hablan del mismo sitio. */
+  const urlCola = () => '/api/cola?d=' + encodeURIComponent(CODIGO) +
+    (JUEGO ? '&juego=' + encodeURIComponent(JUEGO) : '');
+
+  let PAQ = null;      // la bolsa que tengo ahora mismo en la mesa
+  let NADA = null;     // lo que contestó el servidor cuando no había nada que dar
+  let relojCola = null;
+  try { PAQ = JSON.parse(localStorage.getItem('billys_paq') || 'null'); } catch (e) { PAQ = null; }
+
+  /* Lo deslizado que aún no ha salido del móvil. Sin esto, un segundo sin
+     cobertura en el almacén es una bolsa que nadie empaqueta. */
+  const LLAVE_COLA = 'billys_cola_pend';
+  let PENDCOLA = [];
+  try { PENDCOLA = JSON.parse(localStorage.getItem(LLAVE_COLA) || '[]'); } catch (e) { PENDCOLA = []; }
+  const guardarPend = () => { try { localStorage.setItem(LLAVE_COLA, JSON.stringify(PENDCOLA)); } catch (e) {} };
+
+  async function apiCola(cuerpo) {
+    const r = await fetch(urlCola(), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+      body: JSON.stringify({ juego: JUEGO || undefined, ...cuerpo })
+    });
+    return r.json();
+  }
+
+  const hace = (t) => {
+    if (!t) return '';
+    const m = Math.round((Date.now() - new Date(t)) / 60000);
+    return m < 1 ? 'ahora mismo' : (m < 60 ? 'hace ' + m + ' min'
+      : 'hace ' + Math.floor(m / 60) + ' h ' + (m % 60) + ' min');
+  };
+  const laHora = (t) => {
+    if (!t) return '';
+    try { return new Date(t).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); }
+    catch (e) { return ''; }
+  };
+
+  /* --------------------------------------------------- quién soy y qué hago */
+  function quienSoy() {
+    DONDE = 'quien';
+    $('barra').hidden = true;
+    $('pantalla').innerHTML = `
+      <div class="menu">
+        <h1>¿Quién eres?</h1>
+        <p class="sub">La cola apunta quién recoge y quién empaqueta cada bolsa. Es lo
+          que permite repartir el trabajo sin que dos hagan la misma.</p>
+        <input class="campo" id="miNombre" placeholder="Tu nombre" value="${esc(QUIEN)}"
+          autocomplete="off" autocapitalize="words">
+        ${NOMBRES_HOY.length ? `<div class="nombresHoy">${NOMBRES_HOY.map((n) =>
+          `<button data-n="${esc(n)}"${sinAdornos(n) === sinAdornos(QUIEN) ? ' class="yo"' : ''}>${esc(n)}</button>`
+        ).join('')}</div>` : ''}
+        <p class="sub" style="margin-top:6px">¿Qué vas a hacer ahora?</p>
+        <div class="modos">
+          <button class="modoBtn${MODO === 'recoge' ? ' on' : ''}" data-m="recoge">Cojo prendas</button>
+          <button class="modoBtn${MODO === 'empaqueta' ? ' on' : ''}" data-m="empaqueta">Empaqueto</button>
+        </div>
+        <button class="accion" id="empezar"${QUIEN.trim() && MODO ? '' : ' disabled'}>Empezar</button>
+        <div class="nota">
+          <div><b>Cojo prendas</b> es ir por los percheros con la app: al acabar cada bolsa,
+            esa bolsa entra en la cola con su número y quien empaqueta la recibe.</div>
+          <div><b>Empaqueto</b> es pedir bolsas de la cola, una a una, y cerrarlas.</div>
+          <div>Se puede cambiar cuando quieras desde arriba.</div>
+        </div>
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+
+  /* A dónde va cada uno al empezar. */
+  function casa() {
+    if (!QUIEN.trim() || !MODO) { quienSoy(); return; }
+    if (MODO === 'empaqueta') verCola(); else menu();
+  }
+
+  const barraQuien = () => `<div class="quienSoyBarra">
+      <span><b>${esc(QUIEN)}</b> · ${MODO === 'empaqueta' ? 'empaquetando' : 'cogiendo prendas'}</span>
+      <button class="volver" id="cambiarQuien" style="margin-left:auto">Cambiar</button>
+    </div>`;
+
   /* ------------------------------------------------------------- el menú */
   function menu() {
     DONDE = 'menu';
@@ -755,6 +980,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     const BOLSAS = TANDAS.reduce((a, ta) => a + ta.b.length, 0);
     $('pantalla').innerHTML = `
       <div class="menu">
+        ${barraQuien()}
         <h1>${esc(DATOS.titulo || 'Recogida')}</h1>
         <p class="sub">${BOLSAS} bolsas, ${PRENDAS} prendas. Las bolsas van en el mismo
           orden que las hojas del taco que ya está impreso.</p>
@@ -773,7 +999,8 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
               <span class="marca">${h}/${p}</span></button>`;
           }).join('')}
         </div>
-        ${total ? `<button class="accion" id="resumen">Ver el resumen</button>` : ''}
+        <button class="accion" id="irCola">Ir a la cola de empaquetado</button>
+        ${total ? `<button class="accion fuera" id="resumen">Ver el resumen</button>` : ''}
         ${RESCATADAS ? `<div class="nota" style="border-color:var(--verde)">
           <div><b>He rescatado ${RESCATADAS} ${RESCATADAS === 1 ? 'prenda' : 'prendas'} que estaban
           guardadas solo en este ordenador</b>, y ya están en el servidor. Desde ahora se ven
@@ -843,7 +1070,9 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
       <div style="display:flex;gap:9px;margin-top:14px">
         <button class="accion fuera" id="atras" style="flex:1"${B === 0 ? ' disabled' : ''}>Bolsa anterior</button>
         <button class="accion fuera" id="salir" style="flex:1">Salir a las tandas</button>
-      </div>`;
+      </div>
+      <button class="accion fuera" id="incidencia" style="margin-top:9px;
+        border-color:var(--ambar);color:var(--ambar)">Esta bolsa tiene un problema</button>`;
     pintarBarra();
   }
 
@@ -851,8 +1080,288 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     const ta = TANDAS[T], b = ta.b[B];
     const libre = b.piezas.findIndex((_, k) => !puesto(T, B, k));
     if (libre >= 0) { foco = libre; pintar(); return; }
+    /* BOLSA TERMINADA. Todas sus prendas están dichas, o sea que están en la
+       mano de quien recoge: la bolsa entra en la cola y quien empaqueta la
+       puede pedir ya. Repetirla no hace daño: meter no toca una bolsa que ya
+       esté en la cola, por si alguien vuelve a corregir una categoría. */
+    aLaCola(b, ta, false, '');
     if (B + 1 < ta.b.length) { B++; foco = 0; pintar(); window.scrollTo(0, 0); return; }
     resumen();
+  }
+
+  /* ======================================================================
+     EMPUJAR UNA BOLSA A LA COLA
+     ====================================================================== */
+  function aLaCola(b, ta, incidencia, motivo) {
+    if (MODO !== 'recoge' || !CODIGO || !QUIEN.trim()) return;
+    if (!b || !b.ped) return;
+    PENDCOLA.push({
+      pedido: b.ped, apodo: b.q, prendas: b.piezas.length,
+      tanda: (ta && ta.e) || '',
+      /* Sellado aquí: si el envío espera cobertura y mientras cambia quien usa
+         la tablet, esa bolsa es de quien la recogió. */
+      quien: QUIEN,
+      incidencia: !!incidencia, motivo: motivo || '',
+      dia: diaMadrid(Date.now()), juego: JUEGO || null,
+      ficha: b.ficha, en: new Date().toISOString()
+    });
+    guardarPend();
+    vaciarCola();
+  }
+
+  const diaMadrid = (t) => {
+    try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date(t)); }
+    catch (e) { return null; }
+  };
+
+  const YA_AVISADO = new Set();
+  function avisarDeOtro(lista, delEnvio) {
+    if (!Array.isArray(lista) || !lista.length) return;
+    const nuevos = lista.filter((x) => delEnvio.has(x.pedido) && !YA_AVISADO.has(x.pedido));
+    if (!nuevos.length) return;
+    for (const x of nuevos) YA_AVISADO.add(x.pedido);
+    const quien = nuevos[0].quien;
+    susurro(nuevos.length === 1
+      ? 'La bolsa de ' + (nuevos[0].apodo || 'ese comprador') + ' ya la había recogido ' +
+        quien + ' (nº' + nuevos[0].numero + '). Estáis haciendo la misma tanda.'
+      : nuevos.length + ' de las bolsas que acabas de pasar ya las había recogido ' + quien +
+        '. Estáis haciendo la misma tanda.');
+  }
+
+  let vaciando = false;
+  async function vaciarCola() {
+    if (vaciando || !PENDCOLA.length || !CODIGO) return;
+    vaciando = true;
+    /* Una tanda por persona y por día: el servidor apunta un solo nombre y un
+       solo día por envío, así que mezclarlos le colgaría a uno el trabajo del
+       otro. */
+    const dueno = PENDCOLA[0].quien || QUIEN;
+    const cuando = PENDCOLA[0].dia || null;
+    const elJuego = PENDCOLA[0].juego || JUEGO;
+    const mismo = (x) => (x.quien || QUIEN) === dueno && (x.dia || null) === cuando &&
+                         (x.juego || JUEGO) === elJuego;
+    const iban = PENDCOLA.filter(mismo);
+    try {
+      const r = await fetch(urlCola(), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+        body: JSON.stringify({ accion: 'meter', quien: dueno, dia: cuando,
+                               juego: elJuego || undefined, paquetes: iban })
+      });
+      const j = await r.json();
+      if (j && j.ok) {
+        const fuera = new Set(iban.map((x) => x.pedido));
+        PENDCOLA = PENDCOLA.filter((x) => !fuera.has(x.pedido));
+        guardarPend();
+        avisarDeOtro(j.deOtro, fuera);
+      }
+    } catch (e) { /* sin red: se queda pendiente y sale con el siguiente */ }
+    vaciando = false;
+    if (PENDCOLA.length) setTimeout(vaciarCola, 4000);
+  }
+  setInterval(vaciarCola, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) vaciarCola(); });
+
+  /* ======================================================================
+     LA PANTALLA DE QUIEN EMPAQUETA
+     ====================================================================== */
+  /* La tarjeta de una bolsa que viene de la cola. No se pinta desde las
+     tandas: se pinta desde la ficha que viajó con ella, que es lo único que
+     seguro que existe aunque el paso 2 se haya vuelto a pasar desde entonces. */
+  function tarjetaDeFicha(ficha) {
+    if (!ficha) return '';
+    const grupos = (ficha.porCuenta || []).filter((x) => (x.numeros || []).length);
+    const varios = grupos.length > 1 || grupos.some((x) => Number(x.dir || 0) > 1);
+    const cuerpo = (grupos.length ? grupos : [{ dir: 1, numeros: ficha.numeros || [] }])
+      .map((x) => {
+        const p = Number(x.dir || 1);
+        return `<div class="grupo p${p}">
+          ${varios ? `<div class="perchero p${p}"><i></i>${esc(x.cuenta || ('Perchero ' + p))}</div>` : ''}
+          <div class="nums">${(x.numeros || []).map((n) =>
+            `<span class="num p${p}" style="pointer-events:none"><u>${n}</u><em></em></span>`).join('')}</div>
+        </div>`;
+      }).join('');
+    return `<div class="tarjeta">
+      <div class="quien">
+        <div class="nombre">${esc(ficha.apodo || '')}</div>
+        <div class="bolsa"><b>${(ficha.numeros || []).length}
+          ${(ficha.numeros || []).length === 1 ? 'prenda' : 'prendas'}</b></div>
+      </div>
+      ${Number(ficha.etiquetas || 1) > 1 ? `<div class="aviso">A esta persona TikTok le ha hecho
+        <b>${ficha.etiquetas} bultos</b>. Esta bolsa lleva <b>su propia etiqueta</b>.</div>` : ''}
+      ${cuerpo}
+    </div>`;
+  }
+
+  function verCola() {
+    DONDE = 'cola';
+    $('barra').hidden = true;
+    pintarCola();
+    refrescarContador();
+    comprobarMio();
+  }
+
+  function pintarCola() {
+    const hay = !!PAQ;
+    $('pantalla').innerHTML = `
+      <div class="menu">
+        ${barraQuien()}
+        <h1>Empaquetar</h1>
+        <p class="sub" id="colaSub">Mirando cómo va la cola…</p>
+        <div id="colaFicha">${hay ? `
+          <div class="colaNum">#${PAQ.numero}</div>
+          ${PAQ.quien_abrio ? `<div class="deQuien">La recogió <b>${esc(PAQ.quien_abrio)}</b>${
+            PAQ.abierto_en ? ' · ' + laHora(PAQ.abierto_en) + ' (' + hace(PAQ.abierto_en) + ')' : ''}${
+            PAQ.tanda ? ' · ' + esc(PAQ.tanda) : ''}</div>` : ''}
+          ${PAQ.rescatado ? `<div class="rescate">Esta bolsa la tenía
+            <b>${esc(PAQ.rescatado.loTenia)}</b> desde hace ${PAQ.rescatado.minutos} min y no la
+            cerró. <b>Compruébala antes de cerrarla</b>: puede estar a medias.</div>` : ''}
+          ${PAQ.motivo ? `<div class="rescate">Venía con incidencia: <b>${esc(PAQ.motivo)}</b>.
+            Si sigue sin arreglarse, devuélvela.</div>` : ''}
+          ${tarjetaDeFicha(PAQ.ficha)}
+        ` : `<div class="vacia">${NADA
+          ? (NADA.haciendo || NADA.parado
+              ? 'Nadie tiene bolsas esperando, pero <b>todavía queda trabajo</b>:' +
+                (NADA.haciendo ? '<br>' + NADA.haciendo + (NADA.haciendo === 1
+                  ? ' abierta en otro móvil' : ' abiertas en otros móviles') : '') +
+                (NADA.parado ? '<br>' + NADA.parado + (NADA.parado === 1
+                  ? ' parada por incidencia' : ' paradas por incidencia') : '') +
+                '<br><br>Lo tienes aquí abajo.'
+              : 'No hay bolsas esperando.<br>Vuelve a pulsar en un momento.')
+          : 'Pulsa <b>Dame la siguiente</b> cuando estés libre.'}</div>`}
+        </div>
+        ${hay ? `
+          <button class="accion" id="cerrarPaq">Cerrada, siguiente</button>
+          <button class="accion fuera" id="soltarPaq">Devolverla a la cola</button>
+        ` : `<button class="accion" id="pedir">Dame la siguiente</button>`}
+        <div class="colaQueda" id="colaQueda"></div>
+        ${MODO === 'empaqueta' ? `<button class="accion fuera" id="irTandas"
+          style="margin-top:4px">Ver las tandas</button>` : `<button class="accion fuera"
+          id="irTandas" style="margin-top:4px">Volver a las tandas</button>`}
+      </div>`;
+    window.scrollTo(0, 0);
+  }
+
+  /* ¿La bolsa que tengo en pantalla sigue siendo mía? Si estuvo doce minutos
+     parada, el servidor se la dio a otro y este móvil seguía enseñándola. */
+  async function comprobarMio() {
+    if (!PAQ || !PAQ.pedido || !CODIGO) return;
+    try {
+      const j = await (await fetch(urlCola(), { cache: 'no-store' })).json();
+      if (!j || !j.ok || !Array.isArray(j.queda)) return;
+      const mio = j.queda.find((x) => x.pedido === PAQ.pedido);
+      const num = '#' + ((mio && mio.numero) || PAQ.numero);
+      if (mio && mio.estado === 'haciendo' && mio.quien_cierra === QUIEN) return;
+      if (!mio) {
+        /* Ya no está sin cerrar: o la cerró alguien, o no existe. */
+        PAQ = null; try { localStorage.removeItem('billys_paq'); } catch (e) {}
+        pintarCola();
+        susurro('La bolsa ' + num + ' ya está cerrada. Pide la siguiente.');
+        return;
+      }
+      PAQ = null; try { localStorage.removeItem('billys_paq'); } catch (e) {}
+      pintarCola();
+      susurro('La bolsa ' + num + ' ha pasado a ' + (mio.quien_cierra || 'la cola') +
+        ': llevaba mucho rato abierta. Pide la siguiente.');
+    } catch (e) { /* sin red: mejor dejarlo como estaba */ }
+  }
+
+  /* Cuántas quedan. Es lo que le dice a quien empaqueta si puede ir al baño o
+     si tiene diez encima. */
+  async function refrescarContador() {
+    clearInterval(relojCola);
+    if (DONDE !== 'cola') return;
+    relojCola = setInterval(refrescarContador, 15000);
+    try {
+      const j = await (await fetch(urlCola(), { cache: 'no-store' })).json();
+      if (!j || !j.ok) return;
+      apuntarNombres(j);
+      const sub = $('colaSub');
+      if (sub) sub.innerHTML = j.espera + (j.espera === 1 ? ' bolsa esperando · ' : ' bolsas esperando · ')
+        + j.cerrado + ' hechas hoy'
+        + (j.atascados ? ' · <b style="color:var(--ambar)">' + j.atascados +
+            (j.atascados === 1 ? ' atascada' : ' atascadas') + '</b>' : '')
+        + (j.parado ? ' · <b style="color:var(--ambar)">' + j.parado +
+            (j.parado === 1 ? ' parada' : ' paradas') + '</b>' : '');
+      pintarQueda(j.queda || []);
+    } catch (e) { const sub = $('colaSub'); if (sub) sub.textContent = 'Sin conexión con el servidor'; }
+  }
+
+  /* LO QUE QUEDA POR CERRAR. El 17 de agosto se acabó el turno con cero en
+     espera, una abierta en un móvil que ya no estaba en el almacén y 21
+     paradas por incidencia, y las pantallas decían "no hay nada esperando".
+     Esta lista es el sitio donde mirarlo. */
+  function pintarQueda(queda) {
+    const caja = $('colaQueda');
+    if (!caja) return;
+    const otros = queda.filter((q) => !(PAQ && q.pedido === PAQ.pedido));
+    if (!otros.length) { caja.innerHTML = ''; return; }
+    const linea = (q) => {
+      const quienTiene = q.estado === 'haciendo'
+        ? 'la tiene <b>' + esc(q.quien_cierra || '¿?') + '</b> ' + hace(q.tomado_en)
+        : (q.estado === 'espera' ? 'esperando desde ' + laHora(q.abierto_en)
+          : (q.estado === 'parado' ? (q.motivo ? esc(q.motivo) : 'incidencia sin resolver')
+            : 'la retiró ' + esc(q.quien_abrio || 'quien recoge')));
+      const datos = ' data-p="' + esc(q.pedido) + '" data-n="' + q.numero + '"';
+      const boton = q.estado === 'parado'
+        ? '<button class="qResolver"' + datos + '>Ya está</button>'
+        : (q.estado === 'retirado' ? ''
+          : '<button class="qCerrar"' + datos + '>Cerrada</button>' +
+            '<button class="qCoger"' + datos + '>La hago yo</button>');
+      return '<div class="qLinea ' + q.estado + (q.atascado ? ' atascado' : '') + '">' +
+        '<b>' + q.numero + '</b><span class="qq">' + esc(q.apodo || '') +
+        '<small>' + quienTiene + ' · recogió ' + esc(q.quien_abrio || '¿?') + '</small></span>' +
+        boton + '</div>';
+    };
+    const grupo = (titulo, lista) => lista.length
+      ? '<h3>' + titulo + '</h3>' + lista.map(linea).join('') : '';
+    caja.innerHTML =
+      grupo('Sin cerrar', otros.filter((q) => q.estado === 'haciendo' || q.estado === 'espera')) +
+      grupo('Paradas por incidencia', otros.filter((q) => q.estado === 'parado')) +
+      grupo('Retiradas por quien recoge', otros.filter((q) => q.estado === 'retirado'));
+  }
+
+  async function pedirSiguiente() {
+    const b = $('pedir');
+    if (b) { b.disabled = true; b.textContent = 'Pidiendo…'; }
+    try {
+      const j = await apiCola({ accion: 'siguiente', quien: QUIEN });
+      if (j && j.ok && j.hay) {
+        PAQ = j.paquete;
+        PAQ.juego = JUEGO;
+        PAQ.rescatado = j.rescatado ? { loTenia: j.loTenia, minutos: j.minutos } : null;
+        try { localStorage.setItem('billys_paq', JSON.stringify(PAQ)); } catch (e) {}
+        vibrar(20);
+      } else {
+        PAQ = null;
+        NADA = (j && (j.haciendo || j.parado))
+          ? { haciendo: j.haciendo || 0, parado: j.parado || 0 } : { haciendo: 0, parado: 0 };
+      }
+    } catch (e) { susurro('No he podido hablar con el servidor. Prueba otra vez.'); }
+    pintarCola(); refrescarContador();
+  }
+
+  async function cerrarPaquete() {
+    if (!PAQ) return;
+    const en = new Date().toISOString();
+    const pedido = PAQ.pedido;
+    try {
+      const j = await apiCola({ accion: 'cerrar', quien: QUIEN, pedido, en });
+      if (j && j.ok) {
+        PAQ = null;
+        try { localStorage.removeItem('billys_paq'); } catch (e) {}
+        vibrar([18, 40, 18]);
+      } else susurro('No se ha podido cerrar. Prueba otra vez.');
+    } catch (e) { susurro('Sin conexión. La bolsa sigue siendo tuya; prueba otra vez.'); }
+    pintarCola(); refrescarContador();
+  }
+
+  async function soltarPaquete() {
+    if (!PAQ) return;
+    if (!confirm('¿Devolverla a la cola para que la haga otra persona?')) return;
+    try { await apiCola({ accion: 'soltar', quien: QUIEN, pedido: PAQ.pedido }); } catch (e) {}
+    PAQ = null;
+    try { localStorage.removeItem('billys_paq'); } catch (e) {}
+    pintarCola(); refrescarContador();
   }
 
   /* ------------------------------------------------------------ resumen */
@@ -908,7 +1417,129 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   }
 
   /* --------------------------------------------------------------- click */
-  $('pantalla').addEventListener('click', (e) => {
+  /* El nombre se escribe en la pantalla de quién soy. */
+  $('pantalla').addEventListener('input', (e) => {
+    if (e.target && e.target.id === 'miNombre') {
+      QUIEN = e.target.value;
+      const b = $('empezar');
+      if (b) b.disabled = !(QUIEN.trim() && MODO);
+    }
+  });
+
+  $('pantalla').addEventListener('click', async (e) => {
+    /* --------------------------------------------------- quién soy y qué hago */
+    const nom = e.target.closest('.nombresHoy button');
+    if (nom) {
+      QUIEN = nom.dataset.n;
+      const campo = $('miNombre');
+      if (campo) campo.value = QUIEN;
+      quienSoy();
+      return;
+    }
+    const mb = e.target.closest('.modoBtn');
+    if (mb) {
+      MODO = mb.dataset.m;
+      const campo = $('miNombre');
+      if (campo) QUIEN = campo.value;
+      quienSoy();
+      return;
+    }
+    if (e.target.closest('#empezar')) {
+      const campo = $('miNombre');
+      QUIEN = comoSeEscribe(campo ? campo.value : QUIEN);
+      if (!QUIEN.trim() || !MODO) return;
+      try { localStorage.setItem('billys_quien', QUIEN); } catch (err) {}
+      try { localStorage.setItem('billys_modo', MODO); } catch (err) {}
+      casa();
+      return;
+    }
+    if (e.target.closest('#cambiarQuien')) { quienSoy(); return; }
+    if (e.target.closest('#irCola')) { verCola(); return; }
+    if (e.target.closest('#irTandas')) { clearInterval(relojCola); menu(); return; }
+
+    /* ------------------------------------------------------------- la cola */
+    if (e.target.closest('#pedir')) { await pedirSiguiente(); return; }
+    if (e.target.closest('#cerrarPaq')) { await cerrarPaquete(); return; }
+    if (e.target.closest('#soltarPaq')) { await soltarPaquete(); return; }
+
+    const bC = e.target.closest('.qCoger');
+    const bR = e.target.closest('.qResolver');
+    const bX = e.target.closest('.qCerrar');
+    if (bC || bR || bX) {
+      const bot = bC || bR || bX;
+      const pedido = bot.dataset.p, num = bot.dataset.n;
+      bot.disabled = true;
+      /* "Esa ya está hecha": se cierra a nombre de quien lo dice, sin tener que
+         cogerla antes. Es el gesto que faltaba para la bolsa que ya está
+         cerrada encima de la mesa. */
+      if (bX) {
+        if (!confirm('¿La bolsa #' + num + ' ya está cerrada?\n\nSe apuntará a tu nombre.')) {
+          bot.disabled = false; return;
+        }
+        try {
+          const j = await apiCola({ accion: 'cerrarLista', quien: QUIEN,
+            paquetes: [{ pedido, en: new Date().toISOString() }] });
+          if (!j || !j.ok) susurro('No he podido cerrarla. Prueba otra vez.');
+          else if ((j.deOtro || []).length) {
+            susurro('La nº' + num + ' la tenía abierta ' + j.deOtro[0].quien +
+              '. La he cerrado a tu nombre; díselo.');
+          }
+          if (PAQ && PAQ.pedido === pedido) {
+            PAQ = null; try { localStorage.removeItem('billys_paq'); } catch (err) {}
+            pintarCola();
+          }
+        } catch (err) { susurro('Sin conexión. Prueba otra vez.'); }
+        refrescarContador();
+        return;
+      }
+      if (bR) {
+        if (!confirm('¿La bolsa #' + num + ' ya está resuelta?\n\nVuelve a la cola y se la daré a quien pida la siguiente.')) {
+          bot.disabled = false; return;
+        }
+        try {
+          const j = await apiCola({ accion: 'resolver', quien: QUIEN, pedido });
+          if (!j || !j.ok || !j.resuelto) susurro('No he podido: puede que ya la haya movido otra persona.');
+        } catch (err) { susurro('Sin conexión. Prueba otra vez.'); }
+        refrescarContador();
+        return;
+      }
+      if (PAQ && !confirm('Tienes la #' + PAQ.numero + ' sin cerrar.\n\n¿Coger la #' + num + ' de todas formas?')) {
+        bot.disabled = false; return;
+      }
+      try {
+        const j = await apiCola({ accion: 'coger', quien: QUIEN, pedido });
+        if (j && j.ok && j.cogido) {
+          PAQ = j.paquete;
+          PAQ.juego = JUEGO;
+          PAQ.rescatado = j.rescatado ? { loTenia: j.loTenia, minutos: j.minutos } : null;
+          try { localStorage.setItem('billys_paq', JSON.stringify(PAQ)); } catch (err) {}
+          vibrar(20);
+          pintarCola();
+        } else {
+          susurro(j && j.estado === 'cerrado'
+            ? 'Esa ya la ha cerrado ' + (j.loTenia || 'otra persona') + '.'
+            : 'No he podido cogerla. Mira cómo está en la lista.');
+        }
+      } catch (err) { susurro('Sin conexión. Prueba otra vez.'); }
+      refrescarContador();
+      return;
+    }
+
+    /* ----------------------------------------------------- una bolsa con problema */
+    if (e.target.closest('#incidencia')) {
+      const ta = TANDAS[T], b = ta.b[B];
+      const motivo = (prompt('¿Qué le pasa a la bolsa de ' + (b.q || 'este comprador') + '?\n\n' +
+        'Una línea basta: falta la 214, manchada, no está en el perchero…') || '').trim();
+      if (!motivo) return;
+      aLaCola(b, ta, true, motivo.slice(0, 140));
+      vibrar([12, 40, 12]);
+      susurro('Apuntada como incidencia. Entra en la cola parada, con su número, ' +
+        'hasta que alguien diga que está resuelta.');
+      if (B + 1 < ta.b.length) { B++; foco = 0; pintar(); window.scrollTo(0, 0); }
+      else resumen();
+      return;
+    }
+
     const t = e.target.closest('[data-t]');
     if (t) { T = Number(t.dataset.t); B = 0; foco = 0;
       const ta = TANDAS[T];
@@ -984,10 +1615,15 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     prepararTandas();
     CLAVE = 'billys_marcado_' + JUEGO;
     try { MARCA = JSON.parse(localStorage.getItem(CLAVE) || '{}') || {}; } catch (e) { MARCA = {}; }
-    menu();
+    /* La bolsa guardada en el móvil es de otro juego: no vale. */
+    if (PAQ && PAQ.juego && PAQ.juego !== JUEGO) {
+      PAQ = null; try { localStorage.removeItem('billys_paq'); } catch (e) {}
+    }
+    casa();
     await leerMarcas(PRIMERA);
     PRIMERA = false;
-    menu();
+    if (DONDE === 'menu') menu();
+    vaciarCola();
 
     /* Cada medio minuto se mira lo que han marcado los demás. No se recarga la
        pantalla de nadie a medio paquete: unir() solo repinta si algo cambió. */
