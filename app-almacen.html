@@ -685,7 +685,15 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     return cambio;
   }
 
-  const guardar = () => { enElMovil(); alServidor(); };
+  /* Marcar es apuntar la prenda en la lista de lo que falta por salir, no
+     mandar la tanda entera. Si no se apunta aquí, no sale nada y la pantalla
+     puede seguir diciendo "Guardado" por la lectura de antes: así se perdió
+     una prueba entera el 21 de septiembre. */
+  const guardar = (k) => {
+    if (k) pendiente[k] = MARCA[k] || null;
+    enElMovil();
+    alServidor();
+  };
 
   /* Repinta lo que haya en pantalla sin sacar a nadie de donde estaba. */
   function repintar() {
@@ -923,8 +931,9 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     const cat = e.target.closest('.cat');
     if (!cat) return;
     vibrar(14);
-    MARCA[llave(T, B, foco)] = cat.dataset.cat;
-    guardar();
+    const k = llave(T, B, foco);
+    MARCA[k] = cat.dataset.cat;
+    guardar(k);
     siguiente();
   });
 
