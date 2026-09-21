@@ -657,7 +657,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     escribiendo = true;
     poner('yendo');
     try {
-      const r = await fetch('/api/marcado?d=' + encodeURIComponent(CODIGO), {
+      const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO), {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ juego: JUEGO, marcas: envio }) });
       const j = await r.json();
@@ -697,8 +697,8 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   async function leerMarcas(primera) {
     if (!CODIGO || !JUEGO) { poner('local'); return; }
     try {
-      const r = await fetch('/api/marcado?d=' + encodeURIComponent(CODIGO) +
-        '&juego=' + encodeURIComponent(JUEGO), { cache: 'no-store' });
+      const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) +
+        '&juego=' + encodeURIComponent(JUEGO) + '&marcas=1', { cache: 'no-store' });
       const j = await r.json();
       if (!j || !j.ok) throw new Error('no ok');
       const fuera = j.marcas || {};
