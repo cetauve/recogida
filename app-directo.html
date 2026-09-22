@@ -48,6 +48,9 @@
 </style>
 </head>
 <body>
+<div id="banda" style="display:none;background:#8a5a00;color:#fff;padding:9px 18px;font-size:15px;font-weight:600;text-align:center">
+  MODO PRUEBA · no se subasta nada, solo se sube el anuncio en la lista
+</div>
 <header>
   <div class="ficha"><span class="et">Ficha</span><span class="n" id="ficha">--</span></div>
   <div class="estado"><span class="punto" id="punto"></span><span id="txtEstado">conectando</span></div>
@@ -74,6 +77,7 @@
 const P = new URLSearchParams(location.search);
 const CODIGO  = P.get('d') || '';
 const DIRECTO = P.get('directo') || '';
+const PRUEBA  = P.get('prueba') === '1';
 const API = '/api/tandas';
 
 const $ = (id) => document.getElementById(id);
@@ -182,13 +186,13 @@ async function pedir(item) {
     const r = await fetch(API + '?d=' + encodeURIComponent(CODIGO), {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ live: 1, directo: DIRECTO, accion: 'pedir',
-        listado: item.id, nombre: item.nombre })
+        listado: item.id, nombre: item.nombre, prueba: PRUEBA ? 1 : 0 })
     });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'no');
     estado = j;
     ordenMia = j.orden ? j.orden.id : null;
-    aviso('Va ' + (item.marca || 'sin marca'));
+    aviso(PRUEBA ? 'PRUEBA · sube ' + (item.marca || 'sin marca') : 'Va ' + (item.marca || 'sin marca'));
     tipoAbierto = null;
     pintar();
   } catch (e) {
@@ -237,6 +241,7 @@ async function mirar() {
   } catch (e) { $('punto').className = 'punto off'; $('txtEstado').textContent = 'sin conexión'; }
 }
 
+if (PRUEBA) $('banda').style.display = '';
 if (!CODIGO || !DIRECTO) {
   $('rejilla').style.display = 'none';
   $('vacio').style.display = '';
