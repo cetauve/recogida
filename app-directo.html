@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Billy's · Directo</title>
+<style>
+  :root{
+    --fondo:#101214; --caja:#1b1f23; --borde:#2b3238;
+    --texto:#f2f4f5; --suave:#9aa5ad; --acento:#3fb6a8; --malo:#d9534f; --ok:#57b85c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--fondo);color:var(--texto);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    overscroll-behavior:none;user-select:none}
+  body{display:flex;flex-direction:column}
+
+  header{display:flex;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--borde);background:var(--caja)}
+  .ficha{display:flex;align-items:baseline;gap:10px}
+  .ficha .et{font-size:13px;letter-spacing:.14em;color:var(--suave);text-transform:uppercase}
+  .ficha .n{font-size:46px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .estado{margin-left:auto;text-align:right;font-size:13px;color:var(--suave);max-width:46%}
+  .punto{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--suave);margin-right:6px;vertical-align:middle}
+  .punto.on{background:var(--ok)} .punto.off{background:var(--malo)}
+
+  main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px}
+  .titulo{font-size:15px;color:var(--suave);margin:0 0 12px;display:flex;align-items:center;gap:12px}
+  .rejilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+  button.b{appearance:none;border:1px solid var(--borde);background:var(--caja);color:var(--texto);
+    border-radius:16px;padding:26px 18px;font-size:23px;font-weight:650;text-align:left;
+    min-height:108px;display:flex;flex-direction:column;justify-content:space-between;gap:10px;
+    transition:transform .05s ease, background .1s ease}
+  button.b:active{transform:scale(.97);background:#242a30}
+  button.b .sub{font-size:13px;font-weight:500;color:var(--suave)}
+  button.b.sinmarca{border-style:dashed}
+  button.volver{appearance:none;border:1px solid var(--borde);background:transparent;color:var(--suave);
+    border-radius:10px;padding:8px 14px;font-size:14px}
+
+  .aviso{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
+    background:var(--caja);border:1px solid var(--borde);border-radius:14px;
+    padding:14px 22px;font-size:17px;box-shadow:0 8px 30px rgba(0,0,0,.5);
+    opacity:0;pointer-events:none;transition:opacity .15s ease;max-width:90vw;text-align:center}
+  .aviso.ver{opacity:1}
+  .aviso.error{border-color:var(--malo);color:#ffb3b0}
+  .vacio{color:var(--suave);font-size:16px;line-height:1.6;padding:30px 4px;max-width:640px}
+  .bloqueo{position:fixed;inset:0;background:rgba(16,18,20,.55);display:none}
+  .bloqueo.ver{display:block}
+</style>
+</head>
+<body>
+<header>
+  <div class="ficha"><span class="et">Ficha</span><span class="n" id="ficha">--</span></div>
+  <div class="estado"><span class="punto" id="punto"></span><span id="txtEstado">conectando</span></div>
+</header>
+
+<main>
+  <p class="titulo"><span id="tituloTxt">Cargando</span><button class="volver" id="volver" style="display:none">Volver</button></p>
+  <div class="rejilla" id="rejilla"></div>
+  <div class="vacio" id="vacio" style="display:none"></div>
+</main>
+
+<div class="bloqueo" id="bloqueo"></div>
+<div class="aviso" id="aviso"></div>
+
+<script>
+/* Billy's · pantalla del directo.
+ *
+ * Dos toques: tipo de prenda y marca. Al segundo toque se deja una orden en el
+ * servidor y el ordenador del directo la recoge y lanza la subasta.
+ *
+ * Esta pantalla NO habla con TikTok. Solo deja la orden. Si el ordenador no
+ * está escuchando, aquí se ve y no se lanza nada a ciegas.
+ */
+const P = new URLSearchParams(location.search);
+const CODIGO  = P.get('d') || '';
+const DIRECTO = P.get('directo') || '';
+const API = '/api/tandas';
+
+const $ = (id) => document.getElementById(id);
+let estado = null, tipoAbierto = null, bloqueadoHasta = 0, ordenMia = null;
+
+function aviso(txt, malo) {
+  const a = $('aviso');
+  a.textContent = txt;
+  a.classList.toggle('error', !!malo);
+  a.classList.add('ver');
+  clearTimeout(a._t);
+  a._t = setTimeout(() => a.classList.remove('ver'), malo ? 5000 : 1800);
+}
+
+/* El nombre que pone TikTok es "#7 Gebrauchtes Hoodie Nike Vintage". Se le
+ * quita el número, el prefijo que añade TikTok y el "Vintage" del final, y
+ * queda "Hoodie Nike". */
+function limpiar(nombre) {
+  return String(nombre || '')
+    .replace(/^#\d+\s*/, '')
+    .replace(/^Gebrauchtes?\s+/i, '')
+    .replace(/\s+Vintage\s*$/i, '')
+    .trim();
+}
+
+/* Los tipos NO están escritos aquí a propósito: se deducen del propio panel.
+ * El cajón sin marca de cada tipo se llama exactamente igual que el tipo
+ * ("Hoodie Vintage" -> "Hoodie"), así que la lista de cajones ES la lista de
+ * tipos. Si mañana añadís un tipo nuevo, con que tenga su cajón aparece aquí
+ * solo y nadie tiene que tocar esta pantalla. */
+function organizar(listados) {
+  const limpios = listados.map((l) => ({ ...l, corto: limpiar(l.nombre) }));
+  const tipos = limpios
+    .filter((l) => limpios.some((o) => o !== l && o.corto.startsWith(l.corto + ' ')))
+    .map((l) => l.corto);
+  const unicos = [...new Set(tipos)].sort((a, b) => b.length - a.length);
+
+  const porTipo = new Map();
+  const sueltos = [];
+  for (const l of limpios) {
+    const t = unicos.find((u) => l.corto === u || l.corto.startsWith(u + ' '));
+    if (!t) { sueltos.push(l); continue; }
+    if (!porTipo.has(t)) porTipo.set(t, []);
+    porTipo.get(t).push({ ...l, marca: l.corto === t ? '' : l.corto.slice(t.length).trim() });
+  }
+  if (sueltos.length) porTipo.set('Otros', sueltos.map((l) => ({ ...l, marca: l.corto })));
+  return porTipo;
+}
+
+function pintar() {
+  const rej = $('rejilla'), vac = $('vacio');
+  rej.innerHTML = ''; vac.style.display = 'none'; rej.style.display = '';
+
+  if (!estado || !estado.listados || !estado.listados.length) {
+    rej.style.display = 'none';
+    vac.style.display = '';
+    vac.innerHTML = 'Todavía no hay listados.<br><br>' +
+      'Abre el panel de TikTok en el ordenador del directo y deja esa pestaña abierta. ' +
+      'En cuanto el ordenador vea los anuncios, aparecen aquí solos.';
+    $('tituloTxt').textContent = 'Esperando al ordenador';
+    $('volver').style.display = 'none';
+    return;
+  }
+
+  const porTipo = organizar(estado.listados);
+
+  if (!tipoAbierto) {
+    $('tituloTxt').textContent = 'Qué prenda es';
+    $('volver').style.display = 'none';
+    for (const [tipo, items] of porTipo) {
+      const b = document.createElement('button');
+      b.className = 'b';
+      const vend = items.reduce((n, x) => n + (x.vendidas || 0), 0);
+      b.innerHTML = '<span>' + tipo + '</span><span class="sub">' + items.length +
+        ' marcas · ' + vend + ' vendidas</span>';
+      b.onclick = () => { tipoAbierto = tipo; pintar(); };
+      rej.appendChild(b);
+    }
+    return;
+  }
+
+  $('tituloTxt').textContent = tipoAbierto;
+  $('volver').style.display = '';
+  const items = porTipo.get(tipoAbierto) || [];
+  /* La marca vacía es el cajón; va al final y con el borde punteado para que se
+   * vea que es el "lo que sea" y no una marca más. */
+  items.sort((a, b2) => (a.marca ? 0 : 1) - (b2.marca ? 0 : 1) || a.marca.localeCompare(b2.marca));
+  for (const it of items) {
+    const b = document.createElement('button');
+    b.className = 'b' + (it.marca ? '' : ' sinmarca');
+    b.innerHTML = '<span>' + (it.marca || 'Sin marca') + '</span>' +
+      '<span class="sub">' + (it.vendidas || 0) + ' vendidas</span>';
+    b.onclick = () => pedir(it);
+    rej.appendChild(b);
+  }
+}
+
+async function pedir(item) {
+  const ahora = Date.now();
+  if (ahora < bloqueadoHasta) return;      // dos toques seguidos sin querer
+  bloqueadoHasta = ahora + 1500;
+  $('bloqueo').classList.add('ver');
+  setTimeout(() => $('bloqueo').classList.remove('ver'), 1200);
+
+  try {
+    const r = await fetch(API + '?d=' + encodeURIComponent(CODIGO), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ live: 1, directo: DIRECTO, accion: 'pedir',
+        listado: item.id, nombre: item.nombre })
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'no');
+    estado = j;
+    ordenMia = j.orden ? j.orden.id : null;
+    aviso('Va ' + (item.marca || 'sin marca'));
+    tipoAbierto = null;
+    pintar();
+  } catch (e) {
+    aviso('No se ha podido mandar. Mira la conexión.', true);
+  }
+}
+
+function cabecera() {
+  if (!estado) return;
+  $('ficha').textContent = (estado.ficha || 0) + 1;
+
+  const l = estado.listados_cuando ? (Date.now() - new Date(estado.listados_cuando).getTime()) / 1000 : 1e9;
+  const vivo = l < 25;
+  $('punto').className = 'punto ' + (vivo ? 'on' : 'off');
+
+  let txt;
+  if (!vivo) txt = 'el ordenador no responde';
+  else if (estado.orden && estado.orden.estado === 'pendiente') txt = 'lanzando ' + limpiar(estado.orden.nombre);
+  else if (estado.orden && estado.orden.estado === 'error') txt = 'falló: ' + (estado.orden.error || 'sin motivo');
+  else if (estado.orden) txt = 'en marcha: ' + limpiar(estado.orden.nombre);
+  else txt = 'listo';
+  $('txtEstado').textContent = txt;
+
+  if (estado.orden && estado.orden.estado === 'error' && estado.orden.id === ordenMia) {
+    ordenMia = null;
+    aviso('No arrancó: ' + (estado.orden.error || 'sin motivo'), true);
+  }
+}
+
+let pintadoUltimo = '';
+async function mirar() {
+  try {
+    const r = await fetch(API + '?d=' + encodeURIComponent(CODIGO) +
+      '&directo=' + encodeURIComponent(DIRECTO) + '&live=1&_=' + Date.now());
+    const j = await r.json();
+    if (j.ok) {
+      estado = j;
+      cabecera();
+      /* Solo se vuelve a pintar si ha cambiado algo de la lista: repintar cada
+       * dos segundos mientras alguien va a tocar un botón es la forma más
+       * tonta de que un toque caiga en el botón equivocado. */
+      const huella = JSON.stringify((j.listados || []).map((x) => [x.id, x.nombre, x.vendidas]));
+      if (huella !== pintadoUltimo) { pintadoUltimo = huella; pintar(); }
+    }
+  } catch (e) { $('punto').className = 'punto off'; $('txtEstado').textContent = 'sin conexión'; }
+}
+
+if (!CODIGO || !DIRECTO) {
+  $('rejilla').style.display = 'none';
+  $('vacio').style.display = '';
+  $('vacio').textContent = 'Falta el código o el directo en el enlace.';
+} else {
+  mirar();
+  setInterval(mirar, 2000);
+}
+</script>
+</body>
+</html>
