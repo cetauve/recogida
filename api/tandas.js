@@ -53,13 +53,16 @@ const { db, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerp
  * único que pueden escribir: una categoría por prenda. No mueve pedidos, no
  * crea etiquetas y no toca nada de TikTok.
  * ========================================================================= */
+let tablaMarcasHecha = false;
 async function tablaDeMarcas(s) {
+  if (tablaMarcasHecha) return;
   await s`
     create table if not exists marcado (
       juego  text primary key,
       marcas jsonb not null default '{}'::jsonb,
       cuando timestamptz not null default now()
     )`;
+  tablaMarcasHecha = true;
 }
 
 const sinNulos = (o) => {
@@ -159,20 +162,39 @@ async function guardarMarcas(s, res, juego, entran) {
  * pasar es que alguien lance una subasta mientras estáis emitiendo. Cuando haya
  * plan de pago esto debería mudarse a su propio sitio y con su propia llave.
  * ========================================================================= */
+/* EL "CREATE TABLE IF NOT EXISTS" NO PUEDE IR EN CADA LECTURA.
+ * 22 sep 2026: la pantalla del directo pregunta cada dos segundos y el agente
+ * otro tanto. Con esa concurrencia, dos CREATE TABLE a la vez se bloquean
+ * entre ellos en Postgres y la llamada se queda colgada PARA SIEMPRE: no da
+ * error, no devuelve nada, y la pantalla se queda en "conectando". Así que se
+ * hace una vez por instancia y quien lee no toca la estructura nunca. */
+let tablaDirectoHecha = false;
 async function tablaDeDirecto(s) {
+  if (tablaDirectoHecha) return;
   await s`
     create table if not exists directo_vivo (
       sesion text primary key,
       estado jsonb not null default '{}'::jsonb,
       cuando timestamptz not null default now()
     )`;
+  tablaDirectoHecha = true;
 }
 
 const ESTADO_VACIO = { room: '', listados: [], listados_cuando: null, orden: null, ficha: 0, ventas: [] };
 
-async function leerDirecto(s, sesion) {
-  await tablaDeDirecto(s);
-  const filas = await s`select estado, cuando from directo_vivo where sesion = ${sesion}`;
+async function leerDirecto(s, sesion, crear) {
+  if (crear) await tablaDeDirecto(s);
+  let filas;
+  try {
+    filas = await s`select estado, cuando from directo_vivo where sesion = ${sesion}`;
+  } catch (e) {
+    /* Todavia no existe la tabla: es el primer dia y nadie ha escrito nada.
+     * Eso no es un error para quien lee, es un "aun no hay nada". */
+    if (String(e && e.message || '').includes('directo_vivo')) {
+      return { hay: false, estado: { ...ESTADO_VACIO } };
+    }
+    throw e;
+  }
   if (!filas.length) return { hay: false, estado: { ...ESTADO_VACIO } };
   return { hay: true, estado: { ...ESTADO_VACIO, ...(filas[0].estado || {}) }, cuando: filas[0].cuando };
 }
@@ -205,7 +227,7 @@ function vistaDirecto(sesion, e, cuando) {
 
 async function accionDirecto(s, res, sesion, b) {
   if (!sesion) return res.status(400).json({ ok: false, error: 'sin-directo' });
-  const { estado } = await leerDirecto(s, sesion);
+  const { estado } = await leerDirecto(s, sesion, true);
   const accion = aTexto(b.accion).trim();
 
   if (accion === 'listados') {
