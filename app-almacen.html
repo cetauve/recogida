@@ -581,6 +581,25 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
         (c.porCuenta || []).map(x => String(x.cuenta || '')))))))].filter(Boolean);
     if (!cuentas.length) return 0;
 
+    /* CON VARIAS CUENTAS NO SE PARTE POR DIRECTO - 22 sep 2026.
+     *
+     * EL FALLO: la tarjeta decia "billysvlc . directo 3" un dia en el que
+     * billysvlc hizo UN solo directo. El token de TikTok es por TIENDA, no por
+     * cuenta, asi que al preguntar por los pedidos de billysvlc contesta con
+     * los de toda la tienda: los de billystour, los de billystacos y los suyos.
+     * Esto contaba esos tres anuncios como si fueran tres directos de
+     * billysvlc, y el suyo, que empezo el ultimo, salia como el 3.
+     *
+     * Cuando en el paso 2 se ha separado en varias cuentas, ya esta hecho el
+     * trabajo: cada grupo lleva su cuenta y eso es lo que identifica la prenda.
+     * Partir por directo ahi solo puede mentir, porque desde la API no hay
+     * forma de saber de que cuenta es cada anuncio.
+     *
+     * Se sigue partiendo cuando la recogida es de UNA sola cuenta, que es el
+     * caso para el que se hizo: Alemania, dos directos seguidos en billys_de
+     * con los numeros pisados. */
+    if (cuentas.length > 1) return 0;
+
     /* Guardado por juego Y por hora de calculo: cada paso 2 rehace las tandas, y
      * si el segundo directo empezo despues de la ultima consulta hay que volver a
      * preguntar en vez de arrastrar un "aqui solo hubo uno" que ya no es verdad. */
