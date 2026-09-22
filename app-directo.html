@@ -222,23 +222,48 @@ function cabecera() {
   }
 }
 
-let pintadoUltimo = '';
+/* PREGUNTAR SIN TUMBAR EL SERVIDOR.
+ * El 22 sep 2026 esta pantalla y el ordenador preguntaban cada dos segundos a
+ * la vez. El servidor abre una conexión a la base por cada pregunta, se quedó
+ * sin libres, y dejó de responder TODA la API, también las tandas del almacén.
+ * Por eso ahora: cada llamada se corta a los ocho segundos, las vueltas van
+ * encadenadas (nunca se solapan) y, si algo falla, se espera el doble cada vez
+ * hasta un minuto. Insistir más fuerte contra un servidor que va mal es
+ * exactamente lo que lo tira. */
+const RITMO = 3000, MAX = 60000, CORTE = 8000;
+let pintadoUltimo = '', espera = RITMO;
+
+function llamar(url) {
+  const corta = new AbortController();
+  const reloj = setTimeout(() => corta.abort(), CORTE);
+  return fetch(url, { signal: corta.signal })
+    .then((r) => r.json())
+    .finally(() => clearTimeout(reloj));
+}
+
 async function mirar() {
   try {
-    const r = await fetch(API + '?d=' + encodeURIComponent(CODIGO) +
+    const j = await llamar(API + '?d=' + encodeURIComponent(CODIGO) +
       '&directo=' + encodeURIComponent(DIRECTO) + '&live=1&_=' + Date.now());
-    const j = await r.json();
-    if (!j.ok) { $('txtEstado').textContent = 'el servidor dice: ' + (j.error || 'no'); return; }
-    if (j.ok) {
+    if (!j.ok) {
+      $('punto').className = 'punto off';
+      $('txtEstado').textContent = 'el servidor dice: ' + (j.error || 'no');
+    } else {
       estado = j;
       cabecera();
-      /* Solo se vuelve a pintar si ha cambiado algo de la lista: repintar cada
-       * dos segundos mientras alguien va a tocar un botón es la forma más
-       * tonta de que un toque caiga en el botón equivocado. */
+      /* Solo se vuelve a pintar si ha cambiado algo de la lista: repintar
+       * mientras alguien va a tocar un botón es la forma más tonta de que un
+       * toque caiga en el botón equivocado. */
       const huella = JSON.stringify((j.listados || []).map((x) => [x.id, x.nombre, x.vendidas]));
       if (huella !== pintadoUltimo) { pintadoUltimo = huella; pintar(); }
     }
-  } catch (e) { $('punto').className = 'punto off'; $('txtEstado').textContent = 'sin conexión'; }
+    espera = RITMO;
+  } catch (e) {
+    $('punto').className = 'punto off';
+    $('txtEstado').textContent = 'sin respuesta del servidor';
+    espera = Math.min(espera * 2, MAX);
+  }
+  setTimeout(mirar, espera);
 }
 
 if (PRUEBA) $('banda').style.display = '';
@@ -248,7 +273,6 @@ if (!CODIGO || !DIRECTO) {
   $('vacio').textContent = 'Falta el código o el directo en el enlace.';
 } else {
   mirar();
-  setInterval(mirar, 2500);
 }
 </script>
 </body>
