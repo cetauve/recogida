@@ -256,7 +256,11 @@ async function accionDirecto(s, res, sesion, b) {
       nombre: aTexto(b.nombre).slice(0, 255),
       pedida: new Date().toISOString(),
       estado: 'pendiente',
-      error: ''
+      error: '',
+      /* En prueba no se subasta nada: el ordenador sube ese anuncio al primer
+       * puesto, que es inofensivo y se ve en el panel. Sirve para comprobar el
+       * camino entero (tablet, servidor, ordenador, TikTok) sin emitir. */
+      prueba: !!b.prueba
     };
     const cuando = await guardarDirecto(s, sesion, estado);
     return res.status(200).json(vistaDirecto(sesion, estado, cuando));
