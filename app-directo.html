@@ -201,7 +201,7 @@ function cabecera() {
   $('ficha').textContent = (estado.ficha || 0) + 1;
 
   const l = estado.listados_cuando ? (Date.now() - new Date(estado.listados_cuando).getTime()) / 1000 : 1e9;
-  const vivo = l < 25;
+  const vivo = l < 45;
   $('punto').className = 'punto ' + (vivo ? 'on' : 'off');
 
   let txt;
@@ -224,6 +224,7 @@ async function mirar() {
     const r = await fetch(API + '?d=' + encodeURIComponent(CODIGO) +
       '&directo=' + encodeURIComponent(DIRECTO) + '&live=1&_=' + Date.now());
     const j = await r.json();
+    if (!j.ok) { $('txtEstado').textContent = 'el servidor dice: ' + (j.error || 'no'); return; }
     if (j.ok) {
       estado = j;
       cabecera();
@@ -242,7 +243,7 @@ if (!CODIGO || !DIRECTO) {
   $('vacio').textContent = 'Falta el código o el directo en el enlace.';
 } else {
   mirar();
-  setInterval(mirar, 2000);
+  setInterval(mirar, 2500);
 }
 </script>
 </body>
