@@ -3,76 +3,102 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Billy's · Directo</title>
 <style>
   :root{
-    --fondo:#101214; --caja:#1b1f23; --borde:#2b3238;
-    --texto:#f2f4f5; --suave:#9aa5ad; --acento:#3fb6a8; --malo:#d9534f; --ok:#57b85c;
+    --fondo:#0e1012; --caja:#191d21; --caja2:#20262b; --borde:#2d353c;
+    --texto:#f4f6f7; --suave:#8f9aa3; --acento:#3fb6a8; --malo:#e05b55; --ok:#5ec264;
+    --alto: 118px;
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
   html,body{margin:0;height:100%;background:var(--fondo);color:var(--texto);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    overscroll-behavior:none;user-select:none}
+    overscroll-behavior:none;user-select:none;overflow:hidden}
   body{display:flex;flex-direction:column}
 
-  header{display:flex;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--borde);background:var(--caja)}
-  .ficha{display:flex;align-items:baseline;gap:10px}
-  .ficha .et{font-size:13px;letter-spacing:.14em;color:var(--suave);text-transform:uppercase}
-  .ficha .n{font-size:46px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
-  .estado{margin-left:auto;text-align:right;font-size:13px;color:var(--suave);max-width:46%}
-  .punto{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--suave);margin-right:6px;vertical-align:middle}
+  /* ---- cabecera ---- */
+  header{display:flex;align-items:center;gap:20px;padding:10px 20px;
+    border-bottom:1px solid var(--borde);background:var(--caja);flex:0 0 auto}
+  .ficha{display:flex;align-items:baseline;gap:12px;min-width:210px}
+  .ficha .et{font-size:12px;letter-spacing:.16em;color:var(--suave);text-transform:uppercase}
+  .ficha .n{font-size:56px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
+    transition:color .15s ease}
+  .ficha .n.sube{color:var(--acento)}
+  .ultima{flex:1;font-size:15px;color:var(--suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ultima b{color:var(--texto);font-weight:600}
+  .estado{font-size:13px;color:var(--suave);text-align:right;min-width:160px}
+  .punto{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--suave);margin-right:7px}
   .punto.on{background:var(--ok)} .punto.off{background:var(--malo)}
+  .banda{background:#8a5a00;color:#fff;padding:7px;font-size:14px;font-weight:600;text-align:center;flex:0 0 auto}
 
-  main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px}
-  .titulo{font-size:15px;color:var(--suave);margin:0 0 12px;display:flex;align-items:center;gap:12px}
-  .rejilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
-  button.b{appearance:none;border:1px solid var(--borde);background:var(--caja);color:var(--texto);
-    border-radius:16px;padding:26px 18px;font-size:23px;font-weight:650;text-align:left;
-    min-height:108px;display:flex;flex-direction:column;justify-content:space-between;gap:10px;
-    transition:transform .05s ease, background .1s ease}
-  button.b:active{transform:scale(.97);background:#242a30}
-  button.b .sub{font-size:13px;font-weight:500;color:var(--suave)}
-  button.b.sinmarca{border-style:dashed}
-  button.volver{appearance:none;border:1px solid var(--borde);background:transparent;color:var(--suave);
-    border-radius:10px;padding:8px 14px;font-size:14px}
+  /* ---- tipos: SIEMPRE en el mismo sitio y siempre visibles ---- */
+  .tipos{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:10px 20px 4px;flex:0 0 auto}
+  button.tipo{appearance:none;border:1px solid var(--borde);background:var(--caja);color:var(--suave);
+    border-radius:12px;padding:13px 6px;font-size:17px;font-weight:650;line-height:1.15;
+    min-height:58px;transition:background .1s ease,color .1s ease,border-color .1s ease}
+  button.tipo:active{transform:scale(.97)}
+  button.tipo.on{background:var(--acento);border-color:var(--acento);color:#06201d}
 
-  .aviso{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
-    background:var(--caja);border:1px solid var(--borde);border-radius:14px;
-    padding:14px 22px;font-size:17px;box-shadow:0 8px 30px rgba(0,0,0,.5);
-    opacity:0;pointer-events:none;transition:opacity .15s ease;max-width:90vw;text-align:center}
+  /* ---- marcas del tipo elegido ---- */
+  main{flex:1;padding:10px 20px 20px;display:flex;flex-direction:column;min-height:0}
+  .marcas{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1;min-height:0}
+  button.marca{appearance:none;border:1px solid var(--borde);background:var(--caja2);color:var(--texto);
+    border-radius:16px;font-size:30px;font-weight:700;padding:10px 14px;min-height:var(--alto);
+    display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;
+    transition:transform .05s ease,background .1s ease}
+  button.marca:active{transform:scale(.97);background:#2b333a}
+  button.marca .sub{font-size:13px;font-weight:500;color:var(--suave)}
+  button.marca.cajon{border-style:dashed;background:var(--caja)}
+  .elige{display:flex;align-items:center;justify-content:center;height:100%;color:var(--suave);
+    font-size:20px;text-align:center;line-height:1.6}
+
+  /* ---- avisos ---- */
+  .aviso{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+    background:var(--caja2);border:1px solid var(--borde);border-radius:14px;
+    padding:16px 28px;font-size:21px;font-weight:600;box-shadow:0 10px 34px rgba(0,0,0,.6);
+    opacity:0;pointer-events:none;transition:opacity .12s ease;max-width:92vw;text-align:center;z-index:9}
   .aviso.ver{opacity:1}
-  .aviso.error{border-color:var(--malo);color:#ffb3b0}
-  .vacio{color:var(--suave);font-size:16px;line-height:1.6;padding:30px 4px;max-width:640px}
-  .bloqueo{position:fixed;inset:0;background:rgba(16,18,20,.55);display:none}
-  .bloqueo.ver{display:block}
+  .aviso.error{border-color:var(--malo);color:#ffb9b6;background:#2a1a19}
+  .tapa{position:fixed;inset:0;background:rgba(14,16,18,.35);display:none;z-index:8}
+  .tapa.ver{display:block}
+  .vacio{padding:40px 6px;color:var(--suave);font-size:18px;line-height:1.7;max-width:680px}
 </style>
 </head>
 <body>
-<div id="banda" style="display:none;background:#8a5a00;color:#fff;padding:9px 18px;font-size:15px;font-weight:600;text-align:center">
-  MODO PRUEBA · no se subasta nada, solo se sube el anuncio en la lista
-</div>
+<div class="banda" id="banda" style="display:none">MODO PRUEBA · no se subasta nada</div>
+
 <header>
   <div class="ficha"><span class="et">Ficha</span><span class="n" id="ficha">--</span></div>
+  <div class="ultima" id="ultima"></div>
   <div class="estado"><span class="punto" id="punto"></span><span id="txtEstado">conectando</span></div>
 </header>
 
-<main>
-  <p class="titulo"><span id="tituloTxt">Cargando</span><button class="volver" id="volver" style="display:none">Volver</button></p>
-  <div class="rejilla" id="rejilla"></div>
-  <div class="vacio" id="vacio" style="display:none"></div>
-</main>
+<div class="tipos" id="tipos"></div>
+<main><div class="marcas" id="marcas"></div></main>
 
-<div class="bloqueo" id="bloqueo"></div>
+<div class="tapa" id="tapa"></div>
 <div class="aviso" id="aviso"></div>
 
 <script>
 /* Billy's · pantalla del directo.
  *
- * Dos toques: tipo de prenda y marca. Al segundo toque se deja una orden en el
- * servidor y el ordenador del directo la recoge y lanza la subasta.
+ * TRES DECISIONES DE LAS QUE DEPENDE QUE ESTO SE USE RAPIDO:
  *
- * Esta pantalla NO habla con TikTok. Solo deja la orden. Si el ordenador no
- * está escuchando, aquí se ve y no se lanza nada a ciegas.
+ * 1. EL TIPO SE QUEDA PUESTO. En el perchero las prendas van agrupadas, asi que
+ *    tras elegir "Hoodie" lo normal es que vengan varias seguidas. Con el tipo
+ *    fijado, cada prenda cuesta UN toque, no dos. Si cambia el tipo, se toca
+ *    arriba y sigue.
+ *
+ * 2. NADA SE MUEVE DE SITIO, NUNCA. Ni los tipos ni las marcas se reordenan por
+ *    lo que vaya pasando en el directo. El orden lo fija la lista de abajo y no
+ *    depende de cuantas se hayan vendido. Si los botones bailan, la vendedora
+ *    no puede memorizar donde esta cada cosa, que es justo lo que hace que a
+ *    los dos dias vaya sin mirar.
+ *
+ * 3. LAS MARCAS SIEMPRE EN EL MISMO ORDEN ENTRE SI. Nike va antes que Adidas en
+ *    todos los tipos. La posicion exacta cambia segun cuantas marcas tenga cada
+ *    tipo, pero la secuencia no, y eso basta para cogerle el aire.
  */
 const P = new URLSearchParams(location.search);
 const CODIGO  = P.get('d') || '';
@@ -80,8 +106,18 @@ const DIRECTO = P.get('directo') || '';
 const PRUEBA  = P.get('prueba') === '1';
 const API = '/api/tandas';
 
+/* El orden de la pantalla. Se toca AQUI y en ningun otro sitio. Lo que no
+ * aparezca en estas listas se pinta detras, por orden alfabetico. */
+const ORDEN_TIPOS = ['Hoodie','T Shirt','Shirt','Jersey','Football Shirt',
+                     'Jacket','Track Jacket','Anorak','Track Pant','Jeans','Shorts'];
+const ORDEN_MARCAS = ['Nike','Adidas','Puma','Champion','Ellesse',
+                      'Ralph Lauren','Lacoste','Tommy Hilfiger','Hugo Boss','Gant',
+                      'Levi’s',"Levi's",'Wrangler','Lee','Diesel','Carhartt',
+                      'The North Face','Columbia','Helly Hansen','Berghaus','Jack Wolfskin',
+                      'Umbro','Kappa'];
+
 const $ = (id) => document.getElementById(id);
-let estado = null, tipoAbierto = null, bloqueadoHasta = 0, ordenMia = null;
+let estado = null, tipoElegido = null, bloqueoHasta = 0, ordenMia = null, fichaPintada = null;
 
 function aviso(txt, malo) {
   const a = $('aviso');
@@ -89,99 +125,97 @@ function aviso(txt, malo) {
   a.classList.toggle('error', !!malo);
   a.classList.add('ver');
   clearTimeout(a._t);
-  a._t = setTimeout(() => a.classList.remove('ver'), malo ? 5000 : 1800);
+  a._t = setTimeout(() => a.classList.remove('ver'), malo ? 6000 : 1400);
 }
 
-/* El nombre que pone TikTok es "#7 Gebrauchtes Hoodie Nike Vintage". Se le
- * quita el número, el prefijo que añade TikTok y el "Vintage" del final, y
- * queda "Hoodie Nike". */
+/* "#7 Gebrauchtes Hoodie Nike" -> "Hoodie Nike" */
 function limpiar(nombre) {
   return String(nombre || '')
     .replace(/^#\d+\s*/, '')
     .replace(/^Gebrauchtes?\s+/i, '')
-    .replace(/\s+Vintage\s*$/i, '')
     .trim();
 }
 
-/* Los tipos NO están escritos aquí a propósito: se deducen del propio panel.
- * El cajón sin marca de cada tipo se llama exactamente igual que el tipo
- * ("Hoodie Vintage" -> "Hoodie"), así que la lista de cajones ES la lista de
- * tipos. Si mañana añadís un tipo nuevo, con que tenga su cajón aparece aquí
- * solo y nadie tiene que tocar esta pantalla. */
+/* Los tipos no estan escritos en el codigo: se deducen del panel. El cajon de
+ * cada tipo se llama "<tipo> Vintage", asi que la lista de cajones es la lista
+ * de tipos. Si se añade un tipo nuevo al Excel, aparece aqui solo. */
 function organizar(listados) {
   const limpios = listados.map((l) => ({ ...l, corto: limpiar(l.nombre) }));
-  const tipos = limpios
-    .filter((l) => limpios.some((o) => o !== l && o.corto.startsWith(l.corto + ' ')))
-    .map((l) => l.corto);
-  const unicos = [...new Set(tipos)].sort((a, b) => b.length - a.length);
+  const tipos = [...new Set(limpios
+    .filter((l) => /\sVintage$/i.test(l.corto))
+    .map((l) => l.corto.replace(/\s+Vintage$/i, '')))]
+    .sort((a, b) => b.length - a.length);
 
   const porTipo = new Map();
   const sueltos = [];
   for (const l of limpios) {
-    const t = unicos.find((u) => l.corto === u || l.corto.startsWith(u + ' '));
+    const t = tipos.find((u) => l.corto === u + ' Vintage' || l.corto.startsWith(u + ' '));
     if (!t) { sueltos.push(l); continue; }
+    const marca = (l.corto === t + ' Vintage') ? '' : l.corto.slice(t.length).trim();
     if (!porTipo.has(t)) porTipo.set(t, []);
-    porTipo.get(t).push({ ...l, marca: l.corto === t ? '' : l.corto.slice(t.length).trim() });
+    porTipo.get(t).push({ ...l, marca });
   }
   if (sueltos.length) porTipo.set('Otros', sueltos.map((l) => ({ ...l, marca: l.corto })));
-  return porTipo;
+
+  const pos = (lista, x) => { const i = lista.indexOf(x); return i < 0 ? 900 + x.length : i; };
+  const ordenados = [...porTipo.entries()]
+    .sort((a, b) => pos(ORDEN_TIPOS, a[0]) - pos(ORDEN_TIPOS, b[0]) || a[0].localeCompare(b[0]));
+  for (const [, items] of ordenados) {
+    items.sort((a, b) => (a.marca ? 0 : 1) - (b.marca ? 0 : 1) ||
+      pos(ORDEN_MARCAS, a.marca) - pos(ORDEN_MARCAS, b.marca) || a.marca.localeCompare(b.marca));
+  }
+  return new Map(ordenados);
 }
 
-function pintar() {
-  const rej = $('rejilla'), vac = $('vacio');
-  rej.innerHTML = ''; vac.style.display = 'none'; rej.style.display = '';
+let mapa = new Map(), huellaPintada = '';
 
-  if (!estado || !estado.listados || !estado.listados.length) {
-    rej.style.display = 'none';
-    vac.style.display = '';
-    vac.innerHTML = 'Todavía no hay listados.<br><br>' +
+function pintarTipos() {
+  const cont = $('tipos');
+  cont.innerHTML = '';
+  if (!mapa.size) return;
+  const n = mapa.size;
+  cont.style.gridTemplateColumns = 'repeat(' + Math.min(6, Math.ceil(n / Math.ceil(n / 6))) + ',1fr)';
+  for (const [tipo] of mapa) {
+    const b = document.createElement('button');
+    b.className = 'tipo' + (tipo === tipoElegido ? ' on' : '');
+    b.textContent = tipo;
+    b.onclick = () => { tipoElegido = tipo; pintarTipos(); pintarMarcas(); };
+    cont.appendChild(b);
+  }
+}
+
+function pintarMarcas() {
+  const cont = $('marcas');
+  cont.innerHTML = '';
+  if (!mapa.size) {
+    cont.innerHTML = '<div class="vacio">Todavía no hay anuncios.<br><br>' +
       'Abre el panel de TikTok en el ordenador del directo y deja esa pestaña abierta. ' +
-      'En cuanto el ordenador vea los anuncios, aparecen aquí solos.';
-    $('tituloTxt').textContent = 'Esperando al ordenador';
-    $('volver').style.display = 'none';
+      'En cuanto los vea, aparecen aquí solos.</div>';
     return;
   }
-
-  const porTipo = organizar(estado.listados);
-
-  if (!tipoAbierto) {
-    $('tituloTxt').textContent = 'Qué prenda es';
-    $('volver').style.display = 'none';
-    for (const [tipo, items] of porTipo) {
-      const b = document.createElement('button');
-      b.className = 'b';
-      const vend = items.reduce((n, x) => n + (x.vendidas || 0), 0);
-      b.innerHTML = '<span>' + tipo + '</span><span class="sub">' + items.length +
-        ' marcas · ' + vend + ' vendidas</span>';
-      b.onclick = () => { tipoAbierto = tipo; pintar(); };
-      rej.appendChild(b);
-    }
+  if (!tipoElegido) {
+    cont.innerHTML = '<div class="elige">Elige arriba qué prenda es.<br>' +
+      'Se queda puesta, así que si vienen varias seguidas<br>solo tocas la marca.</div>';
     return;
   }
-
-  $('tituloTxt').textContent = tipoAbierto;
-  $('volver').style.display = '';
-  const items = porTipo.get(tipoAbierto) || [];
-  /* La marca vacía es el cajón; va al final y con el borde punteado para que se
-   * vea que es el "lo que sea" y no una marca más. */
-  items.sort((a, b2) => (a.marca ? 0 : 1) - (b2.marca ? 0 : 1) || a.marca.localeCompare(b2.marca));
+  const items = mapa.get(tipoElegido) || [];
+  cont.style.gridTemplateColumns = 'repeat(' + (items.length <= 4 ? 2 : 3) + ',1fr)';
   for (const it of items) {
     const b = document.createElement('button');
-    b.className = 'b' + (it.marca ? '' : ' sinmarca');
+    b.className = 'marca' + (it.marca ? '' : ' cajon');
     b.innerHTML = '<span>' + (it.marca || 'Sin marca') + '</span>' +
       '<span class="sub">' + (it.vendidas || 0) + ' vendidas</span>';
     b.onclick = () => pedir(it);
-    rej.appendChild(b);
+    cont.appendChild(b);
   }
 }
 
 async function pedir(item) {
   const ahora = Date.now();
-  if (ahora < bloqueadoHasta) return;      // dos toques seguidos sin querer
-  bloqueadoHasta = ahora + 1500;
-  $('bloqueo').classList.add('ver');
-  setTimeout(() => $('bloqueo').classList.remove('ver'), 1200);
-
+  if (ahora < bloqueoHasta) return;        /* dos toques seguidos sin querer */
+  bloqueoHasta = ahora + 1400;
+  $('tapa').classList.add('ver');
+  setTimeout(() => $('tapa').classList.remove('ver'), 1100);
   try {
     const r = await fetch(API + '?d=' + encodeURIComponent(CODIGO), {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -190,11 +224,10 @@ async function pedir(item) {
     });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'no');
-    estado = j;
-    ordenMia = j.orden ? j.orden.id : null;
-    aviso(PRUEBA ? 'PRUEBA · sube ' + (item.marca || 'sin marca') : 'Va ' + (item.marca || 'sin marca'));
-    tipoAbierto = null;
-    pintar();
+    estado = j; ordenMia = j.orden ? j.orden.id : null;
+    aviso((PRUEBA ? 'PRUEBA · ' : '') + tipoElegido + ' ' + (item.marca || 'sin marca'));
+    cabecera();
+    /* El tipo NO se deselecciona: lo normal es que la siguiente sea igual. */
   } catch (e) {
     aviso('No se ha podido mandar. Mira la conexión.', true);
   }
@@ -202,17 +235,27 @@ async function pedir(item) {
 
 function cabecera() {
   if (!estado) return;
-  $('ficha').textContent = (estado.ficha || 0) + 1;
+  const n = (estado.ficha || 0) + 1;
+  const el = $('ficha');
+  if (fichaPintada !== null && n !== fichaPintada) {
+    el.classList.add('sube');
+    setTimeout(() => el.classList.remove('sube'), 600);
+  }
+  fichaPintada = n;
+  el.textContent = n;
+
+  const u = (estado.ultimas || [])[ (estado.ultimas || []).length - 1 ];
+  $('ultima').innerHTML = u
+    ? 'Última vendida: <b>ficha ' + u.ficha + '</b> · ' + limpiar(u.nombre) + ' · ' + (u.precio || '')
+    : '';
 
   const l = estado.listados_cuando ? (Date.now() - new Date(estado.listados_cuando).getTime()) / 1000 : 1e9;
   const vivo = l < 45;
   $('punto').className = 'punto ' + (vivo ? 'on' : 'off');
-
   let txt;
   if (!vivo) txt = 'el ordenador no responde';
-  else if (estado.orden && estado.orden.estado === 'pendiente') txt = 'lanzando ' + limpiar(estado.orden.nombre);
-  else if (estado.orden && estado.orden.estado === 'error') txt = 'falló: ' + (estado.orden.error || 'sin motivo');
-  else if (estado.orden) txt = 'en marcha: ' + limpiar(estado.orden.nombre);
+  else if (estado.orden && estado.orden.estado === 'pendiente') txt = 'lanzando…';
+  else if (estado.orden && estado.orden.estado === 'error') txt = 'falló';
   else txt = 'listo';
   $('txtEstado').textContent = txt;
 
@@ -222,16 +265,12 @@ function cabecera() {
   }
 }
 
-/* PREGUNTAR SIN TUMBAR EL SERVIDOR.
- * El 22 sep 2026 esta pantalla y el ordenador preguntaban cada dos segundos a
- * la vez. El servidor abre una conexión a la base por cada pregunta, se quedó
- * sin libres, y dejó de responder TODA la API, también las tandas del almacén.
- * Por eso ahora: cada llamada se corta a los ocho segundos, las vueltas van
- * encadenadas (nunca se solapan) y, si algo falla, se espera el doble cada vez
- * hasta un minuto. Insistir más fuerte contra un servidor que va mal es
- * exactamente lo que lo tira. */
+/* Preguntar sin tumbar el servidor: vueltas encadenadas, corte a los 8 segundos
+ * y freno progresivo si algo falla. El 22 sep 2026 tres cosas preguntando cada
+ * dos segundos dejaron toda la API sin responder, también las tandas del
+ * almacén. */
 const RITMO = 3000, MAX = 60000, CORTE = 8000;
-let pintadoUltimo = '', espera = RITMO;
+let espera = RITMO;
 
 function llamar(url) {
   const corta = new AbortController();
@@ -247,20 +286,25 @@ async function mirar() {
       '&directo=' + encodeURIComponent(DIRECTO) + '&live=1&_=' + Date.now());
     if (!j.ok) {
       $('punto').className = 'punto off';
-      $('txtEstado').textContent = 'el servidor dice: ' + (j.error || 'no');
+      $('txtEstado').textContent = j.error || 'el servidor dice que no';
     } else {
       estado = j;
       cabecera();
-      /* Solo se vuelve a pintar si ha cambiado algo de la lista: repintar
-       * mientras alguien va a tocar un botón es la forma más tonta de que un
-       * toque caiga en el botón equivocado. */
-      const huella = JSON.stringify((j.listados || []).map((x) => [x.id, x.nombre, x.vendidas]));
-      if (huella !== pintadoUltimo) { pintadoUltimo = huella; pintar(); }
+      /* Solo se repinta si cambia la LISTA de anuncios, no cuando cambian las
+       * ventas: repintar mientras alguien va a tocar es la forma más tonta de
+       * que un toque caiga en el botón de al lado. */
+      const huella = JSON.stringify((j.listados || []).map((x) => [x.id, x.nombre]));
+      if (huella !== huellaPintada) {
+        huellaPintada = huella;
+        mapa = organizar(j.listados || []);
+        if (tipoElegido && !mapa.has(tipoElegido)) tipoElegido = null;
+        pintarTipos(); pintarMarcas();
+      }
     }
     espera = RITMO;
   } catch (e) {
     $('punto').className = 'punto off';
-    $('txtEstado').textContent = 'sin respuesta del servidor';
+    $('txtEstado').textContent = 'sin respuesta';
     espera = Math.min(espera * 2, MAX);
   }
   setTimeout(mirar, espera);
@@ -268,10 +312,9 @@ async function mirar() {
 
 if (PRUEBA) $('banda').style.display = '';
 if (!CODIGO || !DIRECTO) {
-  $('rejilla').style.display = 'none';
-  $('vacio').style.display = '';
-  $('vacio').textContent = 'Falta el código o el directo en el enlace.';
+  $('marcas').innerHTML = '<div class="vacio">Falta el código o el directo en el enlace.</div>';
 } else {
+  pintarMarcas();
   mirar();
 }
 </script>
