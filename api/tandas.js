@@ -291,6 +291,9 @@ async function accionDirecto(s, res, sesion, b) {
       estado.ventas.push({
         ficha: estado.ficha,
         pedido: aTexto(v.pedido).slice(0, 32),
+        /* De que anuncio es. Sin esto no se puede traducir el numero de TikTok
+         * al de la ficha, porque cada anuncio numera desde el 1. */
+        producto: aTexto(v.producto).slice(0, 32),
         listado: aTexto(v.listado).slice(0, 32),
         nombre: aTexto(v.nombre).slice(0, 255),
         unidad: aTexto(v.unidad).slice(0, 16),
