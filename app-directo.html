@@ -7,9 +7,9 @@
 <title>Billy's · Directo</title>
 <style>
   :root{
-    --fondo:#0e1012; --caja:#191d21; --caja2:#20262b; --borde:#2d353c;
-    --texto:#f4f6f7; --suave:#8f9aa3; --acento:#3fb6a8; --malo:#e05b55; --ok:#5ec264;
-    --alto: 118px;
+    --fondo:#0d1117; --caja:#161c22; --caja2:#1d252c; --borde:#2b353d;
+    --texto:#f2f5f7; --suave:#8b97a1; --cian:#3fb6a8; --malo:#e05b55; --ok:#5ec264;
+    --arriba:#5C8FD6; --abajo:#D98A4A; --exterior:#7FB893;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
   html,body{margin:0;height:100%;background:var(--fondo);color:var(--texto);
@@ -17,55 +17,112 @@
     overscroll-behavior:none;user-select:none;overflow:hidden}
   body{display:flex;flex-direction:column}
 
-  /* ---- cabecera ---- */
-  header{display:flex;align-items:center;gap:20px;padding:10px 20px;
+  header{display:flex;align-items:center;gap:22px;padding:9px 18px;
     border-bottom:1px solid var(--borde);background:var(--caja);flex:0 0 auto}
-  .ficha{display:flex;align-items:baseline;gap:12px;min-width:210px}
-  .ficha .et{font-size:12px;letter-spacing:.16em;color:var(--suave);text-transform:uppercase}
-  .ficha .n{font-size:56px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
-    transition:color .15s ease}
-  .ficha .n.sube{color:var(--acento)}
-  .ultima{flex:1;font-size:15px;color:var(--suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ficha{display:flex;align-items:baseline;gap:11px;min-width:190px}
+  .ficha .et{font-size:11px;letter-spacing:.17em;color:var(--suave);text-transform:uppercase}
+  .ficha .n{font-size:50px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;transition:color .15s}
+  .ficha .n.sube{color:var(--cian)}
+  .ultima{flex:1;font-size:14px;color:var(--suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ultima b{color:var(--texto);font-weight:600}
-  .estado{font-size:13px;color:var(--suave);text-align:right;min-width:160px}
+  .estado{font-size:12.5px;color:var(--suave);text-align:right;min-width:150px}
   .punto{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--suave);margin-right:7px}
   .punto.on{background:var(--ok)} .punto.off{background:var(--malo)}
-  .banda{background:#8a5a00;color:#fff;padding:7px;font-size:14px;font-weight:600;text-align:center;flex:0 0 auto}
+  .banda{background:#8a5a00;color:#fff;padding:6px;font-size:13px;font-weight:600;text-align:center;flex:0 0 auto}
 
-  /* ---- tipos: SIEMPRE en el mismo sitio y siempre visibles ---- */
-  .tipos{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:10px 20px 4px;flex:0 0 auto}
-  button.tipo{appearance:none;border:1px solid var(--borde);background:var(--caja);color:var(--suave);
-    border-radius:12px;padding:13px 6px;font-size:17px;font-weight:650;line-height:1.15;
-    min-height:58px;transition:background .1s ease,color .1s ease,border-color .1s ease}
-  button.tipo:active{transform:scale(.97)}
-  button.tipo.on{background:var(--acento);border-color:var(--acento);color:#06201d}
+  .cuerpo{flex:1;display:grid;grid-template-columns:1.25fr 1fr;gap:14px;padding:12px 16px 16px;min-height:0}
 
-  /* ---- marcas del tipo elegido ---- */
-  main{flex:1;padding:10px 20px 20px;display:flex;flex-direction:column;min-height:0}
-  .marcas{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1;min-height:0}
+  /* ---- prendas, a la izquierda, SIEMPRE en el mismo sitio ---- */
+  .prendas{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-content:start;min-height:0}
+  .fam{display:flex;flex-direction:column;gap:9px;min-height:0}
+  .fam h2{margin:0 0 1px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--suave);display:flex;align-items:center;gap:7px;font-weight:800}
+  .fam h2 i{width:9px;height:9px;border-radius:50%;display:block}
+  button.cat{appearance:none;border:2px solid var(--borde);background:var(--caja);color:var(--texto);
+    border-radius:15px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:7px;flex:1;min-height:82px;transition:transform .05s,border-color .1s,background .1s}
+  button.cat svg{width:40px;height:40px;display:block;flex:none}
+  button.cat b{font-size:15px;font-weight:750;line-height:1.1;text-align:center;letter-spacing:-.01em}
+  button.cat:active{transform:scale(.96)}
+  button.cat.on{background:color-mix(in srgb,var(--cian) 22%,var(--caja))}
+
+  /* ---- marcas, a la derecha ---- */
+  .lado{display:flex;flex-direction:column;gap:10px;min-height:0}
+  .lado h3{margin:0;font-size:13px;color:var(--suave);font-weight:700;letter-spacing:.04em;
+    display:flex;align-items:center;gap:9px}
+  .lado h3 svg{width:22px;height:22px}
+  .marcas{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;flex:1;min-height:0}
   button.marca{appearance:none;border:1px solid var(--borde);background:var(--caja2);color:var(--texto);
-    border-radius:16px;font-size:30px;font-weight:700;padding:10px 14px;min-height:var(--alto);
-    display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;
-    transition:transform .05s ease,background .1s ease}
-  button.marca:active{transform:scale(.97);background:#2b333a}
-  button.marca .sub{font-size:13px;font-weight:500;color:var(--suave)}
-  button.marca.cajon{border-style:dashed;background:var(--caja)}
-  .elige{display:flex;align-items:center;justify-content:center;height:100%;color:var(--suave);
-    font-size:20px;text-align:center;line-height:1.6}
+    border-radius:16px;font-size:26px;font-weight:750;padding:8px 12px;line-height:1.1;
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    transition:transform .05s,background .1s}
+  button.marca:active{transform:scale(.96);background:#28323a}
+  button.marca.cajon{border-style:dashed;color:var(--suave);font-size:22px}
+  .espera{display:flex;align-items:center;justify-content:center;height:100%;
+    color:var(--suave);font-size:19px;text-align:center;line-height:1.7;
+    border:1px dashed var(--borde);border-radius:16px;padding:20px}
 
-  /* ---- avisos ---- */
-  .aviso{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+  .aviso{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
     background:var(--caja2);border:1px solid var(--borde);border-radius:14px;
-    padding:16px 28px;font-size:21px;font-weight:600;box-shadow:0 10px 34px rgba(0,0,0,.6);
-    opacity:0;pointer-events:none;transition:opacity .12s ease;max-width:92vw;text-align:center;z-index:9}
+    padding:15px 30px;font-size:22px;font-weight:700;box-shadow:0 10px 34px rgba(0,0,0,.6);
+    opacity:0;pointer-events:none;transition:opacity .12s;max-width:92vw;text-align:center;z-index:9}
   .aviso.ver{opacity:1}
   .aviso.error{border-color:var(--malo);color:#ffb9b6;background:#2a1a19}
-  .tapa{position:fixed;inset:0;background:rgba(14,16,18,.35);display:none;z-index:8}
+  .tapa{position:fixed;inset:0;background:rgba(13,17,23,.4);display:none;z-index:8}
   .tapa.ver{display:block}
-  .vacio{padding:40px 6px;color:var(--suave);font-size:18px;line-height:1.7;max-width:680px}
+  .vacio{padding:30px 6px;color:var(--suave);font-size:17px;line-height:1.7}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<g id="i-camiseta"><path d="M11 4 Q16 8.5 21 4 L26.5 6.5 L31 12.5 L27 15.5 L24.5 13 V29 H7.5 V13 L5 15.5 L1 12.5 L5.5 6.5 Z"/></g>
+<g id="i-sudadera"><path d="M10.2 8 Q9.6 1 16 1 Q22.4 1 21.8 8 Q16 5 10.2 8 Z"/>
+<path d="M11.2 7.4 Q16 11 20.8 7.4 L26 9.5 L28.8 25 H24.5 V29 H7.5 V25 H3.2 L6 9.5 Z"/>
+<rect x="11.5" y="20" width="9" height="5" rx="1.2" fill="#0E1723"/></g>
+<!-- CAMISA · cerrada y de una pieza, con cuello de puntas y botones.
+     Tiene que distinguirse de la CHAQUETA de un vistazo: la chaqueta va
+     abierta y son dos mitades; la camisa es un cuerpo entero. -->
+<g id="i-camisa"><path d="M11.5 4 L16 8.4 L20.5 4 L26 6.2 L28.8 24 H24.5 V29 H7.5 V24 H3.2 L6 6.2 Z"/>
+<path d="M12.6 4.1 L16 9.2 L19.4 4.1 L17.6 3.2 L16 5.9 L14.4 3.2 Z" fill="#0E1723"/>
+<circle cx="16" cy="13" r="1.15" fill="#0E1723"/>
+<circle cx="16" cy="18" r="1.15" fill="#0E1723"/>
+<circle cx="16" cy="23" r="1.15" fill="#0E1723"/></g>
+<g id="i-polo"><path d="M11 4 L16 9.5 L21 4 L26.5 6.5 L31 12.5 L27 15.5 L24.5 13 V29 H7.5 V13 L5 15.5 L1 12.5 L5.5 6.5 Z"/>
+<path d="M11.4 4.2 L16 10.2 L20.6 4.2 L18.2 3.1 L16 6.8 L13.8 3.1 Z" fill="#0E1723"/>
+<rect x="15.2" y="9.6" width="1.6" height="5.5" fill="#0E1723"/></g>
+<g id="i-punto"><path d="M11.2 4 Q16 8.6 20.8 4 L26 6.2 L28.8 22 H24.5 V29 H7.5 V22 H3.2 L6 6.2 Z"/>
+<rect x="7.5" y="25.5" width="17" height="3.5" fill="#0E1723"/>
+<rect x="3.4" y="19" width="4.6" height="3" fill="#0E1723"/>
+<rect x="24" y="19" width="4.6" height="3" fill="#0E1723"/></g>
+<g id="i-nba"><path d="M11.5 4 Q16 8.8 20.5 4 L24.5 5.6 Q22.2 9.2 22.2 14 V29 H9.8 V14 Q9.8 9.2 7.5 5.6 Z"/>
+<text x="16" y="25" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="900"
+ text-anchor="middle" fill="#0E1723">23</text></g>
+<g id="i-futbol"><path d="M11 4 Q16 8.5 21 4 L26.5 6.5 L31 12.5 L27 15.5 L24.5 13 V29 H7.5 V13 L5 15.5 L1 12.5 L5.5 6.5 Z"/>
+<text x="16" y="25" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="900"
+ text-anchor="middle" fill="#0E1723">10</text></g>
+<g id="i-vaquero"><path d="M8.5 3 H23.5 L24.5 29 H18.5 L16 15 L13.5 29 H7.5 Z"/>
+<rect x="8.6" y="5.6" width="14.8" height="2" fill="#0E1723"/>
+<path d="M9.4 9 Q12.4 12 13.6 9 Z" fill="#0E1723"/>
+<path d="M22.6 9 Q19.6 12 18.4 9 Z" fill="#0E1723"/></g>
+<g id="i-trackpants"><path d="M8.5 3 H23.5 L24.5 29 H18.5 L16 15 L13.5 29 H7.5 Z"/>
+<rect x="9.4" y="6" width="1.6" height="21" fill="#0E1723"/><rect x="21" y="6" width="1.6" height="21" fill="#0E1723"/></g>
+<g id="i-shorts"><path d="M8.5 4 H23.5 L24.5 18.5 H18.5 L16 11.5 L13.5 18.5 H7.5 Z"/>
+<rect x="9.4" y="7" width="1.6" height="9" fill="#0E1723"/><rect x="21" y="7" width="1.6" height="9" fill="#0E1723"/></g>
+<g id="i-chaqueta"><path d="M11.2 5.5 L15 11 V29 H7.5 V25 H3.2 L6 8 Z"/><path d="M20.8 5.5 L17 11 V29 H24.5 V25 H28.8 L26 8 Z"/>
+<path d="M11.6 5.8 L15 10.6 L13.2 14 L9.8 7.4 Z" fill="#0E1723"/><path d="M20.4 5.8 L17 10.6 L18.8 14 L22.2 7.4 Z" fill="#0E1723"/></g>
+<g id="i-chaleco"><path d="M11.5 4 Q16 8.6 20.5 4 L24.5 5.6 Q22 9 22 14 V29 H10 V14 Q10 9 7.5 5.6 Z"/>
+<rect x="10" y="15" width="12" height="1.6" fill="#0E1723"/>
+<rect x="10" y="21" width="12" height="1.6" fill="#0E1723"/></g>
+<g id="i-trackjacket"><path d="M11 5 H21 L26 9.5 L28.8 25 H24.5 V29 H7.5 V25 H3.2 L6 9.5 Z"/>
+<rect x="11" y="3.2" width="10" height="2.6" rx="1"/><rect x="15.2" y="5" width="1.6" height="24" fill="#0E1723"/>
+<rect x="5.2" y="11" width="1.4" height="13" fill="#0E1723"/><rect x="25.4" y="11" width="1.4" height="13" fill="#0E1723"/></g>
+<g id="i-anoraksra"><path d="M11 5 H21 L26 9 L28.4 20 H24.6 L23.4 16.5 Q21.6 19.6 21.6 22 V29 H10.4 V22
+ Q10.4 19.6 8.6 16.5 L7.4 20 H3.6 L6 9 Z"/>
+<rect x="15.2" y="5" width="1.6" height="24" fill="#0E1723"/>
+<path d="M10.4 20.4 Q16 22.6 21.6 20.4 L21.6 22.6 Q16 24.8 10.4 22.6 Z" fill="#0E1723"/></g>
+<g id="i-nose"><path d="M16 4.5 a7 7 0 0 1 7 7 q0 4-4 6 -2 1-2 4 h-2.4 q0-4.4 2.2-5.6 3-1.8 3-4.6 a3.8 3.8 0 0 0-7.6 0 H9.6 a6.4 6.4 0 0 1 6.4-6.8 Z"/>
+<circle cx="16" cy="27" r="2.1"/></g>
+</defs></svg>
 <div class="banda" id="banda" style="display:none">MODO PRUEBA · no se subasta nada</div>
 
 <header>
@@ -74,31 +131,36 @@
   <div class="estado"><span class="punto" id="punto"></span><span id="txtEstado">conectando</span></div>
 </header>
 
-<div class="tipos" id="tipos"></div>
-<main><div class="marcas" id="marcas"></div></main>
+<div class="cuerpo">
+  <div class="prendas" id="prendas"></div>
+  <div class="lado">
+    <h3 id="tituloLado">Qué prenda es</h3>
+    <div class="marcas" id="marcas"></div>
+  </div>
+</div>
 
 <div class="tapa" id="tapa"></div>
 <div class="aviso" id="aviso"></div>
-
 <script>
 /* Billy's · pantalla del directo.
  *
- * TRES DECISIONES DE LAS QUE DEPENDE QUE ESTO SE USE RAPIDO:
+ * LA DISTRIBUCION ES LA DE LA APP DE MARCAR DEL ALMACEN, con sus mismas
+ * familias, sus mismos colores y sus mismos iconos. Es a proposito: quien
+ * emite y quien recoge acaban siendo la misma gente, y aprender una pantalla
+ * tiene que servir para la otra.
  *
- * 1. EL TIPO SE QUEDA PUESTO. En el perchero las prendas van agrupadas, asi que
- *    tras elegir "Hoodie" lo normal es que vengan varias seguidas. Con el tipo
- *    fijado, cada prenda cuesta UN toque, no dos. Si cambia el tipo, se toca
- *    arriba y sigue.
+ * LO QUE CAMBIA RESPECTO AL MOVIL es que aqui hay sitio: las prendas viven a la
+ * izquierda y SIEMPRE estan todas a la vista, y las marcas aparecen a la
+ * derecha sin tapar nada. Dos toques, sin cambiar de pantalla y sin volver
+ * atras nunca.
  *
- * 2. NADA SE MUEVE DE SITIO, NUNCA. Ni los tipos ni las marcas se reordenan por
- *    lo que vaya pasando en el directo. El orden lo fija la lista de abajo y no
- *    depende de cuantas se hayan vendido. Si los botones bailan, la vendedora
- *    no puede memorizar donde esta cada cosa, que es justo lo que hace que a
- *    los dos dias vaya sin mirar.
+ * NADA SE MUEVE DE SITIO. Ni las prendas ni las marcas se reordenan por lo que
+ * vaya pasando en el directo: el orden lo fijan las listas de abajo. Si los
+ * botones bailan, no hay forma de memorizar donde esta cada cosa, y memorizarlo
+ * es lo unico que hace que a los dos dias se vaya sin mirar.
  *
- * 3. LAS MARCAS SIEMPRE EN EL MISMO ORDEN ENTRE SI. Nike va antes que Adidas en
- *    todos los tipos. La posicion exacta cambia segun cuantas marcas tenga cada
- *    tipo, pero la secuencia no, y eso basta para cogerle el aire.
+ * LAS PRENDAS NO VIENEN AGRUPADAS EN EL PERCHERO. Nada de esto supone que la
+ * siguiente se parezca a la anterior.
  */
 const P = new URLSearchParams(location.search);
 const CODIGO  = P.get('d') || '';
@@ -106,18 +168,36 @@ const DIRECTO = P.get('directo') || '';
 const PRUEBA  = P.get('prueba') === '1';
 const API = '/api/tandas';
 
-/* El orden de la pantalla. Se toca AQUI y en ningun otro sitio. Lo que no
- * aparezca en estas listas se pinta detras, por orden alfabetico. */
-const ORDEN_TIPOS = ['Hoodie','T Shirt','Shirt','Jersey','Football Shirt',
-                     'Jacket','Track Jacket','Anorak','Track Pant','Jeans','Shorts'];
+/* La pantalla se toca AQUI y en ningun otro sitio. `ico` es el dibujo que ya
+ * usa la app del almacen; `fam` la columna en la que cae. */
+const TIPOS = [
+  { n:'Hoodie',         ico:'sudadera',    fam:'arriba' },
+  { n:'T Shirt',        ico:'camiseta',    fam:'arriba' },
+  { n:'Shirt',          ico:'camisa',      fam:'arriba' },
+  { n:'Jersey',         ico:'punto',       fam:'arriba' },
+  { n:'Football Shirt', ico:'futbol',      fam:'arriba' },
+  { n:'Jacket',         ico:'chaqueta',    fam:'exterior' },
+  { n:'Track Jacket',   ico:'trackjacket', fam:'exterior' },
+  { n:'Anorak',         ico:'anoraksra',   fam:'exterior' },
+  { n:'Track Pant',     ico:'trackpants',  fam:'abajo' },
+  { n:'Jeans',          ico:'vaquero',     fam:'abajo' },
+  { n:'Shorts',         ico:'shorts',      fam:'abajo' }
+];
+const FAM = [
+  { id:'arriba',   n:'De arriba', color:'var(--arriba)' },
+  { id:'abajo',    n:'De abajo',  color:'var(--abajo)' },
+  { id:'exterior', n:'Exterior',  color:'var(--exterior)' }
+];
 const ORDEN_MARCAS = ['Nike','Adidas','Puma','Champion','Ellesse',
-                      'Ralph Lauren','Lacoste','Tommy Hilfiger','Hugo Boss','Gant',
-                      'Levi’s',"Levi's",'Wrangler','Lee','Diesel','Carhartt',
-                      'The North Face','Columbia','Helly Hansen','Berghaus','Jack Wolfskin',
-                      'Umbro','Kappa'];
+  'Ralph Lauren','Lacoste','Tommy Hilfiger','Hugo Boss','Gant',
+  "Levi's",'Wrangler','Lee','Diesel','Carhartt',
+  'The North Face','Columbia','Helly Hansen','Berghaus','Jack Wolfskin','Umbro','Kappa'];
 
 const $ = (id) => document.getElementById(id);
-let estado = null, tipoElegido = null, bloqueoHasta = 0, ordenMia = null, fichaPintada = null;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const vibrar = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+let estado = null, elegido = null, bloqueoHasta = 0, ordenMia = null, fichaPintada = null;
+let mapa = new Map(), huella = '';
 
 function aviso(txt, malo) {
   const a = $('aviso');
@@ -125,97 +205,89 @@ function aviso(txt, malo) {
   a.classList.toggle('error', !!malo);
   a.classList.add('ver');
   clearTimeout(a._t);
-  a._t = setTimeout(() => a.classList.remove('ver'), malo ? 6000 : 1400);
+  a._t = setTimeout(() => a.classList.remove('ver'), malo ? 6000 : 1300);
 }
 
-/* "#7 Gebrauchtes Hoodie Nike" -> "Hoodie Nike" */
-function limpiar(nombre) {
-  return String(nombre || '')
-    .replace(/^#\d+\s*/, '')
-    .replace(/^Gebrauchtes?\s+/i, '')
-    .trim();
-}
+const limpiar = (n) => String(n || '').replace(/^#\d+\s*/, '').replace(/^Gebrauchtes?\s+/i, '').trim();
+const icoDe = (t) => (TIPOS.find((x) => x.n === t) || {}).ico || 'nose';
 
-/* Los tipos no estan escritos en el codigo: se deducen del panel. El cajon de
- * cada tipo se llama "<tipo> Vintage", asi que la lista de cajones es la lista
- * de tipos. Si se añade un tipo nuevo al Excel, aparece aqui solo. */
+/* Los tipos salen del panel, no de la lista de arriba: el cajon de cada uno se
+ * llama "<tipo> Vintage". La lista solo manda en el ORDEN y en el dibujo, asi
+ * que si un dia se añade un tipo al Excel aparece igual, al final y con el
+ * icono de "no se". */
 function organizar(listados) {
   const limpios = listados.map((l) => ({ ...l, corto: limpiar(l.nombre) }));
-  const tipos = [...new Set(limpios
-    .filter((l) => /\sVintage$/i.test(l.corto))
-    .map((l) => l.corto.replace(/\s+Vintage$/i, '')))]
-    .sort((a, b) => b.length - a.length);
-
-  const porTipo = new Map();
-  const sueltos = [];
+  const tipos = [...new Set(limpios.filter((l) => /\sVintage$/i.test(l.corto))
+    .map((l) => l.corto.replace(/\s+Vintage$/i, '')))].sort((a, b) => b.length - a.length);
+  const m = new Map();
   for (const l of limpios) {
     const t = tipos.find((u) => l.corto === u + ' Vintage' || l.corto.startsWith(u + ' '));
-    if (!t) { sueltos.push(l); continue; }
+    if (!t) continue;
     const marca = (l.corto === t + ' Vintage') ? '' : l.corto.slice(t.length).trim();
-    if (!porTipo.has(t)) porTipo.set(t, []);
-    porTipo.get(t).push({ ...l, marca });
+    if (!m.has(t)) m.set(t, []);
+    m.get(t).push({ ...l, marca });
   }
-  if (sueltos.length) porTipo.set('Otros', sueltos.map((l) => ({ ...l, marca: l.corto })));
-
-  const pos = (lista, x) => { const i = lista.indexOf(x); return i < 0 ? 900 + x.length : i; };
-  const ordenados = [...porTipo.entries()]
-    .sort((a, b) => pos(ORDEN_TIPOS, a[0]) - pos(ORDEN_TIPOS, b[0]) || a[0].localeCompare(b[0]));
-  for (const [, items] of ordenados) {
+  const pos = (x) => { const i = ORDEN_MARCAS.indexOf(x); return i < 0 ? 900 : i; };
+  for (const [, items] of m) {
     items.sort((a, b) => (a.marca ? 0 : 1) - (b.marca ? 0 : 1) ||
-      pos(ORDEN_MARCAS, a.marca) - pos(ORDEN_MARCAS, b.marca) || a.marca.localeCompare(b.marca));
+      pos(a.marca) - pos(b.marca) || a.marca.localeCompare(b.marca));
   }
-  return new Map(ordenados);
+  return m;
 }
 
-let mapa = new Map(), huellaPintada = '';
-
-function pintarTipos() {
-  const cont = $('tipos');
-  cont.innerHTML = '';
-  if (!mapa.size) return;
-  const n = mapa.size;
-  cont.style.gridTemplateColumns = 'repeat(' + Math.min(6, Math.ceil(n / Math.ceil(n / 6))) + ',1fr)';
-  for (const [tipo] of mapa) {
-    const b = document.createElement('button');
-    b.className = 'tipo' + (tipo === tipoElegido ? ' on' : '');
-    b.textContent = tipo;
-    b.onclick = () => { tipoElegido = tipo; pintarTipos(); pintarMarcas(); };
-    cont.appendChild(b);
+function pintarPrendas() {
+  const cont = $('prendas');
+  if (!mapa.size) {
+    cont.innerHTML = '<div class="vacio">Todavía no hay anuncios.<br><br>Abre el panel de TikTok ' +
+      'en el ordenador del directo y deja esa pestaña abierta.</div>';
+    return;
   }
+  const orden = (t) => { const i = TIPOS.findIndex((x) => x.n === t); return i < 0 ? 900 : i; };
+  const suyos = (f) => [...mapa.keys()]
+    .filter((t) => ((TIPOS.find((x) => x.n === t) || {}).fam || 'arriba') === f)
+    .sort((a, b) => orden(a) - orden(b));
+  cont.innerHTML = FAM.map((f) => {
+    const ts = suyos(f.id);
+    if (!ts.length) return '';
+    return '<div class="fam"><h2><i style="background:' + f.color + '"></i>' + f.n + '</h2>' +
+      ts.map((t) => '<button class="cat' + (t === elegido ? ' on' : '') + '" data-t="' + esc(t) + '"' +
+        ' style="border-color:' + (t === elegido ? 'var(--cian)' : 'var(--borde)') + '">' +
+        '<svg viewBox="0 0 32 32" fill="' + f.color + '"><use href="#i-' + icoDe(t) + '"></use></svg>' +
+        '<b>' + esc(t) + '</b></button>').join('') + '</div>';
+  }).join('');
 }
 
 function pintarMarcas() {
-  const cont = $('marcas');
-  cont.innerHTML = '';
-  if (!mapa.size) {
-    cont.innerHTML = '<div class="vacio">Todavía no hay anuncios.<br><br>' +
-      'Abre el panel de TikTok en el ordenador del directo y deja esa pestaña abierta. ' +
-      'En cuanto los vea, aparecen aquí solos.</div>';
+  const cont = $('marcas'), tit = $('tituloLado');
+  if (!elegido) {
+    tit.textContent = 'Qué prenda es';
+    cont.innerHTML = '<div class="espera" style="grid-column:1/-1">Toca la prenda que tienes<br>en la mano</div>';
     return;
   }
-  if (!tipoElegido) {
-    cont.innerHTML = '<div class="elige">Elige arriba qué prenda es.<br>' +
-      'Se queda puesta, así que si vienen varias seguidas<br>solo tocas la marca.</div>';
-    return;
-  }
-  const items = mapa.get(tipoElegido) || [];
-  cont.style.gridTemplateColumns = 'repeat(' + (items.length <= 4 ? 2 : 3) + ',1fr)';
-  for (const it of items) {
-    const b = document.createElement('button');
-    b.className = 'marca' + (it.marca ? '' : ' cajon');
-    b.innerHTML = '<span>' + (it.marca || 'Sin marca') + '</span>' +
-      '<span class="sub">' + (it.vendidas || 0) + ' vendidas</span>';
-    b.onclick = () => pedir(it);
-    cont.appendChild(b);
-  }
+  const f = FAM.find((x) => x.id === ((TIPOS.find((y) => y.n === elegido) || {}).fam || 'arriba'));
+  tit.innerHTML = '<svg viewBox="0 0 32 32" fill="' + f.color + '"><use href="#i-' + icoDe(elegido) +
+    '"></use></svg> ' + esc(elegido) + ' · de qué marca';
+  const items = mapa.get(elegido) || [];
+  cont.innerHTML = items.map((it, i) =>
+    '<button class="marca' + (it.marca ? '' : ' cajon') + '" data-i="' + i + '">' +
+    esc(it.marca || 'Sin marca') + '</button>').join('');
 }
+
+document.addEventListener('click', (e) => {
+  const cat = e.target.closest('.cat');
+  if (cat) { elegido = cat.dataset.t; vibrar(8); pintarPrendas(); pintarMarcas(); return; }
+  const mb = e.target.closest('.marca');
+  if (mb) { const items = mapa.get(elegido) || []; const it = items[Number(mb.dataset.i)]; if (it) pedir(it); }
+});
 
 async function pedir(item) {
   const ahora = Date.now();
-  if (ahora < bloqueoHasta) return;        /* dos toques seguidos sin querer */
+  if (ahora < bloqueoHasta) return;
   bloqueoHasta = ahora + 1400;
   $('tapa').classList.add('ver');
   setTimeout(() => $('tapa').classList.remove('ver'), 1100);
+  vibrar([12, 40, 12]);
+  const queEra = elegido;
   try {
     const r = await fetch(API + '?d=' + encodeURIComponent(CODIGO), {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -225,40 +297,28 @@ async function pedir(item) {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'no');
     estado = j; ordenMia = j.orden ? j.orden.id : null;
-    aviso((PRUEBA ? 'PRUEBA · ' : '') + tipoElegido + ' ' + (item.marca || 'sin marca'));
-    cabecera();
-    /* El tipo NO se deselecciona: lo normal es que la siguiente sea igual. */
-  } catch (e) {
-    aviso('No se ha podido mandar. Mira la conexión.', true);
-  }
+    aviso((PRUEBA ? 'PRUEBA · ' : '') + queEra + ' ' + (item.marca || 'sin marca'));
+    /* Se vuelve a cero: la siguiente prenda no tiene por que parecerse a esta. */
+    elegido = null; pintarPrendas(); pintarMarcas(); cabecera();
+  } catch (e) { aviso('No se ha podido mandar. Mira la conexión.', true); }
 }
 
 function cabecera() {
   if (!estado) return;
-  const n = (estado.ficha || 0) + 1;
-  const el = $('ficha');
+  const n = (estado.ficha || 0) + 1, el = $('ficha');
   if (fichaPintada !== null && n !== fichaPintada) {
-    el.classList.add('sube');
-    setTimeout(() => el.classList.remove('sube'), 600);
+    el.classList.add('sube'); setTimeout(() => el.classList.remove('sube'), 600);
   }
-  fichaPintada = n;
-  el.textContent = n;
-
-  const u = (estado.ultimas || [])[ (estado.ultimas || []).length - 1 ];
-  $('ultima').innerHTML = u
-    ? 'Última vendida: <b>ficha ' + u.ficha + '</b> · ' + limpiar(u.nombre) + ' · ' + (u.precio || '')
-    : '';
-
+  fichaPintada = n; el.textContent = n;
+  const u = (estado.ultimas || [])[(estado.ultimas || []).length - 1];
+  $('ultima').innerHTML = u ? 'Última vendida: <b>ficha ' + u.ficha + '</b> · ' +
+    esc(limpiar(u.nombre)) + ' · ' + esc(u.precio || '') : '';
   const l = estado.listados_cuando ? (Date.now() - new Date(estado.listados_cuando).getTime()) / 1000 : 1e9;
   const vivo = l < 45;
   $('punto').className = 'punto ' + (vivo ? 'on' : 'off');
-  let txt;
-  if (!vivo) txt = 'el ordenador no responde';
-  else if (estado.orden && estado.orden.estado === 'pendiente') txt = 'lanzando…';
-  else if (estado.orden && estado.orden.estado === 'error') txt = 'falló';
-  else txt = 'listo';
-  $('txtEstado').textContent = txt;
-
+  $('txtEstado').textContent = !vivo ? 'el ordenador no responde'
+    : (estado.orden && estado.orden.estado === 'pendiente') ? 'lanzando…'
+    : (estado.orden && estado.orden.estado === 'error') ? 'falló' : 'listo';
   if (estado.orden && estado.orden.estado === 'error' && estado.orden.id === ordenMia) {
     ordenMia = null;
     aviso('No arrancó: ' + (estado.orden.error || 'sin motivo'), true);
@@ -266,45 +326,30 @@ function cabecera() {
 }
 
 /* Preguntar sin tumbar el servidor: vueltas encadenadas, corte a los 8 segundos
- * y freno progresivo si algo falla. El 22 sep 2026 tres cosas preguntando cada
- * dos segundos dejaron toda la API sin responder, también las tandas del
- * almacén. */
+ * y freno progresivo. El 22 sep 2026 tres cosas preguntando cada dos segundos
+ * dejaron toda la API sin responder, también las tandas del almacén. */
 const RITMO = 3000, MAX = 60000, CORTE = 8000;
 let espera = RITMO;
-
 function llamar(url) {
   const corta = new AbortController();
   const reloj = setTimeout(() => corta.abort(), CORTE);
-  return fetch(url, { signal: corta.signal })
-    .then((r) => r.json())
-    .finally(() => clearTimeout(reloj));
+  return fetch(url, { signal: corta.signal }).then((r) => r.json()).finally(() => clearTimeout(reloj));
 }
-
 async function mirar() {
   try {
     const j = await llamar(API + '?d=' + encodeURIComponent(CODIGO) +
       '&directo=' + encodeURIComponent(DIRECTO) + '&live=1&_=' + Date.now());
-    if (!j.ok) {
-      $('punto').className = 'punto off';
-      $('txtEstado').textContent = j.error || 'el servidor dice que no';
-    } else {
-      estado = j;
-      cabecera();
-      /* Solo se repinta si cambia la LISTA de anuncios, no cuando cambian las
-       * ventas: repintar mientras alguien va a tocar es la forma más tonta de
-       * que un toque caiga en el botón de al lado. */
-      const huella = JSON.stringify((j.listados || []).map((x) => [x.id, x.nombre]));
-      if (huella !== huellaPintada) {
-        huellaPintada = huella;
-        mapa = organizar(j.listados || []);
-        if (tipoElegido && !mapa.has(tipoElegido)) tipoElegido = null;
-        pintarTipos(); pintarMarcas();
-      }
+    if (!j.ok) { $('punto').className = 'punto off'; $('txtEstado').textContent = j.error || 'el servidor dice que no'; }
+    else {
+      estado = j; cabecera();
+      const h = JSON.stringify((j.listados || []).map((x) => [x.id, x.nombre]));
+      if (h !== huella) { huella = h; mapa = organizar(j.listados || []);
+        if (elegido && !mapa.has(elegido)) elegido = null;
+        pintarPrendas(); pintarMarcas(); }
     }
     espera = RITMO;
   } catch (e) {
-    $('punto').className = 'punto off';
-    $('txtEstado').textContent = 'sin respuesta';
+    $('punto').className = 'punto off'; $('txtEstado').textContent = 'sin respuesta';
     espera = Math.min(espera * 2, MAX);
   }
   setTimeout(mirar, espera);
@@ -312,11 +357,8 @@ async function mirar() {
 
 if (PRUEBA) $('banda').style.display = '';
 if (!CODIGO || !DIRECTO) {
-  $('marcas').innerHTML = '<div class="vacio">Falta el código o el directo en el enlace.</div>';
-} else {
-  pintarMarcas();
-  mirar();
-}
+  $('prendas').innerHTML = '<div class="vacio">Falta el código o el directo en el enlace.</div>';
+} else { pintarMarcas(); mirar(); }
 </script>
 </body>
 </html>
