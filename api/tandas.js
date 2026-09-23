@@ -180,7 +180,47 @@ async function tablaDeDirecto(s) {
   tablaDirectoHecha = true;
 }
 
-const ESTADO_VACIO = { room: '', listados: [], listados_cuando: null, orden: null, ficha: 0, ventas: [] };
+/* UNA CAJA NUEVA CADA VEZ, y no un objeto suelto que se copia por encima.
+ * Copiar un objeto con `...` copia las listas POR REFERENCIA: todos los
+ * directos que empezaban de cero compartian la MISMA lista de ventas, la del
+ * propio molde. En el servidor un mismo proceso atiende muchas peticiones
+ * seguidas, asi que el segundo directo que estrenaba se encontraba dentro las
+ * ventas del primero, y con ellas sus fichas. Con un solo directo no se veia.
+ * Con tres a la vez es la forma mas rapida de mezclar dos tiendas. */
+function cajaVacia() {
+  return { room: '', listados: [], listados_cuando: null, orden: null, ficha: 0, ventas: [] };
+}
+
+/* ESCRIBIR SIN PISARSE. Cada directo tiene DOS que le escriben: la tablet
+ * (pedir) y el ordenador (listados, ventas, hecha). Antes se leia la caja, se
+ * cambiaba y se volvia a guardar entera; si los dos caian en el mismo instante,
+ * el segundo borraba lo del primero. Con un directo pasaba poco. Con tres pasa
+ * tres veces mas, y lo peor que puede perderse es una VENTA: esa prenda se
+ * queda sin ficha para siempre y su tarjeta ya no se puede traducir.
+ *
+ * Se arregla sin transacciones a proposito, para que funcione igual con el
+ * pooler de la base en cualquier modo: se guarda la marca de tiempo que traia
+ * la caja y solo se escribe SI NADIE LA HA TOCADO desde entonces. Si la ha
+ * tocado otro, se vuelve a leer y se aplica encima. La marca viaja como TEXTO
+ * porque las fechas de JavaScript pierden los microsegundos y la comparacion
+ * no cuadraria nunca. */
+async function leerParaEscribir(s, sesion) {
+  let filas = await s`select estado, cuando, cuando::text as marca from directo_vivo where sesion = ${sesion}`;
+  if (!filas.length) {
+    await s`insert into directo_vivo (sesion) values (${sesion}) on conflict (sesion) do nothing`;
+    filas = await s`select estado, cuando, cuando::text as marca from directo_vivo where sesion = ${sesion}`;
+  }
+  const f = filas[0] || {};
+  return { estado: { ...cajaVacia(), ...(f.estado || {}) }, marca: f.marca || null };
+}
+
+async function guardarSiNadieToco(s, sesion, estado, marca) {
+  const filas = await s`
+    update directo_vivo set estado = ${s.json(estado)}, cuando = now()
+    where sesion = ${sesion} and cuando::text = ${marca}
+    returning cuando`;
+  return filas.length ? filas[0].cuando : null;
+}
 
 async function leerDirecto(s, sesion, crear) {
   if (crear) await tablaDeDirecto(s);
@@ -191,12 +231,12 @@ async function leerDirecto(s, sesion, crear) {
     /* Todavia no existe la tabla: es el primer dia y nadie ha escrito nada.
      * Eso no es un error para quien lee, es un "aun no hay nada". */
     if (String(e && e.message || '').includes('directo_vivo')) {
-      return { hay: false, estado: { ...ESTADO_VACIO } };
+      return { hay: false, estado: cajaVacia() };
     }
     throw e;
   }
-  if (!filas.length) return { hay: false, estado: { ...ESTADO_VACIO } };
-  return { hay: true, estado: { ...ESTADO_VACIO, ...(filas[0].estado || {}) }, cuando: filas[0].cuando };
+  if (!filas.length) return { hay: false, estado: cajaVacia() };
+  return { hay: true, estado: { ...cajaVacia(), ...(filas[0].estado || {}) }, cuando: filas[0].cuando };
 }
 
 async function guardarDirecto(s, sesion, estado) {
@@ -225,11 +265,10 @@ function vistaDirecto(sesion, e, cuando) {
   };
 }
 
-async function accionDirecto(s, res, sesion, b) {
-  if (!sesion) return res.status(400).json({ ok: false, error: 'sin-directo' });
-  const { estado } = await leerDirecto(s, sesion, true);
-  const accion = aTexto(b.accion).trim();
-
+/* Lo que hace cada accion sobre la caja del directo. Solo toca el objeto que
+ * se le pasa; no habla con la base. Asi se puede volver a aplicar tal cual si
+ * al guardar resulta que otro habia escrito antes. */
+function aplicarAccion(estado, accion, b) {
   if (accion === 'listados') {
     const entran = Array.isArray(b.listados) ? b.listados : [];
     estado.listados = entran.slice(0, 300).map((x) => ({
@@ -240,13 +279,12 @@ async function accionDirecto(s, res, sesion, b) {
     })).filter((x) => x.id);
     estado.listados_cuando = new Date().toISOString();
     if (b.room) estado.room = aTexto(b.room).slice(0, 32);
-    const cuando = await guardarDirecto(s, sesion, estado);
-    return res.status(200).json(vistaDirecto(sesion, estado, cuando));
+    return null;
   }
 
   if (accion === 'pedir') {
     const listado = aTexto(b.listado).slice(0, 32);
-    if (!listado) return res.status(400).json({ ok: false, error: 'sin-listado' });
+    if (!listado) return { error: 'sin-listado' };
     /* Una orden pendiente cada vez. Si la vendedora toca dos veces seguidas, la
      * segunda sustituye a la primera en vez de encolarse: lo que quiere es
      * lanzar ESE, no lanzar dos subastas seguidas sin mirar. */
@@ -262,8 +300,7 @@ async function accionDirecto(s, res, sesion, b) {
        * camino entero (tablet, servidor, ordenador, TikTok) sin emitir. */
       prueba: !!b.prueba
     };
-    const cuando = await guardarDirecto(s, sesion, estado);
-    return res.status(200).json(vistaDirecto(sesion, estado, cuando));
+    return null;
   }
 
   if (accion === 'hecha') {
@@ -273,8 +310,7 @@ async function accionDirecto(s, res, sesion, b) {
       estado.orden.error = aTexto(b.error).slice(0, 300);
       estado.orden.resuelta = new Date().toISOString();
     }
-    const cuando = await guardarDirecto(s, sesion, estado);
-    return res.status(200).json(vistaDirecto(sesion, estado, cuando));
+    return null;
   }
 
   if (accion === 'ventas') {
@@ -302,23 +338,39 @@ async function accionDirecto(s, res, sesion, b) {
       });
     }
     if (estado.ventas.length > 2000) estado.ventas = estado.ventas.slice(-2000);
-    const cuando = await guardarDirecto(s, sesion, estado);
-    const r = vistaDirecto(sesion, estado, cuando);
-    r.nuevas = nuevas.length;
-    return res.status(200).json(r);
+    return { nuevas: nuevas.length };
   }
 
   if (accion === 'ficha') {
     const n = Number(b.ficha);
-    if (!Number.isInteger(n) || n < 0 || n > 5000) {
-      return res.status(400).json({ ok: false, error: 'ficha-rara' });
-    }
+    if (!Number.isInteger(n) || n < 0 || n > 5000) return { error: 'ficha-rara' };
     estado.ficha = n;
-    const cuando = await guardarDirecto(s, sesion, estado);
-    return res.status(200).json(vistaDirecto(sesion, estado, cuando));
+    return null;
   }
 
-  return res.status(400).json({ ok: false, error: 'accion-desconocida' });
+  return { error: 'accion-desconocida' };
+}
+
+async function accionDirecto(s, res, sesion, b) {
+  if (!sesion) return res.status(400).json({ ok: false, error: 'sin-directo' });
+  await tablaDeDirecto(s);
+  const accion = aTexto(b.accion).trim();
+
+  /* Cuatro intentos. Dos escrituras a la vez sobre el mismo directo son cosa de
+   * milisegundos; que fallen cuatro seguidas significa que algo va muy mal y es
+   * mejor decirlo que dejar a la tablet creyendo que se guardo. */
+  for (let intento = 0; intento < 4; intento++) {
+    const { estado, marca } = await leerParaEscribir(s, sesion);
+    const r = aplicarAccion(estado, accion, b);
+    if (r && r.error) return res.status(400).json({ ok: false, error: r.error });
+    const cuando = await guardarSiNadieToco(s, sesion, estado, marca);
+    if (cuando) {
+      const salida = vistaDirecto(sesion, estado, cuando);
+      if (r && typeof r.nuevas === 'number') salida.nuevas = r.nuevas;
+      return res.status(200).json(salida);
+    }
+  }
+  return res.status(409).json({ ok: false, error: 'ocupado' });
 }
 
 /* ===========================================================================
@@ -345,18 +397,40 @@ async function accionDirecto(s, res, sesion, b) {
  * ========================================================================= */
 async function mapaDeFichas(s) {
   try {
+    /* El desglose se hace EN LA BASE y no aqui. Antes se traia la caja entera de
+     * cada directo de los ultimos tres dias, con sus dos mil ventas, y se
+     * recorria en memoria. Con un directo se notaba poco; con tres es traerse
+     * varios megas en CADA peticion de tarjetas del almacen, y los moviles
+     * preguntan a menudo. Asi solo viajan tres columnas por venta. */
     const filas = await s`
-      select estado from directo_vivo
-      where cuando > now() - interval '3 days'`;
-    const m = {};
+      select d.sesion        as sesion,
+             v->>'producto' as producto,
+             v->>'unidad'   as unidad,
+             v->>'ficha'    as ficha
+        from directo_vivo d,
+             lateral jsonb_array_elements(
+               case when jsonb_typeof(d.estado->'ventas') = 'array'
+                    then d.estado->'ventas' else '[]'::jsonb end) v
+       where d.cuando > now() - interval '3 days'`;
+    const m = {}, dueno = {}, dudosas = new Set();
     for (const f of filas) {
-      for (const v of ((f.estado && f.estado.ventas) || [])) {
-        if (!v.producto || !v.unidad || !v.ficha) continue;
-        const n = parseInt(String(v.unidad).replace(/[^0-9]/g, ''), 10);
-        if (!Number.isFinite(n)) continue;
-        m[v.producto + '.' + n] = v.ficha;
-      }
+      if (!f.producto || !f.unidad || !f.ficha) continue;
+      const n = parseInt(String(f.unidad).replace(/[^0-9]/g, ''), 10);
+      const ficha = parseInt(String(f.ficha), 10);
+      if (!Number.isFinite(n) || !Number.isFinite(ficha)) continue;
+      const llave = f.producto + '.' + n;
+      /* SEPARAR POR TIENDA. Cada anuncio temporal es de una sola cuenta y su
+       * identificador no se repite entre tiendas, asi que dos directos a la vez
+       * no se cruzan. Pero si la misma llave apareciera en DOS directos, no hay
+       * forma de saber de que taco es la ficha, y las tres de Espana tienen
+       * tacos distintos con los mismos numeros. Mandar a la chica al taco
+       * equivocado es peor que no traducir: esa tarjeta sale con los numeros de
+       * TikTok, que es raro de ver y por tanto se nota. */
+      if (llave in dueno && dueno[llave] !== f.sesion) { dudosas.add(llave); continue; }
+      dueno[llave] = f.sesion;
+      m[llave] = ficha;
     }
+    for (const k of dudosas) delete m[k];
     return m;
   } catch (e) {
     /* Sin traduccion se sirven las tandas como siempre. Que esto falle no puede
