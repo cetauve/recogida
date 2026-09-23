@@ -318,6 +318,79 @@ async function accionDirecto(s, res, sesion, b) {
   return res.status(400).json({ ok: false, error: 'accion-desconocida' });
 }
 
+/* ===========================================================================
+ * TRADUCIR LOS NUMEROS DE TIKTOK A LOS DE LA FICHA DE CARTON
+ * ===========================================================================
+ * Desde el 25 sep 2026 un directo lleva decenas de anuncios y CADA UNO numera
+ * sus prendas desde el 1. O sea que en un mismo perchero hay treinta prendas
+ * con el numero 1, y el numero que manda TikTok en el pedido ya no sirve para
+ * encontrarla.
+ *
+ * El almacen sigue usando sus tacos de fichas numeradas del 1 al 500, en orden
+ * y colgando ficha solo cuando la prenda se vende. Aqui se cruzan las dos
+ * cosas: la ficha que se le asigno a cada venta (tabla directo_vivo) con el
+ * numero que trae la tarjeta (anuncio + numero).
+ *
+ * SE HACE AQUI Y NO EN LA APP DEL ALMACEN A PROPOSITO. La app tiene 1.685
+ * lineas y es lo que usan las chicas cada dia; tocarla dos dias antes de
+ * estrenar todo esto es pedir un disgusto. Asi las tarjetas le llegan ya
+ * traducidas y su pantalla no cambia ni una linea.
+ *
+ * SI NO HAY TRADUCCION, NO SE TOCA NADA. Los juegos de antes del 25 de
+ * septiembre, y cualquier directo de una sola listing, siguen funcionando
+ * exactamente igual.
+ * ========================================================================= */
+async function mapaDeFichas(s) {
+  try {
+    const filas = await s`
+      select estado from directo_vivo
+      where cuando > now() - interval '3 days'`;
+    const m = {};
+    for (const f of filas) {
+      for (const v of ((f.estado && f.estado.ventas) || [])) {
+        if (!v.producto || !v.unidad || !v.ficha) continue;
+        const n = parseInt(String(v.unidad).replace(/[^0-9]/g, ''), 10);
+        if (!Number.isFinite(n)) continue;
+        m[v.producto + '.' + n] = v.ficha;
+      }
+    }
+    return m;
+  } catch (e) {
+    /* Sin traduccion se sirven las tandas como siempre. Que esto falle no puede
+     * dejar al almacen sin tarjetas. */
+    return {};
+  }
+}
+
+function traducirTandas(datos, mapa) {
+  if (!datos || !Array.isArray(datos.tandas) || !Object.keys(mapa).length) return { datos, n: 0 };
+  let n = 0;
+  for (const t of datos.tandas) {
+    for (const c of (t.compradores || t.detalle || [])) {
+      const grupos = c.porCuenta || [];
+      const fichas = [];
+      let todas = true;
+      for (const g of grupos) {
+        for (const num of (g.numeros || [])) {
+          const f = mapa[(g.producto || '') + '.' + num];
+          if (f) { fichas.push(f); n++; } else { todas = false; }
+        }
+      }
+      if (!grupos.length || !fichas.length) continue;
+      /* Solo se traduce la tarjeta ENTERA. Media tarjeta con numeros de dos
+       * mundos distintos es peor que no traducir: nadie sabria cuales mirar. */
+      if (!todas) continue;
+      fichas.sort((a, b) => a - b);
+      c.numeros = fichas;
+      /* Un solo grupo y sin rotulo: el almacen ya no ve percheros ni anuncios,
+       * solo numeros del 1 al 500, que es como trabajan. */
+      c.porCuenta = [{ cuenta: '', numeros: fichas }];
+      if (Array.isArray(c.bultos)) c.bultos = null;
+    }
+  }
+  return { datos, n };
+}
+
 module.exports = puerta(async (req, res) => {
   const s = db();
 
@@ -389,9 +462,11 @@ module.exports = puerta(async (req, res) => {
       return res.status(200).json({ ok: true, hay: false, dia, juego, datos: null });
     }
     const f = filas[0];
+    const mapa = await mapaDeFichas(s);
+    const { datos, n } = traducirTandas(f.datos, mapa);
     return res.status(200).json({
       ok: true, hay: true, dia: f.dia, juego: f.juego,
-      generado: f.generado, titulo: f.titulo, datos: f.datos
+      generado: f.generado, titulo: f.titulo, datos, traducidas: n
     });
   }
 
