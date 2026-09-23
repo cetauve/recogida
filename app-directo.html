@@ -7,9 +7,13 @@
 <title>Billy's · Directo</title>
 <style>
   :root{
-    --fondo:#0d1117; --caja:#161c22; --caja2:#1d252c; --borde:#2b353d;
-    --texto:#f2f5f7; --suave:#8b97a1; --cian:#3fb6a8; --malo:#e05b55; --ok:#5ec264;
-    --arriba:#5C8FD6; --abajo:#D98A4A; --exterior:#7FB893;
+    /* CLARO A PROPOSITO. Se emite con focos, y con mucha luz alrededor el texto
+     * oscuro sobre fondo claro se lee mas rapido y con menos errores. Ademas
+     * los iconos son siluetas, y una silueta oscura sobre claro se reconoce
+     * antes. No blanco puro: con focos deslumbra. */
+    --fondo:#eef1f4; --caja:#ffffff; --caja2:#ffffff; --borde:#ccd4db;
+    --texto:#141a1f; --suave:#5f6b76; --cian:#0e8c80; --malo:#c0392b; --ok:#2e9e4f;
+    --arriba:#2F6FBF; --abajo:#B0651F; --exterior:#34845A;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
   html,body{margin:0;height:100%;background:var(--fondo);color:var(--texto);
@@ -39,12 +43,12 @@
     color:var(--suave);display:flex;align-items:center;gap:7px;font-weight:800}
   .fam h2 i{width:9px;height:9px;border-radius:50%;display:block}
   button.cat{appearance:none;border:2px solid var(--borde);background:var(--caja);color:var(--texto);
-    border-radius:15px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;
+    border-radius:15px;padding:12px 6px;box-shadow:0 1px 2px rgba(20,26,31,.06);display:flex;flex-direction:column;align-items:center;
     justify-content:center;gap:7px;flex:1;min-height:82px;transition:transform .05s,border-color .1s,background .1s}
   button.cat svg{width:40px;height:40px;display:block;flex:none}
   button.cat b{font-size:15px;font-weight:750;line-height:1.1;text-align:center;letter-spacing:-.01em}
   button.cat:active{transform:scale(.96)}
-  button.cat.on{background:color-mix(in srgb,var(--cian) 22%,var(--caja))}
+  button.cat.on{background:color-mix(in srgb,var(--cian) 13%,#fff);box-shadow:0 0 0 1px var(--cian) inset}
 
   /* ---- marcas, a la derecha ---- */
   .lado{display:flex;flex-direction:column;gap:10px;min-height:0}
@@ -53,10 +57,10 @@
   .lado h3 svg{width:22px;height:22px}
   .marcas{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;flex:1;min-height:0}
   button.marca{appearance:none;border:1px solid var(--borde);background:var(--caja2);color:var(--texto);
-    border-radius:16px;font-size:26px;font-weight:750;padding:8px 12px;line-height:1.1;
+    border-radius:16px;font-size:26px;font-weight:750;padding:8px 12px;line-height:1.1;box-shadow:0 1px 2px rgba(20,26,31,.06);
     display:flex;align-items:center;justify-content:center;text-align:center;
     transition:transform .05s,background .1s}
-  button.marca:active{transform:scale(.96);background:#28323a}
+  button.marca:active{transform:scale(.96);background:#e8edf1}
   button.marca.cajon{border-style:dashed;color:var(--suave);font-size:22px}
   .espera{display:flex;align-items:center;justify-content:center;height:100%;
     color:var(--suave);font-size:19px;text-align:center;line-height:1.7;
@@ -64,11 +68,11 @@
 
   .aviso{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
     background:var(--caja2);border:1px solid var(--borde);border-radius:14px;
-    padding:15px 30px;font-size:22px;font-weight:700;box-shadow:0 10px 34px rgba(0,0,0,.6);
+    padding:15px 30px;font-size:22px;font-weight:700;box-shadow:0 10px 34px rgba(20,26,31,.18);
     opacity:0;pointer-events:none;transition:opacity .12s;max-width:92vw;text-align:center;z-index:9}
   .aviso.ver{opacity:1}
-  .aviso.error{border-color:var(--malo);color:#ffb9b6;background:#2a1a19}
-  .tapa{position:fixed;inset:0;background:rgba(13,17,23,.4);display:none;z-index:8}
+  .aviso.error{border-color:var(--malo);color:#8c1f14;background:#fdecea}
+  .tapa{position:fixed;inset:0;background:rgba(238,241,244,.55);display:none;z-index:8}
   .tapa.ver{display:block}
   .vacio{padding:30px 6px;color:var(--suave);font-size:17px;line-height:1.7}
 </style>
@@ -123,10 +127,10 @@
 <g id="i-nose"><path d="M16 4.5 a7 7 0 0 1 7 7 q0 4-4 6 -2 1-2 4 h-2.4 q0-4.4 2.2-5.6 3-1.8 3-4.6 a3.8 3.8 0 0 0-7.6 0 H9.6 a6.4 6.4 0 0 1 6.4-6.8 Z"/>
 <circle cx="16" cy="27" r="2.1"/></g>
 </defs></svg>
-<div class="banda" id="banda" style="display:none">MODO PRUEBA · no se subasta nada</div>
+<div class="banda" id="banda" style="display:none">TEST MODE · nothing is auctioned</div>
 
 <header>
-  <div class="ficha"><span class="et">Ficha</span><span class="n" id="ficha">--</span></div>
+  <div class="ficha"><span class="et">Tag</span><span class="n" id="ficha">--</span></div>
   <div class="ultima" id="ultima"></div>
   <div class="estado"><span class="punto" id="punto"></span><span id="txtEstado">conectando</span></div>
 </header>
@@ -134,7 +138,7 @@
 <div class="cuerpo">
   <div class="prendas" id="prendas"></div>
   <div class="lado">
-    <h3 id="tituloLado">Qué prenda es</h3>
+    <h3 id="tituloLado">What is it</h3>
     <div class="marcas" id="marcas"></div>
   </div>
 </div>
@@ -184,9 +188,9 @@ const TIPOS = [
   { n:'Shorts',         ico:'shorts',      fam:'abajo' }
 ];
 const FAM = [
-  { id:'arriba',   n:'De arriba', color:'var(--arriba)' },
-  { id:'abajo',    n:'De abajo',  color:'var(--abajo)' },
-  { id:'exterior', n:'Exterior',  color:'var(--exterior)' }
+  { id:'arriba',   n:'Tops',      color:'var(--arriba)' },
+  { id:'abajo',    n:'Bottoms',   color:'var(--abajo)' },
+  { id:'exterior', n:'Outerwear', color:'var(--exterior)' }
 ];
 const ORDEN_MARCAS = ['Nike','Adidas','Puma','Champion','Ellesse',
   'Ralph Lauren','Lacoste','Tommy Hilfiger','Hugo Boss','Gant',
@@ -238,8 +242,8 @@ function organizar(listados) {
 function pintarPrendas() {
   const cont = $('prendas');
   if (!mapa.size) {
-    cont.innerHTML = '<div class="vacio">Todavía no hay anuncios.<br><br>Abre el panel de TikTok ' +
-      'en el ordenador del directo y deja esa pestaña abierta.</div>';
+    cont.innerHTML = '<div class="vacio">No listings yet.<br><br>Open the TikTok panel on the LIVE computer ' +
+      'and leave that tab open.</div>';
     return;
   }
   const orden = (t) => { const i = TIPOS.findIndex((x) => x.n === t); return i < 0 ? 900 : i; };
@@ -260,17 +264,17 @@ function pintarPrendas() {
 function pintarMarcas() {
   const cont = $('marcas'), tit = $('tituloLado');
   if (!elegido) {
-    tit.textContent = 'Qué prenda es';
-    cont.innerHTML = '<div class="espera" style="grid-column:1/-1">Toca la prenda que tienes<br>en la mano</div>';
+    tit.textContent = 'What is it';
+    cont.innerHTML = '<div class="espera" style="grid-column:1/-1">Tap the garment<br>you are holding</div>';
     return;
   }
   const f = FAM.find((x) => x.id === ((TIPOS.find((y) => y.n === elegido) || {}).fam || 'arriba'));
   tit.innerHTML = '<svg viewBox="0 0 32 32" fill="' + f.color + '"><use href="#i-' + icoDe(elegido) +
-    '"></use></svg> ' + esc(elegido) + ' · de qué marca';
+    '"></use></svg> ' + esc(elegido) + ' · which brand';
   const items = mapa.get(elegido) || [];
   cont.innerHTML = items.map((it, i) =>
     '<button class="marca' + (it.marca ? '' : ' cajon') + '" data-i="' + i + '">' +
-    esc(it.marca || 'Sin marca') + '</button>').join('');
+    esc(it.marca || 'No brand') + '</button>').join('');
 }
 
 document.addEventListener('click', (e) => {
@@ -297,10 +301,10 @@ async function pedir(item) {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'no');
     estado = j; ordenMia = j.orden ? j.orden.id : null;
-    aviso((PRUEBA ? 'PRUEBA · ' : '') + queEra + ' ' + (item.marca || 'sin marca'));
+    aviso((PRUEBA ? 'TEST · ' : '') + queEra + ' ' + (item.marca || 'no brand'));
     /* Se vuelve a cero: la siguiente prenda no tiene por que parecerse a esta. */
     elegido = null; pintarPrendas(); pintarMarcas(); cabecera();
-  } catch (e) { aviso('No se ha podido mandar. Mira la conexión.', true); }
+  } catch (e) { aviso('Could not send. Check the connection.', true); }
 }
 
 function cabecera() {
@@ -311,17 +315,17 @@ function cabecera() {
   }
   fichaPintada = n; el.textContent = n;
   const u = (estado.ultimas || [])[(estado.ultimas || []).length - 1];
-  $('ultima').innerHTML = u ? 'Última vendida: <b>ficha ' + u.ficha + '</b> · ' +
+  $('ultima').innerHTML = u ? 'Last sold: <b>tag ' + u.ficha + '</b> · ' +
     esc(limpiar(u.nombre)) + ' · ' + esc(u.precio || '') : '';
   const l = estado.listados_cuando ? (Date.now() - new Date(estado.listados_cuando).getTime()) / 1000 : 1e9;
   const vivo = l < 45;
   $('punto').className = 'punto ' + (vivo ? 'on' : 'off');
-  $('txtEstado').textContent = !vivo ? 'el ordenador no responde'
-    : (estado.orden && estado.orden.estado === 'pendiente') ? 'lanzando…'
-    : (estado.orden && estado.orden.estado === 'error') ? 'falló' : 'listo';
+  $('txtEstado').textContent = !vivo ? 'computer not responding'
+    : (estado.orden && estado.orden.estado === 'pendiente') ? 'starting…'
+    : (estado.orden && estado.orden.estado === 'error') ? 'failed' : 'ready';
   if (estado.orden && estado.orden.estado === 'error' && estado.orden.id === ordenMia) {
     ordenMia = null;
-    aviso('No arrancó: ' + (estado.orden.error || 'sin motivo'), true);
+    aviso('Did not start: ' + (estado.orden.error || 'no reason given'), true);
   }
 }
 
@@ -339,7 +343,7 @@ async function mirar() {
   try {
     const j = await llamar(API + '?d=' + encodeURIComponent(CODIGO) +
       '&directo=' + encodeURIComponent(DIRECTO) + '&live=1&_=' + Date.now());
-    if (!j.ok) { $('punto').className = 'punto off'; $('txtEstado').textContent = j.error || 'el servidor dice que no'; }
+    if (!j.ok) { $('punto').className = 'punto off'; $('txtEstado').textContent = j.error || 'server refused'; }
     else {
       estado = j; cabecera();
       const h = JSON.stringify((j.listados || []).map((x) => [x.id, x.nombre]));
@@ -349,7 +353,7 @@ async function mirar() {
     }
     espera = RITMO;
   } catch (e) {
-    $('punto').className = 'punto off'; $('txtEstado').textContent = 'sin respuesta';
+    $('punto').className = 'punto off'; $('txtEstado').textContent = 'no response';
     espera = Math.min(espera * 2, MAX);
   }
   setTimeout(mirar, espera);
@@ -357,7 +361,7 @@ async function mirar() {
 
 if (PRUEBA) $('banda').style.display = '';
 if (!CODIGO || !DIRECTO) {
-  $('prendas').innerHTML = '<div class="vacio">Falta el código o el directo en el enlace.</div>';
+  $('prendas').innerHTML = '<div class="vacio">The link is missing the code or the LIVE session.</div>';
 } else { pintarMarcas(); mirar(); }
 </script>
 </body>
