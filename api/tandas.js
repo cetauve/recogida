@@ -188,7 +188,7 @@ async function tablaDeDirecto(s) {
  * ventas del primero, y con ellas sus fichas. Con un solo directo no se veia.
  * Con tres a la vez es la forma mas rapida de mezclar dos tiendas. */
 function cajaVacia() {
-  return { room: '', listados: [], listados_cuando: null, orden: null, ficha: 0, ventas: [] };
+  return { room: '', canal: '', cuenta: '', puesto: '', listados: [], listados_cuando: null, orden: null, ficha: 0, ventas: [] };
 }
 
 /* ESCRIBIR SIN PISARSE. Cada directo tiene DOS que le escriben: la tablet
@@ -265,6 +265,101 @@ function vistaDirecto(sesion, e, cuando) {
   };
 }
 
+/* Un canal es un nombre corto y sin sorpresas: vale para ir en una direccion
+ * y para que nadie lo escriba mal. ES 1, es-1 y "ES  1" son el mismo. */
+function limpiarCanal(x) {
+  return aTexto(x).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
+}
+
+/* A que directo apunta hoy un canal: el ultimo que dijo llamarse asi. Si el
+ * ordenador de ES 1 se reinicia y TikTok le da un numero nuevo, el canal pasa
+ * a apuntar al nuevo solo y la tablet ni se entera. */
+async function sesionDeCanal(s, canal) {
+  if (!canal) return '';
+  try {
+    const filas = await s`
+      select sesion from directo_vivo
+      where estado->>'canal' = ${canal}
+      order by cuando desc limit 1`;
+    return filas.length ? filas[0].sesion : '';
+  } catch (e) { return ''; }
+}
+
+/* DOS ORDENADORES NO PUEDEN LLAMARSE IGUAL. Si el de ES 2 se dejo abierto con
+ * el nombre de ES 1, las dos tablets mandarian al mismo directo y nadie se
+ * enteraria hasta ver las ventas. Se comprueba solo cuando un directo estrena
+ * canal, no en cada vuelta: despues ya lo lleva escrito en su propia caja. */
+async function canalOcupado(s, canal, sesion, puesto) {
+  /* SIN PUESTO NO SE BLOQUEA. Un ordenador con la extension vieja no sabe
+   * decir quien es; preferimos que emita a dejarlo fuera por precaucion. */
+  if (!puesto) return '';
+  try {
+    const filas = await s`
+      select sesion, coalesce(estado->>'puesto', '') as puesto from directo_vivo
+      where estado->>'canal' = ${canal} and sesion <> ${sesion}
+        and coalesce(estado->>'puesto', '') <> ${puesto}
+        and cuando > now() - interval '3 minutes'
+      order by cuando desc limit 1`;
+    return filas.length ? filas[0].sesion : '';
+  } catch (e) { return ''; }
+}
+
+/* LA TABLET TAMBIEN SE APUNTA, para que el panel pueda decir si esta viva. Se
+ * escribe como mucho una vez por minuto y sin tocar la marca de tiempo de la
+ * caja, asi que no estorba a quien este escribiendo de verdad. */
+async function vistaTablet(s, sesion) {
+  try {
+    await s`
+      update directo_vivo
+      set estado = jsonb_set(coalesce(estado, '{}'::jsonb), '{tablet}', to_jsonb(now()::text))
+      where sesion = ${sesion}
+        and (estado->>'tablet' is null or (estado->>'tablet')::timestamptz < now() - interval '60 seconds')`;
+  } catch (e) { /* que no se apunte no puede romper la pantalla */ }
+}
+
+/* LO QUE VE EL PANEL. Una fila por directo de las ultimas doce horas, y el
+ * desglose lo hace la base: aqui solo llegan los cuatro datos que se pintan, no
+ * el historial entero de ventas de cada uno. */
+async function panelDirectos(s) {
+  const filas = await s`
+    select sesion,
+           estado->>'canal'  as canal,
+           estado->>'cuenta' as cuenta,
+           estado->>'room'   as room,
+           coalesce((estado->>'ficha')::int, 0) as ficha,
+           jsonb_array_length(case when jsonb_typeof(estado->'ventas') = 'array'
+                                   then estado->'ventas' else '[]'::jsonb end) as ventas,
+           estado->'ventas'->-1 as ultima,
+           jsonb_array_length(case when jsonb_typeof(estado->'listados') = 'array'
+                                   then estado->'listados' else '[]'::jsonb end) as listados,
+           estado->>'listados_cuando' as listados_cuando,
+           estado->'orden'   as orden,
+           estado->>'tablet' as tablet,
+           cuando
+      from directo_vivo
+     where cuando > now() - interval '12 hours'
+     order by cuando desc
+     limit 40`;
+  return filas.map((f) => ({
+    sesion: f.sesion,
+    canal: f.canal || '',
+    cuenta: f.cuenta || '',
+    ficha: f.ficha || 0,
+    ventas: f.ventas || 0,
+    /* DE LA ULTIMA VENTA SOLO LO QUE SE PUEDE ENSENAR. El numero de pedido no
+     * sale por pantalla en ninguna de nuestras aplicaciones, y el panel no va a
+     * ser el primero. */
+    ultima: f.ultima ? { ficha: f.ultima.ficha, nombre: f.ultima.nombre,
+                         precio: f.ultima.precio, hora: f.ultima.hora } : null,
+    listados: f.listados || 0,
+    listados_cuando: f.listados_cuando || null,
+    orden: f.orden ? { estado: f.orden.estado, nombre: f.orden.nombre,
+                       pedida: f.orden.pedida, error: f.orden.error || '' } : null,
+    tablet: f.tablet || null,
+    cuando: f.cuando
+  }));
+}
+
 /* Lo que hace cada accion sobre la caja del directo. Solo toca el objeto que
  * se le pasa; no habla con la base. Asi se puede volver a aplicar tal cual si
  * al guardar resulta que otro habia escrito antes. */
@@ -279,6 +374,18 @@ function aplicarAccion(estado, accion, b) {
     })).filter((x) => x.id);
     estado.listados_cuando = new Date().toISOString();
     if (b.room) estado.room = aTexto(b.room).slice(0, 32);
+    /* EL CANAL. El numero que TikTok le pone a cada directo cambia cada vez que
+     * se arranca, asi que no sirve para poner en el enlace de una tablet. El
+     * canal si: es un nombre que se le da UNA VEZ a cada perfil de Chrome
+     * -ES 1, ES 2, DE- y ya no cambia nunca. La tablet lleva el nombre en su
+     * enlace y el servidor lo apunta al directo que este emitiendo hoy. */
+    if (b.canal) estado.canal = limpiarCanal(b.canal);
+    if (b.cuenta) estado.cuenta = aTexto(b.cuenta).slice(0, 60);
+    /* EL PUESTO es quien dice ser el ordenador, y no cambia aunque TikTok le de
+     * un numero nuevo. Sin esto, parar y reanudar el directo se confundiria con
+     * un segundo ordenador robando el nombre, y el propio ES 1 se quedaria
+     * fuera de su canal justo al reanudar. */
+    if (b.puesto) estado.puesto = aTexto(b.puesto).slice(0, 40);
     return null;
   }
 
@@ -361,6 +468,14 @@ async function accionDirecto(s, res, sesion, b) {
    * mejor decirlo que dejar a la tablet creyendo que se guardo. */
   for (let intento = 0; intento < 4; intento++) {
     const { estado, marca } = await leerParaEscribir(s, sesion);
+    /* Solo al estrenar canal, no en cada vuelta. */
+    if (accion === 'listados' && b.canal) {
+      const canal = limpiarCanal(b.canal);
+      if (canal && estado.canal !== canal) {
+        const otro = await canalOcupado(s, canal, sesion, aTexto(b.puesto).slice(0, 40));
+        if (otro) return res.status(409).json({ ok: false, error: 'canal-ocupado', canal });
+      }
+    }
     const r = aplicarAccion(estado, accion, b);
     if (r && r.error) return res.status(400).json({ ok: false, error: r.error });
     const cuando = await guardarSiNadieToco(s, sesion, estado, marca);
@@ -521,7 +636,14 @@ module.exports = puerta(async (req, res) => {
      * menos trabajo hace el resto. */
     if (bm && bm.live) {
       if (!puedeLeer(req)) return noAutorizado(res, 'leer');
-      return accionDirecto(s, res, aTexto(bm.directo || (req.query || {}).directo).trim(), bm);
+      let sesion = aTexto(bm.directo || (req.query || {}).directo).trim();
+      /* La tablet manda su canal, no un numero: su enlace es fijo para siempre. */
+      if (!sesion && (bm.canal || (req.query || {}).canal)) {
+        const canal = limpiarCanal(bm.canal || (req.query || {}).canal);
+        sesion = await sesionDeCanal(s, canal);
+        if (!sesion) return res.status(200).json({ ok: false, error: 'canal-sin-directo', canal });
+      }
+      return accionDirecto(s, res, sesion, bm);
     }
     if (bm && bm.marcas && typeof bm.marcas === 'object' && !bm.datos) {
       if (!puedeLeer(req)) return noAutorizado(res, 'leer');
@@ -560,15 +682,33 @@ module.exports = puerta(async (req, res) => {
   if (req.method === 'GET') {
     if (!puedeLeer(req)) return noAutorizado(res, 'leer');
     const q = req.query || {};
+    if (q.panel) {
+      try {
+        return res.status(200).json({ ok: true, ahora: new Date().toISOString(),
+                                      directos: await panelDirectos(s) });
+      } catch (e) {
+        return res.status(200).json({ ok: true, ahora: new Date().toISOString(), directos: [] });
+      }
+    }
     if (q.live) {
-      const sesion = aTexto(q.directo).trim();
-      if (!sesion) return res.status(400).json({ ok: false, error: 'sin-directo' });
+      let sesion = aTexto(q.directo).trim();
+      const canal = limpiarCanal(q.canal);
+      if (!sesion && canal) sesion = await sesionDeCanal(s, canal);
+      if (!sesion) {
+        if (canal) return res.status(200).json({ ok: true, hay: false, canal, sesion: '',
+          room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
+        return res.status(400).json({ ok: false, error: 'sin-directo' });
+      }
       const { hay, estado, cuando } = await leerDirecto(s, sesion);
       if (!hay) {
-        return res.status(200).json({ ok: true, hay: false, sesion,
+        return res.status(200).json({ ok: true, hay: false, sesion, canal,
           room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
       }
-      return res.status(200).json(vistaDirecto(sesion, estado, cuando));
+      if (canal) await vistaTablet(s, sesion);
+      const v = vistaDirecto(sesion, estado, cuando);
+      v.canal = estado.canal || canal;
+      v.cuenta = estado.cuenta || '';
+      return res.status(200).json(v);
     }
     if (q.marcas) return leerMarcas(s, res, aTexto(q.juego).trim());
     const dia = diaDe(q.dia);
