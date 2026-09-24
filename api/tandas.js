@@ -439,30 +439,71 @@ async function mapaDeFichas(s) {
   }
 }
 
+/* LA TARJETA SE QUEDA COMO ESTABA: cada cuenta con su rotulo y sus numeros.
+ *
+ * ESTO ESTUVO MAL Y ASI SE ARREGLA. La primera version juntaba todos los
+ * numeros de la tarjeta en un solo monton y borraba el rotulo de la cuenta,
+ * porque con un unico directo el rotulo no distinguia nada. Con tres cuentas
+ * espanolas emitiendo a la vez eso es un desastre: cada cuenta tiene su taco de
+ * fichas y las tres empiezan por el 1, asi que un monton con "47, 47" sin
+ * rotulo manda a quien recoge a dos prendas distintas. Ahora se traduce grupo a
+ * grupo y el rotulo no se toca.
+ *
+ * LAS BOLSAS TAMBIEN. Cuando alguien compra para dos direcciones, TikTok parte
+ * el pedido en dos bolsas y la tarjeta las ensena por separado. Esas listas
+ * llevan los mismos numeros pero no dicen de que anuncio son, asi que se
+ * traducen por el valor. Si un numero sale de dos anuncios distintos en la
+ * misma tarjeta no hay forma de saber cual es cual, y entonces esa tarjeta se
+ * queda SIN traducir entera. Media tarjeta es peor que ninguna. */
 function traducirTandas(datos, mapa) {
   if (!datos || !Array.isArray(datos.tandas) || !Object.keys(mapa).length) return { datos, n: 0 };
   let n = 0;
   for (const t of datos.tandas) {
     for (const c of (t.compradores || t.detalle || [])) {
-      const grupos = c.porCuenta || [];
-      const fichas = [];
-      let todas = true;
+      const grupos = (c.porCuenta || []).filter((g) => Array.isArray(g.numeros) && g.numeros.length);
+      if (!grupos.length) continue;
+
+      const nuevos = [];
+      const porValor = {};          /* numero de TikTok -> ficha, para las bolsas */
+      let liada = false;
+
       for (const g of grupos) {
-        for (const num of (g.numeros || [])) {
+        const fichas = [];
+        for (const num of g.numeros) {
           const f = mapa[(g.producto || '') + '.' + num];
-          if (f) { fichas.push(f); n++; } else { todas = false; }
+          if (!f) { liada = true; break; }
+          fichas.push(f);
+          if (porValor[num] === undefined) porValor[num] = f;
+          else if (porValor[num] !== f) porValor[num] = null;   /* sale de dos sitios */
         }
+        if (liada) break;
+        /* Se copia el grupo entero y solo se cambian los numeros: el rotulo de
+         * la cuenta y su color siguen exactamente donde estaban. */
+        nuevos.push({ ...g, numeros: fichas.slice().sort((a, b) => a - b) });
       }
-      if (!grupos.length || !fichas.length) continue;
-      /* Solo se traduce la tarjeta ENTERA. Media tarjeta con numeros de dos
-       * mundos distintos es peor que no traducir: nadie sabria cuales mirar. */
-      if (!todas) continue;
-      fichas.sort((a, b) => a - b);
-      c.numeros = fichas;
-      /* Un solo grupo y sin rotulo: el almacen ya no ve percheros ni anuncios,
-       * solo numeros del 1 al 500, que es como trabajan. */
-      c.porCuenta = [{ cuenta: '', numeros: fichas }];
-      if (Array.isArray(c.bultos)) c.bultos = null;
+      if (liada) continue;
+
+      let bolsas = null;
+      if (Array.isArray(c.bultos) && c.bultos.length) {
+        bolsas = [];
+        for (const b of c.bultos) {
+          const nums = [];
+          for (const num of ((b && b.numeros) || [])) {
+            const f = porValor[num];
+            if (!f) { liada = true; break; }
+            nums.push(f);
+          }
+          if (liada) break;
+          bolsas.push({ ...b, numeros: nums });
+        }
+        if (liada) continue;
+      }
+
+      const todas = nuevos.reduce((a, g) => a.concat(g.numeros), []).sort((a, b) => a - b);
+      c.porCuenta = nuevos;
+      c.numeros = todas;
+      if (bolsas) c.bultos = bolsas;
+      n += todas.length;
     }
   }
   return { datos, n };
