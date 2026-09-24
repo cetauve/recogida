@@ -178,6 +178,14 @@
 const P = new URLSearchParams(location.search);
 const CODIGO  = P.get('d') || '';
 const DIRECTO = P.get('directo') || '';
+/* EL CANAL es el nombre fijo de este puesto: ES 1, ES 2, DE, NL. El enlace de
+ * la tablet lo lleva a el y no al numero que TikTok le pone a cada directo, que
+ * cambia cada vez que se arranca. Asi este enlace se guarda una vez en la
+ * pantalla de inicio y no se vuelve a tocar nunca. El numero suelto sigue
+ * valiendo, para no romper los enlaces de estos dias. */
+const CANAL = P.get('canal') || '';
+const QUIEN = CANAL ? '&canal=' + encodeURIComponent(CANAL)
+                    : '&directo=' + encodeURIComponent(DIRECTO);
 const PRUEBA  = P.get('prueba') === '1';
 const API = '/api/tandas';
 
@@ -334,7 +342,7 @@ async function pedir(item) {
   try {
     const r = await fetch(API + '?d=' + encodeURIComponent(CODIGO), {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ live: 1, directo: DIRECTO, accion: 'pedir',
+      body: JSON.stringify({ live: 1, directo: DIRECTO, canal: CANAL, accion: 'pedir',
         listado: item.id, nombre: item.nombre, prueba: PRUEBA ? 1 : 0 })
     });
     const j = await r.json();
@@ -381,7 +389,7 @@ function llamar(url) {
 async function mirar() {
   try {
     const j = await llamar(API + '?d=' + encodeURIComponent(CODIGO) +
-      '&directo=' + encodeURIComponent(DIRECTO) + '&live=1&_=' + Date.now());
+      QUIEN + '&live=1&_=' + Date.now());
     if (!j.ok) { $('punto').className = 'punto off'; $('txtEstado').textContent = j.error || 'server refused'; }
     else {
       estado = j; cabecera();
@@ -399,7 +407,7 @@ async function mirar() {
 }
 
 if (PRUEBA) $('banda').style.display = '';
-if (!CODIGO || !DIRECTO) {
+if (!CODIGO || (!DIRECTO && !CANAL)) {
   $('prendas').innerHTML = '<div class="vacio">The link is missing the code or the LIVE session.</div>';
 } else { pintarMarcas(); mirar(); }
 </script>
