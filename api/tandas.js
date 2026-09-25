@@ -557,6 +557,22 @@ async function accionDirecto(s, res, sesion, b) {
  * septiembre, y cualquier directo de una sola listing, siguen funcionando
  * exactamente igual.
  * ========================================================================= */
+/* UN FALLO SUELTO NO ES UN FALLO.
+ *
+ * De vez en cuando una consulta falla a la primera: casi siempre es una
+ * conexion que acababa de morir por su cuenta y todavia no se habia enterado
+ * nadie. Antes eso salia por pantalla como "no se ha podido leer" y la tablet
+ * parpadeaba sin motivo. Se tira esa conexion y se repite UNA vez con una
+ * limpia. Si vuelve a fallar, entonces si es de verdad y se dice. */
+async function conReintento(hacer) {
+  try {
+    return await hacer(db());
+  } catch (e) {
+    try { reiniciarDb(); } catch (_) {}
+    return hacer(db());
+  }
+}
+
 async function mapaDeFichas(s) {
   try {
     /* El desglose se hace EN LA BASE y no aqui. Antes se traia la caja entera de
@@ -763,7 +779,7 @@ async function atender(req, res) {
     if (q.panel) {
       try {
         return res.status(200).json({ ok: true, ahora: new Date().toISOString(),
-                                      directos: await panelDirectos(s) });
+                                      directos: await conReintento(panelDirectos) });
       } catch (e) {
         /* Si no se ha podido leer, se dice. Devolver una lista vacia haria que
          * el panel pintara los cinco puestos como apagados, que es justo lo
@@ -780,7 +796,7 @@ async function atender(req, res) {
           room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
         return res.status(400).json({ ok: false, error: 'sin-directo' });
       }
-      const { hay, estado, cuando } = await leerDirecto(s, sesion);
+      const { hay, estado, cuando } = await conReintento((c) => leerDirecto(c, sesion));
       if (!hay) {
         return res.status(200).json({ ok: true, hay: false, sesion, canal,
           room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
