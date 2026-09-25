@@ -168,8 +168,27 @@ async function guardarMarcas(s, res, juego, entran) {
  * entre ellos en Postgres y la llamada se queda colgada PARA SIEMPRE: no da
  * error, no devuelve nada, y la pantalla se queda en "conectando". Así que se
  * hace una vez por instancia y quien lee no toca la estructura nunca. */
+/* EL `create table if not exists` NO SE EJECUTA NUNCA EN CAMINO NORMAL.
+ *
+ * ESTO YA NOS COSTO UN SERVIDOR CAIDO Y HOY CASI OTRO. Aunque la tabla exista,
+ * esa orden pide el candado mas fuerte que hay sobre ella. Basta con que una
+ * lectura este en marcha para que se quede esperando, y a partir de ese momento
+ * TODAS las lecturas y escrituras de esa tabla se ponen en cola detras. El
+ * servidor no da error: se queda mudo, que es peor. Con tres directos y cinco
+ * tablets preguntando, cada arranque de una copia del servidor era otra orden
+ * de esas.
+ *
+ * Ahora solo se crea SI DE VERDAD NO EXISTE: se intenta lo que se iba a hacer,
+ * y unicamente cuando la base contesta "esa tabla no existe" se crea y se
+ * reintenta. En funcionamiento normal esto no se ejecuta jamas. */
 let tablaDirectoHecha = false;
-async function tablaDeDirecto(s) {
+
+const noExisteLaTabla = (e) => {
+  const m = String((e && e.message) || e);
+  return /directo_vivo/.test(m) && /does not exist|no existe|undefined table/i.test(m);
+};
+
+async function crearTablaDirecto(s) {
   if (tablaDirectoHecha) return;
   await s`
     create table if not exists directo_vivo (
@@ -178,6 +197,17 @@ async function tablaDeDirecto(s) {
       cuando timestamptz not null default now()
     )`;
   tablaDirectoHecha = true;
+}
+
+/* Hace lo que se le pida y, solo si la tabla no estaba, la crea y lo repite. */
+async function conTabla(s, hacer) {
+  try {
+    return await hacer();
+  } catch (e) {
+    if (!noExisteLaTabla(e)) throw e;
+    await crearTablaDirecto(s);
+    return hacer();
+  }
 }
 
 /* UNA CAJA NUEVA CADA VEZ, y no un objeto suelto que se copia por encima.
@@ -222,8 +252,7 @@ async function guardarSiNadieToco(s, sesion, estado, marca) {
   return filas.length ? filas[0].cuando : null;
 }
 
-async function leerDirecto(s, sesion, crear) {
-  if (crear) await tablaDeDirecto(s);
+async function leerDirecto(s, sesion) {
   let filas;
   try {
     filas = await s`select estado, cuando from directo_vivo where sesion = ${sesion}`;
@@ -277,9 +306,12 @@ function limpiarCanal(x) {
 async function sesionDeCanal(s, canal) {
   if (!canal) return '';
   try {
+    /* La fecha va PRIMERO a proposito: asi la base solo abre el contenido de
+     * los directos de hoy y no el de todos los que ha habido nunca. */
     const filas = await s`
       select sesion from directo_vivo
-      where estado->>'canal' = ${canal}
+      where cuando > now() - interval '24 hours'
+        and estado->>'canal' = ${canal}
       order by cuando desc limit 1`;
     return filas.length ? filas[0].sesion : '';
   } catch (e) { return ''; }
@@ -296,9 +328,9 @@ async function canalOcupado(s, canal, sesion, puesto) {
   try {
     const filas = await s`
       select sesion, coalesce(estado->>'puesto', '') as puesto from directo_vivo
-      where estado->>'canal' = ${canal} and sesion <> ${sesion}
+      where cuando > now() - interval '3 minutes'
+        and estado->>'canal' = ${canal} and sesion <> ${sesion}
         and coalesce(estado->>'puesto', '') <> ${puesto}
-        and cuando > now() - interval '3 minutes'
       order by cuando desc limit 1`;
     return filas.length ? filas[0].sesion : '';
   } catch (e) { return ''; }
@@ -460,14 +492,13 @@ function aplicarAccion(estado, accion, b) {
 
 async function accionDirecto(s, res, sesion, b) {
   if (!sesion) return res.status(400).json({ ok: false, error: 'sin-directo' });
-  await tablaDeDirecto(s);
   const accion = aTexto(b.accion).trim();
 
   /* Cuatro intentos. Dos escrituras a la vez sobre el mismo directo son cosa de
    * milisegundos; que fallen cuatro seguidas significa que algo va muy mal y es
    * mejor decirlo que dejar a la tablet creyendo que se guardo. */
   for (let intento = 0; intento < 4; intento++) {
-    const { estado, marca } = await leerParaEscribir(s, sesion);
+    const { estado, marca } = await conTabla(s, () => leerParaEscribir(s, sesion));
     /* Solo al estrenar canal, no en cada vuelta. */
     if (accion === 'listados' && b.canal) {
       const canal = limpiarCanal(b.canal);
