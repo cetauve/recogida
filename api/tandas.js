@@ -23,7 +23,7 @@
  * SIN JUEGO SE USA LA FECHA, que es lo que el juego era hasta hoy. Así los
  * enlaces de antes y los móviles con la página en caché siguen funcionando.
  */
-const { db, reiniciarDb, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerpo } = require('./_lib');
+const { db, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerpo } = require('./_lib');
 
 /* ===========================================================================
  * LO QUE EL ALMACÉN DICE QUE ES CADA PRENDA
@@ -590,7 +590,17 @@ async function conReintento(hacer) {
   try {
     return await hacer(db());
   } catch (e) {
-    try { reiniciarDb(); } catch (_) {}
+    /* AQUI SE TIRABA LA CONEXION, Y ERA LA CAUSA DE TODO. 25 sep 2026.
+     *
+     * Tirar la conexion no la sustituye solo para quien falla: la conexion es
+     * UNA para toda la copia del servidor, y las llamadas que ya estaban en
+     * marcha se habian quedado con una referencia a la vieja. A partir de ese
+     * momento sus consultas no fallaban: se quedaban esperando a una conexion
+     * muerta, para siempre. Por eso unas llamadas iban bien y otras se colgaban
+     * a la vez, y por eso parecia que la base estaba atascada cuando la base
+     * estaba vacia y ociosa.
+     *
+     * Se reintenta y ya esta. Si falla dos veces, se dice y se acabo. */
     return hacer(db());
   }
 }
