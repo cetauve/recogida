@@ -293,7 +293,7 @@ function aviso(txt, malo) {
  * Vintage y la pantalla se quedaria sin un solo tipo. */
 const limpiar = (n) => String(n || '')
   .replace(/^#\d+\s*/, '')
-  .replace(/^Gebrauchtes?\s+/i, '')
+  .replace(/^Gebrauchtes?\s+/i, '').replace(/^De\s+segunda\s+mano\s+/i, '')
   .replace(/\s+(BV|BTo|BTa|DE|NL)$/i, '')
   .trim();
 const icoDe = (t) => (TIPOS.find((x) => x.n === t) || {}).ico || 'nose';
