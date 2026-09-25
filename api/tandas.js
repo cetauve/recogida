@@ -765,7 +765,10 @@ async function atender(req, res) {
         return res.status(200).json({ ok: true, ahora: new Date().toISOString(),
                                       directos: await panelDirectos(s) });
       } catch (e) {
-        return res.status(200).json({ ok: true, ahora: new Date().toISOString(), directos: [] });
+        /* Si no se ha podido leer, se dice. Devolver una lista vacia haria que
+         * el panel pintara los cinco puestos como apagados, que es justo lo
+         * contrario de lo que hace falta saber. */
+        return res.status(200).json({ ok: false, error: 'no-se-ha-podido-leer' });
       }
     }
     if (q.live) {
