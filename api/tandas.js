@@ -671,7 +671,35 @@ function traducirTandas(datos, mapa) {
   return { datos, n };
 }
 
+/* PASE LO QUE PASE, SE CONTESTA.
+ *
+ * Esto es una red, no un arreglo: si algo aqui dentro se queda colgado, a los
+ * doce segundos se responde igualmente con un "voy lento" y quien pregunta
+ * -la tablet, el panel, el almacen- puede seguir su vida y reintentar. Sin
+ * esto, una llamada colgada deja al cliente esperando cinco minutos y a las
+ * demas haciendo cola detras, que es como una tonteria se convierte en el
+ * servidor entero mudo.
+ *
+ * Doce segundos es mucho: la llamada mas lenta que tenemos anda por medio. */
+const LIMITE = 12000;
+
 module.exports = puerta(async (req, res) => {
+  let contestado = false;
+  const marcar = (r) => { contestado = true; return r; };
+  const reloj = setTimeout(() => {
+    if (contestado) return;
+    contestado = true;
+    try { res.status(503).json({ ok: false, error: 'servidor-lento' }); } catch (_) {}
+  }, LIMITE);
+  try {
+    return marcar(await atender(req, res));
+  } finally {
+    contestado = true;
+    clearTimeout(reloj);
+  }
+});
+
+async function atender(req, res) {
   const s = db();
 
   if (req.method === 'POST') {
@@ -776,4 +804,4 @@ module.exports = puerta(async (req, res) => {
   }
 
   return res.status(405).json({ ok: false, error: 'metodo' });
-});
+}

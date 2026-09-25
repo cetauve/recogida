@@ -36,8 +36,22 @@ function db() {
     ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(url) ? false : 'require',
     prepare: false,
     max: 1,
-    idle_timeout: 20,
-    connect_timeout: 15,
+    /* CONEXIONES QUE NO SE QUEDAN ZOMBIS.
+     *
+     * Entre una llamada y la siguiente, el servidor congela la copia que atendio
+     * la anterior. Mientras esta congelada, la base puede cerrar la conexion por
+     * su cuenta, y al descongelarse esa copia sigue creyendo que la tiene. Manda
+     * la consulta a un sitio que ya no existe y se queda esperando una respuesta
+     * que no va a llegar NUNCA: ni salta el corte de diez segundos, porque la
+     * base nunca llego a recibir nada. Eso son los cinco minutos colgada.
+     *
+     * Con esto la conexion se suelta enseguida al terminar y se jubila al
+     * minuto, asi que la siguiente llamada abre una nueva en vez de resucitar
+     * una muerta. Abrir cuesta unas decimas; quedarse colgado cuesta el directo. */
+    idle_timeout: 5,
+    max_lifetime: 60,
+    keep_alive: 10,
+    connect_timeout: 10,
     /* EL FRENO DE MANO, Y ES LO QUE NOS HA FALTADO DOS VECES YA.
      *
      * 25 sep 2026: la API estuvo cayendo durante media hora con el mismo error
