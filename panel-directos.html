@@ -152,8 +152,10 @@ function enlaceTablet(canal, sesion) {
 }
 
 function filaHTML(p, d) {
+  /* Mismo listón que la tablet: noventa segundos. Una pestaña que Chrome ha
+   * frenado habla una vez por minuto y sigue estando perfectamente viva. */
   var pcSeg = (d && d.listados_cuando) ? (Date.now() - new Date(d.listados_cuando).getTime()) / 1000 : 1e9;
-  var clase = !d ? 'dormido' : (pcSeg < 45 ? 'vivo' : (pcSeg < 3600 ? 'muerto' : 'dormido'));
+  var clase = !d ? 'dormido' : (pcSeg < 90 ? 'vivo' : (pcSeg < 3600 ? 'muerto' : 'dormido'));
   var canal = p ? p.canal : (d.canal || '');
   var nombre = p ? p.nombre : (d.canal ? d.canal.toUpperCase() : '');
   var cuenta = (d && d.cuenta) || (p && p.cuenta) || '';
@@ -184,7 +186,7 @@ function filaHTML(p, d) {
   }
 
   var semaforo = d
-    ? '<span class="sem">' + luz('ordenador', d.listados_cuando, 45) + luz('tablet', d.tablet, 120) + '</span>'
+    ? '<span class="sem">' + luz('ordenador', d.listados_cuando, 90) + luz('tablet', d.tablet, 120) + '</span>'
     : '';
 
   var pie = '';

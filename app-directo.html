@@ -415,8 +415,13 @@ function cabecera() {
   const u = (estado.ultimas || [])[(estado.ultimas || []).length - 1];
   $('ultima').innerHTML = u ? 'Last sold: <b>tag ' + u.ficha + '</b> · ' +
     esc(limpiar(u.nombre)) + ' · ' + esc(u.precio || '') : '';
+  /* NOVENTA SEGUNDOS Y NO CUARENTA Y CINCO. El ordenador da senales cada quince,
+   * pero si Chrome ha frenado esa pestana por estar detras, pasa a hablar una
+   * vez por minuto. Con el listón en cuarenta y cinco, la vendedora veia el
+   * cartel rojo aparecer y desaparecer todo el rato con el sistema funcionando
+   * perfectamente, y un aviso que salta sin motivo deja de mirarse. */
   const l = estado.listados_cuando ? (Date.now() - new Date(estado.listados_cuando).getTime()) / 1000 : 1e9;
-  const vivo = l < 45;
+  const vivo = l < 90;
   $('punto').className = 'punto ' + (vivo ? 'on' : 'off');
   $('txtEstado').textContent = !vivo ? 'computer not responding'
     : (estado.orden && estado.orden.estado === 'pendiente') ? 'starting…'
