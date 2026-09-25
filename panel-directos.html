@@ -151,7 +151,7 @@ function enlaceTablet(canal, sesion) {
     (canal ? '&canal=' + encodeURIComponent(canal) : '&directo=' + encodeURIComponent(sesion));
 }
 
-function filaHTML(p, d) {
+function filaHTML(p, d, choque) {
   /* Mismo listón que la tablet: noventa segundos. Una pestaña que Chrome ha
    * frenado habla una vez por minuto y sigue estando perfectamente viva. */
   var pcSeg = (d && d.listados_cuando) ? (Date.now() - new Date(d.listados_cuando).getTime()) / 1000 : 1e9;
@@ -199,10 +199,16 @@ function filaHTML(p, d) {
     '</div>';
   }
 
+  var aviso = choque
+    ? '<div class="orden error">Hay DOS ordenadores diciendo que son ' + esc(nombre) + '. ' +
+      'La tablet sigue al ultimo que hable y el otro no sale. Mira el nombre en el panel de ' +
+      'control de la extension de cada perfil de Chrome.</div>'
+    : '';
+
   return '<div class="fila ' + clase + (d ? '' : ' apagado') + '">' +
     '<div class="alto">' + titulo +
       (cuenta ? '<span class="cuenta">' + esc(cuenta) + '</span>' : '') + semaforo +
-    '</div>' + cuerpo + orden + pie +
+    '</div>' + aviso + cuerpo + orden + pie +
   '</div>';
 }
 
@@ -216,7 +222,23 @@ function pintar(j) {
     if (c && !porCanal[c]) porCanal[c] = vivos[i];
   }
 
-  var html = PUESTOS.map(function (p) { return filaHTML(p, porCanal[p.canal] || null); });
+  /* DOS DIRECTOS CON EL MISMO NOMBRE. Pasa cuando a un perfil de Chrome se le
+   * deja el nombre de otro, y es de lo peor que puede ocurrir: los dos escriben
+   * en el mismo canal, la tablet sigue al ultimo que hablo y el otro no aparece
+   * nunca. Antes esto quedaba ESCONDIDO, porque de cada canal solo se pintaba el
+   * mas reciente. Ahora se avisa en la fila. */
+  var FRESCO_CHOQUE = 5 * 60 * 1000;
+  var choques = {};
+  vivos.forEach(function (d) {
+    if (!d.canal) return;
+    var visto = d.listados_cuando ? Date.now() - new Date(d.listados_cuando).getTime() : 1e12;
+    if (visto > FRESCO_CHOQUE) return;
+    choques[d.canal] = (choques[d.canal] || 0) + 1;
+  });
+
+  var html = PUESTOS.map(function (p) {
+    return filaHTML(p, porCanal[p.canal] || null, choques[p.canal] > 1);
+  });
 
   /* Y al final, lo que no encaja en ningun puesto: directos sin nombre, o con
    * un nombre que no esta en la lista. Se ven para que no pasen desapercibidos. */
@@ -232,7 +254,7 @@ function pintar(j) {
     if (d.canal && porCanal[d.canal] !== d) return;
     var visto = d.listados_cuando ? Date.now() - new Date(d.listados_cuando).getTime() : 1e12;
     if (visto > FRESCO) return;
-    html.push(filaHTML(null, d));
+    html.push(filaHTML(null, d, false));
   });
 
   $('lista').innerHTML = html.join('');
