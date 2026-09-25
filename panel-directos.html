@@ -220,9 +220,16 @@ function pintar(j) {
    * un nombre que no esta en la lista. Se ven para que no pasen desapercibidos. */
   var conocidos = {};
   PUESTOS.forEach(function (p) { conocidos[p.canal] = 1; });
+  /* Y al final, lo que no encaja en ningun puesto. Solo si ha dado senales hace
+   * poco: cada vez que se para y se reanuda un directo, TikTok le da un numero
+   * nuevo, asi que el de antes se queda ahi de recuerdo. Enseñar esos fantasmas
+   * doce horas solo sirve para asustar. */
+  var FRESCO = 10 * 60 * 1000;
   vivos.forEach(function (d) {
     if (d.canal && conocidos[d.canal]) return;
     if (d.canal && porCanal[d.canal] !== d) return;
+    var visto = d.listados_cuando ? Date.now() - new Date(d.listados_cuando).getTime() : 1e12;
+    if (visto > FRESCO) return;
     html.push(filaHTML(null, d));
   });
 
