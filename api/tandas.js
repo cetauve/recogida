@@ -23,7 +23,7 @@
  * SIN JUEGO SE USA LA FECHA, que es lo que el juego era hasta hoy. Así los
  * enlaces de antes y los móviles con la página en caché siguen funcionando.
  */
-const { db, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerpo } = require('./_lib');
+const { db, reiniciarDb, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerpo } = require('./_lib');
 
 /* ===========================================================================
  * LO QUE EL ALMACÉN DICE QUE ES CADA PRENDA
@@ -689,6 +689,9 @@ module.exports = puerta(async (req, res) => {
   const reloj = setTimeout(() => {
     if (contestado) return;
     contestado = true;
+    /* Y se tira la conexion: si ha tardado doce segundos es que esta colgada, y
+     * dejarla puesta condena a esta copia del servidor a no contestar mas. */
+    try { reiniciarDb(); } catch (_) {}
     try { res.status(503).json({ ok: false, error: 'servidor-lento' }); } catch (_) {}
   }, LIMITE);
   try {

@@ -21,6 +21,22 @@ const crypto = require('crypto');
 /* ------------------------------------------------------------------ base */
 
 let sql = null;
+
+/* TIRAR LA CONEXION Y EMPEZAR DE CERO.
+ *
+ * Cada copia del servidor tiene UNA sola conexion, a proposito, para no abrir
+ * de mas. El precio es que si esa conexion se queda colgada, TODO lo que pida
+ * esa copia a partir de ese momento se pone en cola detras y no sale nunca:
+ * una copia envenenada deja de contestar para siempre aunque la base este
+ * perfecta. Por eso, cuando algo tarda mas de la cuenta, se tira la conexion y
+ * la siguiente llamada abre una limpia. Se cura sola en una llamada en vez de
+ * quedarse muerta hasta que el servidor decida reciclar esa copia. */
+function reiniciarDb() {
+  const vieja = sql;
+  sql = null;
+  if (vieja) { try { vieja.end({ timeout: 0 }); } catch (_) {} }
+}
+
 function db() {
   if (sql) return sql;
   const url = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL ||
@@ -453,6 +469,7 @@ const noAutorizado = (res, quiere) => res.status(401).json({
 });
 
 module.exports = {
+  reiniciarDb,
   db, asegurarTablas, puerta, puedeEscribir, puedeLeer, noAutorizado,
   diaDeHoy, diaDe, aFecha, aEntero, aNumero, aTexto, cuerpo
 };
