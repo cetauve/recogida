@@ -725,9 +725,18 @@ module.exports = puerta(async (req, res) => {
   const reloj = setTimeout(() => {
     if (contestado) return;
     contestado = true;
-    /* Y se tira la conexion: si ha tardado doce segundos es que esta colgada, y
-     * dejarla puesta condena a esta copia del servidor a no contestar mas. */
-    try { reiniciarDb(); } catch (_) {}
+    /* AQUI SE TIRABA LA CONEXION Y ERA UN ERROR MIO, 25 sep 2026.
+     *
+     * La idea era razonable: si una llamada tarda doce segundos, su conexion
+     * esta colgada, se tira y la siguiente abre una limpia. El problema es que
+     * la conexion es UNA para toda la copia del servidor, y esa copia atiende
+     * varias llamadas a la vez. Al tirarla se cargaba tambien las llamadas de
+     * los demas que iban por la mitad. Resultado: cada vez que algo tardaba, se
+     * caian con el las peticiones de la tablet que estaban en curso, y desde
+     * fuera se veia como "la conexion se cae cada vez que toco algo".
+     *
+     * Se queda solo lo util: contestar siempre. Las conexiones viejas ya se
+     * reciclan solas por tiempo, que era lo que hacia falta de verdad. */
     try { res.status(503).json({ ok: false, error: 'servidor-lento' }); } catch (_) {}
   }, LIMITE);
   try {
