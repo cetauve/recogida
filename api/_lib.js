@@ -37,7 +37,24 @@ function db() {
     prepare: false,
     max: 1,
     idle_timeout: 20,
-    connect_timeout: 15
+    connect_timeout: 15,
+    /* EL FRENO DE MANO, Y ES LO QUE NOS HA FALTADO DOS VECES YA.
+     *
+     * 25 sep 2026: la API estuvo cayendo durante media hora con el mismo error
+     * una y otra vez, "se acabó el tiempo a los 300 segundos". Una consulta que
+     * se queda esperando un candado no falla: se queda ahí cinco minutos, y
+     * durante esos cinco minutos su conexión a la base NO está disponible para
+     * nadie. Con las tablets y los móviles del almacén reintentando, la cola
+     * crece más deprisa de lo que se vacía y el servidor entero enmudece.
+     *
+     * Con esto, una consulta que pasa de diez segundos se corta sola, suelta la
+     * conexión y devuelve un error de verdad, que además se ve en los registros.
+     * Diez segundos es mucho más de lo que tarda cualquier consulta nuestra: la
+     * más pesada anda por medio segundo. */
+    connection: {
+      statement_timeout: 10000,
+      idle_in_transaction_session_timeout: 10000
+    }
   });
   return sql;
 }

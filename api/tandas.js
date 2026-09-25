@@ -53,8 +53,14 @@ const { db, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerp
  * único que pueden escribir: una categoría por prenda. No mueve pedidos, no
  * crea etiquetas y no toca nada de TikTok.
  * ========================================================================= */
+/* MISMO CUIDADO QUE CON EL DIRECTO: esta orden no se ejecuta en camino normal.
+ * Los moviles del almacen preguntan por lo marcado a todas horas, y cada copia
+ * del servidor que arrancaba lanzaba una de estas. Pedir ese candado mientras
+ * alguien esta leyendo deja la tabla en cola y se lleva por delante una
+ * conexion durante cinco minutos. Ahora solo se crea si de verdad no existe. */
 let tablaMarcasHecha = false;
-async function tablaDeMarcas(s) {
+
+async function crearTablaMarcas(s) {
   if (tablaMarcasHecha) return;
   await s`
     create table if not exists marcado (
@@ -65,6 +71,17 @@ async function tablaDeMarcas(s) {
   tablaMarcasHecha = true;
 }
 
+async function conMarcado(s, hacer) {
+  try {
+    return await hacer();
+  } catch (e) {
+    const m = String((e && e.message) || e);
+    if (!(/marcado/.test(m) && /does not exist|no existe|undefined table/i.test(m))) throw e;
+    await crearTablaMarcas(s);
+    return hacer();
+  }
+}
+
 const sinNulos = (o) => {
   const r = {};
   for (const k of Object.keys(o || {})) if (o[k] !== null) r[k] = o[k];
@@ -73,8 +90,8 @@ const sinNulos = (o) => {
 
 async function leerMarcas(s, res, juego) {
   if (!juego) return res.status(400).json({ ok: false, error: 'sin-juego' });
-  await tablaDeMarcas(s);
-  const filas = await s`select marcas, cuando from marcado where juego = ${juego}`;
+  const filas = await conMarcado(s, () =>
+    s`select marcas, cuando from marcado where juego = ${juego}`);
   if (!filas.length) return res.status(200).json({ ok: true, hay: false, juego, marcas: {} });
   return res.status(200).json({ ok: true, hay: true, juego,
     marcas: sinNulos(filas[0].marcas), cuando: filas[0].cuando });
@@ -82,7 +99,6 @@ async function leerMarcas(s, res, juego) {
 
 async function guardarMarcas(s, res, juego, entran) {
   if (!juego) return res.status(400).json({ ok: false, error: 'sin-juego' });
-  await tablaDeMarcas(s);
 
   /* Solo llaves y valores con pinta de lo que son. Una llave es
    * "perchero.numero" y un valor es el nombre corto de una categoría, o nulo
@@ -101,13 +117,13 @@ async function guardarMarcas(s, res, juego, entran) {
 
   /* `||` en jsonb es unir: lo que llega gana llave a llave y lo que no venía
    * se queda como estaba, así dos móviles marcando a la vez no se pisan. */
-  const [f] = await s`
+  const [f] = await conMarcado(s, () => s`
     insert into marcado (juego, marcas, cuando)
     values (${juego}, ${s.json(limpio)}, now())
     on conflict (juego) do update set
       marcas = jsonb_strip_nulls(marcado.marcas || excluded.marcas),
       cuando = now()
-    returning marcas, cuando`;
+    returning marcas, cuando`);
 
   const marcas = sinNulos(f.marcas);
   return res.status(200).json({ ok: true, juego, marcas, cuando: f.cuando,
