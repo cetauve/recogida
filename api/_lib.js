@@ -36,7 +36,7 @@ function db() {
      * configuración que se puedan desincronizar. */
     ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(url) ? false : 'require',
     prepare: false,
-    3
+        max: 3,
     idle_timeout: 20,
     connect_timeout: 15
   });
