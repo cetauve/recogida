@@ -248,7 +248,11 @@ async function vuelta() {
     return;
   }
   var corte = new AbortController();
-  var reloj = setTimeout(function () { corte.abort(); }, 8000);
+  /* QUINCE SEGUNDOS Y NO OCHO. La primera llamada despues de un rato sin usar
+   * el servidor tarda unos segundos en arrancar, y cortarla a los ocho hacia
+   * que el panel dijera "sin respuesta" con el servidor perfectamente bien.
+   * Peor aun: la llamada cortada aqui sigue corriendo alla, gastando conexion. */
+  var reloj = setTimeout(function () { corte.abort(); }, 15000);
   try {
     var r = await fetch(API + '?d=' + encodeURIComponent(CODIGO) + '&panel=1&_=' + Date.now(),
                         { signal: corte.signal, cache: 'no-store' });
@@ -262,7 +266,9 @@ async function vuelta() {
     /* Freno progresivo. Con cinco tablets y varios moviles mirando esto a la
      * vez, una pantalla que insiste cada cinco segundos contra un servidor que
      * va mal es lo que lo acaba de tirar. */
-    espera = Math.min(espera * 2, 60000);
+    /* Se espacia poco a poco, no de golpe: con un fallo suelto no tiene sentido
+     * dejar el panel un minuto a ciegas. */
+    espera = Math.min(Math.round(espera * 1.6), 30000);
     $('reloj').textContent = 'sin respuesta · reintentando en ' + Math.round(espera / 1000) + ' s';
     $('fallo').innerHTML = '<div class="fallo">No se puede hablar con el servidor. ' +
       esc(String((e && e.message) || e)) + '</div>';
