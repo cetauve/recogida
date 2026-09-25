@@ -23,6 +23,11 @@
 
   header{display:flex;align-items:center;gap:22px;padding:9px 18px;
     border-bottom:1px solid var(--borde);background:var(--caja);flex:0 0 auto}
+  .puesto{display:flex;flex-direction:column;gap:1px;text-decoration:none;color:inherit;
+    border:1.5px solid var(--borde);border-radius:11px;padding:7px 13px;background:var(--caja);flex:0 0 auto}
+  .puesto b{font-size:17px;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+  .puesto span{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--suave);font-weight:700}
+  .puesto:active{background:#e8edf1}
   .ficha{display:flex;align-items:baseline;gap:11px;min-width:190px}
   .ficha .et{font-size:11px;letter-spacing:.17em;color:var(--suave);text-transform:uppercase}
   .ficha .n{font-size:50px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;transition:color .15s}
@@ -139,6 +144,12 @@
 <div class="banda" id="banda" style="display:none">TEST MODE · nothing is auctioned</div>
 
 <header>
+  <!-- DE QUE DIRECTO ES ESTA TABLET. Con tres a la vez, la pantalla era
+       identica en las tres y no habia forma de saber en cual estabas sin
+       mirar el enlace. Ademas es la puerta de vuelta al panel: todas las
+       tablets guardan el panel y entran desde ahi, asi que cambiarse de
+       puesto es un toque. -->
+  <a class="puesto" id="puesto" hidden></a>
   <div class="ficha"><span class="et">Tag</span><span class="n" id="ficha">--</span></div>
   <div class="ultima" id="ultima"></div>
   <div class="estado"><span class="punto" id="punto"></span><span id="txtEstado">conectando</span></div>
@@ -382,6 +393,18 @@ async function pedir(item) {
   } catch (e) { aviso('Could not send. Check the connection.', true); }
 }
 
+/* El rotulo del puesto. El nombre de la cuenta llega del servidor en cuanto
+ * contesta; hasta entonces vale con el nombre del canal, que ya viene en el
+ * enlace. */
+function pintarPuesto(cuenta) {
+  if (!CANAL) return;
+  const a = $('puesto');
+  a.innerHTML = '<b>' + esc(CANAL.toUpperCase().replace(/-/g, ' ')) + '</b>' +
+                '<span>' + esc(cuenta || 'cambiar') + '</span>';
+  a.href = 'panel-directos.html?d=' + encodeURIComponent(CODIGO);
+  a.hidden = false;
+}
+
 function cabecera() {
   if (!estado) return;
   const n = (estado.ficha || 0) + 1, el = $('ficha');
@@ -418,6 +441,7 @@ async function mirar() {
   try {
     const j = await llamar(API + '?d=' + encodeURIComponent(CODIGO) +
       QUIEN + '&live=1&_=' + Date.now());
+    if (CANAL) pintarPuesto(j && j.cuenta);
     if (!j.ok) { $('punto').className = 'punto off'; $('txtEstado').textContent = j.error || 'server refused'; }
     else {
       estado = j; cabecera();
@@ -437,7 +461,7 @@ async function mirar() {
 if (PRUEBA) $('banda').style.display = '';
 if (!CODIGO || (!DIRECTO && !CANAL)) {
   $('prendas').innerHTML = '<div class="vacio">The link is missing the code or the LIVE session.</div>';
-} else { pintarMarcas(); mirar(); }
+} else { pintarPuesto(''); pintarMarcas(); mirar(); }
 </script>
 </body>
 </html>

@@ -6,12 +6,12 @@
 <title>Billy's · Panel de directos</title>
 <style>
   /* Mismo mundo que la pantalla del directo: claro, porque esto se mira en un
-   * almacen con luz y a veces desde el movil en la calle. */
+   * almacen con luz, en el movil y ahora tambien en las tablets. */
   :root{
     color-scheme: light;
     --fondo:#eef1f4; --caja:#ffffff; --borde:#ccd4db;
     --texto:#141a1f; --suave:#5f6b76;
-    --ok:#2e9e4f; --malo:#c0392b; --avisa:#b0651f; --cian:#0e8c80;
+    --ok:#2e9e4f; --malo:#c0392b; --cian:#0e8c80;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;background:var(--fondo);color:var(--texto);
@@ -43,24 +43,33 @@
   .dato .v{font-size:26px;font-weight:750;line-height:1.1;font-variant-numeric:tabular-nums}
   .dato .v.chico{font-size:15px;font-weight:600}
   .ultima{flex:1;min-width:190px}
-  .ultima .v.chico{color:var(--texto)}
 
   .orden{margin-top:12px;font-size:14px;padding:9px 12px;border-radius:9px;background:#f4f7f9;color:var(--suave)}
   .orden.pendiente{background:#e7f4f2;color:#0a6b62}
   .orden.error{background:#fdecea;color:#8c1f14;font-weight:600}
 
-  .pie{margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  button{appearance:none;font:inherit;cursor:pointer;background:var(--caja);
-    border:1.5px solid var(--borde);border-radius:9px;padding:8px 14px;
-    font-size:13px;font-weight:600;color:var(--texto)}
-  button:active{background:#e8edf1}
-  button:focus-visible{outline:3px solid var(--cian);outline-offset:2px}
-  .enlace{font-size:12px;color:var(--suave);word-break:break-all;flex:1;min-width:200px}
+  .pie{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 
-  .vacio{background:var(--caja);border:1px dashed var(--borde);border-radius:14px;
-    padding:36px 20px;text-align:center;color:var(--suave);font-size:16px;line-height:1.7}
+  /* EL BOTON GRANDE ES EL DE ABRIR LA TABLET.
+   * Todas las tablets guardan el MISMO enlace, el de este panel, y cada una
+   * elige aqui su puesto. Asi no hay que repartir enlaces cada dia. Por eso
+   * este boton es lo mas grande de la fila: lo va a pulsar alguien de pie, con
+   * una prenda en la otra mano. */
+  .abrir{display:inline-flex;align-items:center;gap:9px;font:inherit;font-size:16px;font-weight:700;
+    padding:14px 22px;border-radius:11px;border:none;background:var(--cian);color:#fff;
+    cursor:pointer;text-decoration:none;min-height:50px}
+  .abrir:active{background:#0b7b70}
+  .abrir:focus-visible{outline:3px solid var(--texto);outline-offset:2px}
+  .abrir .fl{font-size:19px;line-height:1}
+  button.copiar{appearance:none;font:inherit;cursor:pointer;background:var(--caja);
+    border:1.5px solid var(--borde);border-radius:9px;padding:10px 16px;
+    font-size:13px;font-weight:600;color:var(--suave);min-height:44px}
+  button.copiar:active{background:#e8edf1}
+
+  .vacio{font-size:14px;color:var(--suave);margin-top:12px;font-style:normal}
   .fallo{background:#fdecea;border:1px solid #f0b8b0;color:#8c1f14;
     border-radius:12px;padding:14px 16px;font-size:14px;margin-bottom:14px}
+  .apagado{opacity:.62}
 </style>
 </head>
 <body>
@@ -69,8 +78,8 @@
     <h1>Directos</h1>
     <span class="reloj" id="reloj">conectando</span>
   </header>
-  <p class="intro">Una fila por directo de las ultimas doce horas. El semaforo mira si el ordenador
-     y la tablet han dado senales hace poco, no si el directo esta emitiendo.</p>
+  <p class="intro">Cada tablet guarda este mismo enlace y aqui elige su puesto. El semaforo mira si el
+     ordenador y la tablet han dado senales hace poco, no si el directo esta emitiendo.</p>
   <div id="fallo"></div>
   <div id="lista"></div>
 </div>
@@ -78,21 +87,40 @@
 <script>
 /* Billy's · panel de directos.
  *
- * SOLO MIRA, NO TOCA. Aqui no hay ningun boton que lance nada ni que pare nada:
- * si algun dia se cuelga esta pantalla, lo peor que pasa es que no se vea.
+ * DOS COSAS A LA VEZ, Y A PROPOSITO. Es la pantalla desde la que se vigila que
+ * todo esta conectado, y es tambien la puerta de entrada de las tablets: todas
+ * guardan ESTE enlace y cada una entra a su puesto desde aqui. Antes habia que
+ * mandarle a cada una el suyo, y un enlace mal mandado es una tablet lanzando
+ * subastas en la cuenta de otra.
  *
- * NO SE ENSENA NADA DE NADIE. Ni usuarios, ni nombres de compradores, ni
- * numeros de pedido. El servidor ya los quita antes de mandarlos, y aqui
- * tampoco se pintarian.
+ * LOS PUESTOS SALEN SIEMPRE, haya directo o no. Si solo se pintaran los
+ * directos vivos, una tablet no podria entrar ANTES de que empiece la emision,
+ * que es justo cuando se prepara. La pantalla del directo ya sabe decir "aun no
+ * hay anuncios" y esperar.
  *
- * PREGUNTA CADA CINCO SEGUNDOS y frena si el servidor falla. Esto se queda
- * abierto en una pestana toda la tarde y no puede ser una de las cosas que
- * tumben la API, que ya paso una vez.
+ * Y SIEMPRE EN EL MISMO ORDEN. Nada de ordenar por actividad: la fila de BV
+ * tiene que estar donde estaba ayer, porque quien la pulsa lo hace sin leer.
+ *
+ * SOLO MIRA, NO LANZA. Aqui no hay ningun boton que empiece ni pare una
+ * subasta. Lo peor que puede pasar si esta pantalla falla es que no se vea.
+ *
+ * NO SE ENSENA NADA DE NADIE: ni usuarios, ni compradores, ni pedidos. El
+ * servidor los quita antes de mandarlos.
  */
 var P = new URLSearchParams(location.search);
 var CODIGO = P.get('d') || '';
 var API = '/api/tandas';
-var RITMO = 5000, espera = RITMO, ultimoFallo = '';
+var RITMO = 5000, espera = RITMO;
+
+/* Los puestos que existen. Si manana hay uno nuevo se anade aqui y ya sale,
+ * tenga directo o no. */
+var PUESTOS = [
+  { canal: 'bv',  nombre: 'BV',  cuenta: 'Billys VLC' },
+  { canal: 'bto', nombre: 'BTo', cuenta: 'Billys Tour' },
+  { canal: 'bta', nombre: 'BTa', cuenta: 'Billys Tacos' },
+  { canal: 'de',  nombre: 'DE',  cuenta: 'Alemania' },
+  { canal: 'nl',  nombre: 'NL',  cuenta: 'Holanda' }
+];
 
 var $ = function (id) { return document.getElementById(id); };
 var esc = function (s) {
@@ -101,8 +129,6 @@ var esc = function (s) {
   });
 };
 
-/* Cuanto hace, en palabras. Un panel que dice "hace 3 s" obliga a hacer
- * cuentas; uno que dice "hace un rato" no dice nada. Termino medio. */
 function hace(iso) {
   if (!iso) return null;
   var s = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -120,65 +146,87 @@ function luz(nombre, iso, limite) {
     (bien ? '' : (cuanto ? ' · hace ' + cuanto : ' · nunca')) + '</span>';
 }
 
-function filaHTML(d) {
-  var pcSeg = d.listados_cuando ? (Date.now() - new Date(d.listados_cuando).getTime()) / 1000 : 1e9;
-  var clase = pcSeg < 45 ? 'vivo' : (pcSeg < 3600 ? 'muerto' : 'dormido');
+function enlaceTablet(canal, sesion) {
+  return 'app-directo.html?d=' + encodeURIComponent(CODIGO) +
+    (canal ? '&canal=' + encodeURIComponent(canal) : '&directo=' + encodeURIComponent(sesion));
+}
 
-  var canal = d.canal
-    ? '<span class="canal">' + esc(d.canal.toUpperCase()) + '</span>'
+function filaHTML(p, d) {
+  var pcSeg = (d && d.listados_cuando) ? (Date.now() - new Date(d.listados_cuando).getTime()) / 1000 : 1e9;
+  var clase = !d ? 'dormido' : (pcSeg < 45 ? 'vivo' : (pcSeg < 3600 ? 'muerto' : 'dormido'));
+  var canal = p ? p.canal : (d.canal || '');
+  var nombre = p ? p.nombre : (d.canal ? d.canal.toUpperCase() : '');
+  var cuenta = (d && d.cuenta) || (p && p.cuenta) || '';
+
+  var titulo = nombre
+    ? '<span class="canal">' + esc(nombre) + '</span>'
     : '<span class="canal sinnombre">sin nombre de canal</span>';
 
-  var u = d.ultima;
-  var ultima = u
-    ? '<div class="et">Ultima vendida</div><div class="v chico">ficha ' + esc(u.ficha) +
-      ' · ' + esc(u.nombre || '') + (u.precio ? ' · ' + esc(u.precio) : '') + '</div>'
-    : '<div class="et">Ultima vendida</div><div class="v chico" style="color:var(--suave)">todavia nada</div>';
-
-  var orden = '';
-  if (d.orden && d.orden.estado === 'pendiente') {
-    orden = '<div class="orden pendiente">Lanzando ' + esc(d.orden.nombre || '') + '…</div>';
-  } else if (d.orden && d.orden.estado === 'error') {
-    orden = '<div class="orden error">No salio: ' + esc(d.orden.error || 'sin motivo') + '</div>';
-  }
-
-  var enlace = location.origin + '/app-directo.html?d=' + encodeURIComponent(CODIGO) +
-    (d.canal ? '&canal=' + encodeURIComponent(d.canal) : '&directo=' + encodeURIComponent(d.sesion));
-
-  return '<div class="fila ' + clase + '">' +
-    '<div class="alto">' + canal +
-      (d.cuenta ? '<span class="cuenta">' + esc(d.cuenta) + '</span>' : '') +
-      '<span class="sem">' + luz('ordenador', d.listados_cuando, 45) +
-                             luz('tablet', d.tablet, 120) + '</span>' +
-    '</div>' +
-    '<div class="datos">' +
+  var cuerpo, orden = '';
+  if (!d) {
+    cuerpo = '<div class="vacio">Sin directo todavia. Se puede abrir la tablet igual y esperar aqui.</div>';
+  } else {
+    var u = d.ultima;
+    var ultima = u
+      ? '<div class="et">Ultima vendida</div><div class="v chico">ficha ' + esc(u.ficha) +
+        ' · ' + esc(u.nombre || '') + (u.precio ? ' · ' + esc(u.precio) : '') + '</div>'
+      : '<div class="et">Ultima vendida</div><div class="v chico" style="color:var(--suave)">todavia nada</div>';
+    cuerpo = '<div class="datos">' +
       '<div class="dato"><div class="et">Ficha</div><div class="v">' + esc((d.ficha || 0) + 1) + '</div></div>' +
       '<div class="dato"><div class="et">Vendidas</div><div class="v">' + esc(d.ventas || 0) + '</div></div>' +
       '<div class="dato"><div class="et">Anuncios</div><div class="v">' + esc(d.listados || 0) + '</div></div>' +
-      '<div class="dato ultima">' + ultima + '</div>' +
-    '</div>' + orden +
-    '<div class="pie">' +
-      '<button data-copiar="' + esc(enlace) + '">Copiar enlace de la tablet</button>' +
-      '<span class="enlace">' + esc(enlace.replace(/([?&]d=)[^&]*/, '$1…')) + '</span>' +
-    '</div>' +
+      '<div class="dato ultima">' + ultima + '</div></div>';
+    if (d.orden && d.orden.estado === 'pendiente') {
+      orden = '<div class="orden pendiente">Lanzando ' + esc(d.orden.nombre || '') + '…</div>';
+    } else if (d.orden && d.orden.estado === 'error') {
+      orden = '<div class="orden error">No salio: ' + esc(d.orden.error || 'sin motivo') + '</div>';
+    }
+  }
+
+  var semaforo = d
+    ? '<span class="sem">' + luz('ordenador', d.listados_cuando, 45) + luz('tablet', d.tablet, 120) + '</span>'
+    : '';
+
+  var pie = '';
+  if (canal || (d && d.sesion)) {
+    var url = enlaceTablet(canal, d && d.sesion);
+    pie = '<div class="pie">' +
+      '<a class="abrir" href="' + esc(url) + '"><span class="fl">▸</span>Abrir la tablet' +
+        (nombre ? ' de ' + esc(nombre) : '') + '</a>' +
+      '<button class="copiar" data-copiar="' + esc(location.origin + '/' + url) + '">Copiar enlace</button>' +
+    '</div>';
+  }
+
+  return '<div class="fila ' + clase + (d ? '' : ' apagado') + '">' +
+    '<div class="alto">' + titulo +
+      (cuenta ? '<span class="cuenta">' + esc(cuenta) + '</span>' : '') + semaforo +
+    '</div>' + cuerpo + orden + pie +
   '</div>';
 }
 
 function pintar(j) {
-  var lista = $('lista');
-  var d = (j && j.directos) || [];
-  if (!d.length) {
-    lista.innerHTML = '<div class="vacio">Ningun directo en las ultimas doce horas.<br>' +
-      'En cuanto un ordenador abra el panel de TikTok, aparece aqui solo.</div>';
-    return;
+  var vivos = (j && j.directos) || [];
+  var porCanal = {};
+  for (var i = 0; i < vivos.length; i++) {
+    var c = vivos[i].canal;
+    /* De un mismo canal se queda el mas reciente: el de antes de reanudar ya no
+     * interesa a nadie. La lista viene ordenada de nuevo a viejo. */
+    if (c && !porCanal[c]) porCanal[c] = vivos[i];
   }
-  /* Los que tienen nombre de canal primero y por orden alfabetico: la fila de
-   * ES 1 tiene que estar siempre en el mismo sitio, tambien aqui. */
-  d.sort(function (a, b) {
-    if (!a.canal !== !b.canal) return a.canal ? -1 : 1;
-    return String(a.canal).localeCompare(String(b.canal)) ||
-           new Date(b.cuando) - new Date(a.cuando);
+
+  var html = PUESTOS.map(function (p) { return filaHTML(p, porCanal[p.canal] || null); });
+
+  /* Y al final, lo que no encaja en ningun puesto: directos sin nombre, o con
+   * un nombre que no esta en la lista. Se ven para que no pasen desapercibidos. */
+  var conocidos = {};
+  PUESTOS.forEach(function (p) { conocidos[p.canal] = 1; });
+  vivos.forEach(function (d) {
+    if (d.canal && conocidos[d.canal]) return;
+    if (d.canal && porCanal[d.canal] !== d) return;
+    html.push(filaHTML(null, d));
   });
-  lista.innerHTML = d.map(filaHTML).join('');
+
+  $('lista').innerHTML = html.join('');
 }
 
 document.addEventListener('click', function (e) {
@@ -188,7 +236,7 @@ document.addEventListener('click', function (e) {
   try {
     navigator.clipboard.writeText(txt).then(function () {
       b.textContent = 'Copiado';
-      setTimeout(function () { b.textContent = 'Copiar enlace de la tablet'; }, 1500);
+      setTimeout(function () { b.textContent = 'Copiar enlace'; }, 1500);
     }, function () { window.prompt('Copia el enlace:', txt); });
   } catch (_) { window.prompt('Copia el enlace:', txt); }
 });
@@ -210,21 +258,24 @@ async function vuelta() {
     $('fallo').innerHTML = '';
     $('reloj').textContent = 'al dia · ' + new Date().toLocaleTimeString('es-ES');
     espera = RITMO;
-    ultimoFallo = '';
   } catch (e) {
-    /* Freno progresivo. Si el servidor esta ahogado, esta pantalla no puede ser
-     * la que siga insistiendo cada cinco segundos. */
+    /* Freno progresivo. Con cinco tablets y varios moviles mirando esto a la
+     * vez, una pantalla que insiste cada cinco segundos contra un servidor que
+     * va mal es lo que lo acaba de tirar. */
     espera = Math.min(espera * 2, 60000);
-    ultimoFallo = String((e && e.message) || e);
     $('reloj').textContent = 'sin respuesta · reintentando en ' + Math.round(espera / 1000) + ' s';
     $('fallo').innerHTML = '<div class="fallo">No se puede hablar con el servidor. ' +
-      esc(ultimoFallo) + '</div>';
+      esc(String((e && e.message) || e)) + '</div>';
+    /* Aunque no haya servidor, los puestos se pintan igual: la tablet tiene que
+     * poder entrar a su directo aunque el panel no sepa contar nada todavia. */
+    if (!$('lista').innerHTML) pintar(null);
   } finally {
     clearTimeout(reloj);
     setTimeout(vuelta, espera);
   }
 }
 
+pintar(null);
 vuelta();
 </script>
 </body>
