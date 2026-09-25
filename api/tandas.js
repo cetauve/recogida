@@ -296,6 +296,24 @@ async function guardarDirecto(s, sesion, estado) {
 /* Lo que se devuelve a quien pregunta. Las últimas ventas van recortadas: la
  * tablet solo necesita ver las de ahora mismo, y mandar 400 cada dos segundos
  * es tirar batería y datos del iPad. */
+/* UNA ORDEN NO SE QUEDA EN "LANZANDO" PARA SIEMPRE.
+ *
+ * Si el ordenador lanza la subasta pero el aviso de "ya esta" se pierde por el
+ * camino, la orden se quedaba en pendiente sin fecha de caducidad y la tablet
+ * decia "starting" hasta el fin de los tiempos, con la vendedora mirandola sin
+ * poder hacer nada. Pasados dos minutos se da por perdida y se dice. No se
+ * escribe nada: se calcula al leer, asi que no cuesta ni una escritura y no
+ * puede pisar a nadie. */
+const CADUCA_ORDEN = 120000;
+
+function ordenVista(o) {
+  if (!o || o.estado !== 'pendiente') return o;
+  const edad = Date.now() - new Date(o.pedida).getTime();
+  if (!(edad > CADUCA_ORDEN)) return o;
+  return { ...o, estado: 'error',
+    error: 'no se pudo confirmar si salio. Mira el panel de TikTok antes de repetirla.' };
+}
+
 function vistaDirecto(sesion, e, cuando) {
   const ventas = e.ventas || [];
   return {
@@ -303,7 +321,7 @@ function vistaDirecto(sesion, e, cuando) {
     room: e.room || '',
     listados: e.listados || [],
     listados_cuando: e.listados_cuando || null,
-    orden: e.orden || null,
+    orden: ordenVista(e.orden) || null,
     ficha: e.ficha || 0,
     ventas: ventas.length,
     ultimas: ventas.slice(-12)
@@ -401,8 +419,10 @@ async function panelDirectos(s) {
                          precio: f.ultima.precio, hora: f.ultima.hora } : null,
     listados: f.listados || 0,
     listados_cuando: f.listados_cuando || null,
-    orden: f.orden ? { estado: f.orden.estado, nombre: f.orden.nombre,
-                       pedida: f.orden.pedida, error: f.orden.error || '' } : null,
+    orden: f.orden ? (function (o) {
+      const v = ordenVista(o);
+      return { estado: v.estado, nombre: v.nombre, pedida: v.pedida, error: v.error || '' };
+    })(f.orden) : null,
     tablet: f.tablet || null,
     cuando: f.cuando
   }));
