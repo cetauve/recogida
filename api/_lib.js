@@ -38,7 +38,7 @@ function db() {
     prepare: false,
             max: 6,
         idle_timeout: 4,
-    connect_timeout: 15
+        connect_timeout: 5, max_lifetime: 120
   });
   return sql;
 }
