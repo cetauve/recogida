@@ -202,7 +202,26 @@ const TIPOS = [
   { n:'Anorak',         ico:'anoraksra',   fam:'exterior' },
   { n:'Track Pant',     ico:'trackpants',  fam:'abajo' },
   { n:'Jeans',          ico:'vaquero',     fam:'abajo' },
-  { n:'Shorts',         ico:'shorts',      fam:'abajo' }
+  { n:'Shorts',         ico:'shorts',      fam:'abajo' },
+
+  /* LOS MISMOS, EN ESPANOL. Un directo es de un idioma o del otro, nunca de los
+   * dos, asi que aparecen solo los que existan ese dia. Si falta uno, la
+   * pantalla lo sigue pintando pero con el icono de "no se" y en la columna de
+   * arriba, que es raro de ver y por eso se nota. */
+  { n:'Sudadera',            ico:'sudadera',    fam:'arriba' },
+  { n:'Camiseta',            ico:'camiseta',    fam:'arriba' },
+  { n:'Camisa',              ico:'camisa',      fam:'arriba' },
+  { n:'Camiseta de Futbol',  ico:'futbol',      fam:'arriba' },
+  { n:'Camiseta de Fútbol',  ico:'futbol',      fam:'arriba' },
+  { n:'Polo',                ico:'polo',        fam:'arriba' },
+  { n:'Chaqueta',            ico:'chaqueta',    fam:'exterior' },
+  { n:'Chaqueta de Chandal', ico:'trackjacket', fam:'exterior' },
+  { n:'Chaqueta de Chándal', ico:'trackjacket', fam:'exterior' },
+  { n:'Pantalon de Chandal', ico:'trackpants',  fam:'abajo' },
+  { n:'Pantalón de Chándal', ico:'trackpants',  fam:'abajo' },
+  { n:'Vaqueros',            ico:'vaquero',     fam:'abajo' },
+  { n:'Pantalon Corto',      ico:'shorts',      fam:'abajo' },
+  { n:'Pantalón Corto',      ico:'shorts',      fam:'abajo' }
 ];
 const FAM = [
   { id:'arriba',   n:'Tops',      color:'var(--arriba)' },
@@ -256,7 +275,16 @@ function aviso(txt, malo) {
   a._t = setTimeout(() => a.classList.remove('ver'), malo ? 6000 : 1300);
 }
 
-const limpiar = (n) => String(n || '').replace(/^#\d+\s*/, '').replace(/^Gebrauchtes?\s+/i, '').trim();
+/* LA ABREVIATURA DE LA CUENTA VA AL FINAL DEL TITULO -"Sudadera Nike BV"- para
+ * saber de que tienda es cada anuncio. Aqui se quita ANTES de mirar nada, y no
+ * es un detalle: los tipos se deducen de los anuncios que acaban en "Vintage",
+ * asi que con la abreviatura pegada "Sudadera Vintage BV" dejaria de acabar en
+ * Vintage y la pantalla se quedaria sin un solo tipo. */
+const limpiar = (n) => String(n || '')
+  .replace(/^#\d+\s*/, '')
+  .replace(/^Gebrauchtes?\s+/i, '')
+  .replace(/\s+(BV|BTo|BTa|DE|NL)$/i, '')
+  .trim();
 const icoDe = (t) => (TIPOS.find((x) => x.n === t) || {}).ico || 'nose';
 
 /* Los tipos salen del panel, no de la lista de arriba: el cajon de cada uno se
