@@ -90,8 +90,10 @@ const sinNulos = (o) => {
 
 async function leerMarcas(s, res, juego) {
   if (!juego) return res.status(400).json({ ok: false, error: 'sin-juego' });
+  aqui('marcas-consultando');
   const filas = await conMarcado(s, () =>
     s`select marcas, cuando from marcado where juego = ${juego}`);
+  aqui('marcas-consultado');
   if (!filas.length) return res.status(200).json({ ok: true, hay: false, juego, marcas: {} });
   return res.status(200).json({ ok: true, hay: true, juego,
     marcas: sinNulos(filas[0].marcas), cuando: filas[0].cuando });
@@ -719,8 +721,15 @@ function traducirTandas(datos, mapa) {
  * Doce segundos es mucho: la llamada mas lenta que tenemos anda por medio. */
 const LIMITE = 12000;
 
+/* MIGAS DE PAN. Cuando algo se cuelga, lo unico que se veia era "voy lento", y
+ * adivinar donde ha sido cuesta horas. Con esto la propia respuesta dice por
+ * que paso iba cuando se quedo parado. No cuesta nada y se puede dejar puesto. */
+let paso = 'nada';
+const aqui = (x) => { paso = x; };
+
 module.exports = puerta(async (req, res) => {
   let contestado = false;
+  paso = 'entrando';
   const marcar = (r) => { contestado = true; return r; };
   const reloj = setTimeout(() => {
     if (contestado) return;
@@ -737,7 +746,7 @@ module.exports = puerta(async (req, res) => {
      *
      * Se queda solo lo util: contestar siempre. Las conexiones viejas ya se
      * reciclan solas por tiempo, que era lo que hacia falta de verdad. */
-    try { res.status(503).json({ ok: false, error: 'servidor-lento' }); } catch (_) {}
+    try { res.status(503).json({ ok: false, error: 'servidor-lento', paso }); } catch (_) {}
   }, LIMITE);
   try {
     return marcar(await atender(req, res));
@@ -748,7 +757,9 @@ module.exports = puerta(async (req, res) => {
 });
 
 async function atender(req, res) {
+  aqui('antes-de-db');
   const s = db();
+  aqui('db-lista');
 
   if (req.method === 'POST') {
     const bm = cuerpo(req);
@@ -803,9 +814,12 @@ async function atender(req, res) {
   }
 
   if (req.method === 'GET') {
+    aqui('get');
     if (!puedeLeer(req)) return noAutorizado(res, 'leer');
     const q = req.query || {};
+    aqui('get-permiso-ok');
     if (q.panel) {
+      aqui('panel');
       try {
         return res.status(200).json({ ok: true, ahora: new Date().toISOString(),
                                       directos: await conReintento(panelDirectos) });
@@ -817,15 +831,18 @@ async function atender(req, res) {
       }
     }
     if (q.live) {
+      aqui('live');
       let sesion = aTexto(q.directo).trim();
       const canal = limpiarCanal(q.canal);
-      if (!sesion && canal) sesion = await sesionDeCanal(s, canal);
+      if (!sesion && canal) { aqui('live-buscando-canal'); sesion = await sesionDeCanal(s, canal); aqui('live-canal-resuelto'); }
       if (!sesion) {
         if (canal) return res.status(200).json({ ok: true, hay: false, canal, sesion: '',
           room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
         return res.status(400).json({ ok: false, error: 'sin-directo' });
       }
+      aqui('live-leyendo');
       const { hay, estado, cuando } = await conReintento((c) => leerDirecto(c, sesion));
+      aqui('live-leido');
       if (!hay) {
         return res.status(200).json({ ok: true, hay: false, sesion, canal,
           room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
@@ -836,7 +853,7 @@ async function atender(req, res) {
       v.cuenta = estado.cuenta || '';
       return res.status(200).json(v);
     }
-    if (q.marcas) return leerMarcas(s, res, aTexto(q.juego).trim());
+    if (q.marcas) { aqui('marcas'); return leerMarcas(s, res, aTexto(q.juego).trim()); }
     const dia = diaDe(q.dia);
     const juego = aTexto(q.juego).trim() || dia;
     const filas = await s`select dia, juego, titulo, datos, generado from tandas where juego = ${juego}`;
