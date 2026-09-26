@@ -143,11 +143,21 @@ function montar(pedidos) {
   pedidos.forEach(function (p) { (p.prendas || []).forEach(function (x) { rots[rotuloDe(x)] = 1; }); });
   Object.keys(rots).sort().forEach(function (k, i) { COLOR[k] = COLORES[i % COLORES.length]; });
 
-  var cajas = [];
+  /* LAS TANDAS VAN POR COMPRADOR, NO POR PEDIDO.
+     Una misma persona puede haber hecho cinco pedidos sueltos en el directo y
+     todo eso va en un solo paquete. Por eso se junta por comprador antes de
+     repartir en tandas. */
+  var porComprador = {};
   pedidos.forEach(function (p) {
     var vivas = (p.prendas || []).filter(function (x) { return !x.reverso; });
     if (!vivas.length) return;
-    for (var i = 0; i < vivas.length; i += MAXPAQ) cajas.push({ id: p.pedido, prendas: vivas.slice(i, i + MAXPAQ) });
+    var k = texto(p.usuario) || texto(p.pedido);
+    (porComprador[k] = porComprador[k] || []).push.apply(porComprador[k], vivas);
+  });
+  var cajas = [];
+  Object.keys(porComprador).forEach(function (k) {
+    var v = porComprador[k];
+    for (var i = 0; i < v.length; i += MAXPAQ) cajas.push({ id: k, prendas: v.slice(i, i + MAXPAQ) });
   });
 
   var por = {};
