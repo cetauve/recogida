@@ -435,7 +435,7 @@ function cabecera() {
 /* Preguntar sin tumbar el servidor: vueltas encadenadas, corte a los 8 segundos
  * y freno progresivo. El 22 sep 2026 tres cosas preguntando cada dos segundos
  * dejaron toda la API sin responder, también las tandas del almacén. */
-const RITMO = 3000, MAX = 60000, CORTE = 8000;
+const RITMO = 3000, MAX = 6000, CORTE = 8000;   /* MAX 6 s: con 60 la tablet se quedaba un minuto en "no response" tras dos fallos seguidos */
 let espera = RITMO;
 function llamar(url) {
   const corta = new AbortController();

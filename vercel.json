@@ -1,4 +1,5 @@
 {
+  "regions": ["fra1"],
   "functions": {
     "api/tiktok-etiquetas.js": {
       "maxDuration": 60
