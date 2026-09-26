@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Almacen de hoy</title>
+<style>
+:root{--f:#111;--t:#fff;--l:#e6e6e6;--v:#0a7d33;--g:#767676}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:#f4f4f4;color:var(--f);padding-bottom:90px}
+header{position:sticky;top:0;z-index:9;background:#111;color:#fff;padding:10px 14px}
+header h1{margin:0;font-size:17px}
+header .sub{font-size:13px;opacity:.75;margin-top:2px}
+.aviso{background:#fff5d6;border-left:5px solid #e0a800;padding:10px 14px;font-size:14px}
+.barra{display:flex;gap:8px;overflow-x:auto;padding:10px 14px;background:#fff;border-bottom:1px solid var(--l);position:sticky;top:57px;z-index:8}
+.barra button{flex:0 0 auto;border:1px solid #ccc;background:#fff;border-radius:20px;padding:7px 14px;font-size:14px;font-weight:600}
+.barra button.on{background:#111;color:#fff;border-color:#111}
+.tanda{padding:14px 14px 0}
+.tanda h2{font-size:15px;margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em;color:#444}
+.bulto{background:#fff;border:1px solid var(--l);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+.bulto.listo{opacity:.45}
+.grupo{margin:6px 0}
+.rot{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:12px;color:#fff;margin-bottom:6px}
+.nums{display:flex;flex-wrap:wrap;gap:7px}
+.n{min-width:54px;text-align:center;border:2px solid #111;border-radius:10px;padding:9px 8px;font-size:20px;font-weight:700;background:#fff;cursor:pointer;user-select:none}
+.n.ok{background:var(--v);border-color:var(--v);color:#fff;text-decoration:line-through}
+.n small{display:block;font-size:10px;font-weight:600;opacity:.65;text-decoration:none}
+.pie{position:fixed;left:0;right:0;bottom:0;background:#111;color:#fff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-size:15px}
+.pie button{background:#fff;color:#111;border:0;border-radius:8px;padding:8px 14px;font-weight:700}
+.cargando{padding:40px 14px;text-align:center;color:#555}
+.vacio{padding:20px 14px;color:#666}
+</style>
+</head>
+<body>
+<header>
+  <h1>Almacen de hoy</h1>
+  <div class="sub" id="sub">Leyendo pedidos...</div>
+</header>
+<div class="aviso" id="aviso" style="display:none"></div>
+<div class="barra" id="barra"></div>
+<div id="lista"><div class="cargando">Leyendo los pedidos de TikTok. Tarda unos segundos.</div></div>
+<div class="pie"><span id="cuenta">-</span><button id="btnRe">Recargar</button></div>
+
+<script>
+/* Pagina de emergencia del 26 sep 2026.
+   El calculo de tandas del servidor esta colgado, asi que esta pagina lee los
+   pedidos directamente y monta las tandas aqui mismo, en el movil.
+   No escribe nada en el servidor: lo marcado se guarda en el propio movil. */
+
+var D = new URLSearchParams(location.search).get('d') || '';
+var CORTES = [[1,1],[2,3],[4,6],[7,10],[11,999]];
+var MAXPAQ = 20;
+var OFFSET_UNICO = 17;   /* la prenda 1 del producto unico es la 18 fisica */
+var COLORES = ['#1f6feb','#b8860b','#8b2fbe','#0a7d33','#c2410c','#0f766e'];
+var LLAVE = 'almacen-hoy-26sep';
+
+var MARCA = {};
+try { MARCA = JSON.parse(localStorage.getItem(LLAVE) || '{}'); } catch (e) { MARCA = {}; }
+function guardar() { try { localStorage.setItem(LLAVE, JSON.stringify(MARCA)); } catch (e) {} }
+
+function texto(x) { return (x === null || x === undefined) ? '' : String(x); }
+
+async function traer(estado) {
+  var todos = [], token = '', i = 0;
+  while (i++ < 12) {
+    var u = '/api/tiktok-pedidos?d=' + encodeURIComponent(D) + '&cuenta=billysvlc&estado=' + estado +
+            (token ? ('&token=' + encodeURIComponent(token)) : '');
+    var r = await fetch(u, { cache: 'no-store' });
+    var o = await r.json();
+    if (!o || !o.ok) break;
+    todos = todos.concat(o.pedidos || []);
+    token = o.siguiente || '';
+    if (!o.sigue || !token) break;
+  }
+  return todos;
+}
+
+/* NUMERO FISICO DE CADA PRENDA.
+   El 25 de septiembre se probo a lanzar cada prenda como un producto aparte,
+   con su categoria y su marca, para cumplir las reglas de TikTok. Cada producto
+   empezo a numerar por el 1, asi que el numero que da TikTok no es el numero
+   del perchero. Se arregla asi:
+     - los productos del experimento (los que acaban en " BV") se ordenan por
+       la hora en que se creo cada uno, del mas antiguo al mas nuevo, y sus
+       prendas se van numerando 1, 2, 3... seguidas;
+     - a partir del 18 se volvio al producto unico, asi que a sus numeros se
+       les suma 17. */
+function esBV(nombre) { return /\sBV\s*$/i.test(texto(nombre)); }
+function esUnico(nombre) { return /vintage1eurobillys/i.test(texto(nombre)); }
+
+function numerar(pedidos) {
+  var porProd = {};
+  pedidos.forEach(function (p) {
+    (p.prendas || []).forEach(function (x) {
+      var k = texto(x.productoId);
+      if (!porProd[k]) porProd[k] = { nombre: texto(x.producto), t0: 9e15, items: [] };
+      if (p.creado && p.creado < porProd[k].t0) porProd[k].t0 = p.creado;
+      porProd[k].items.push(x);
+      if (!porProd[k].nombre) porProd[k].nombre = texto(x.producto);
+    });
+  });
+
+  var bv = Object.keys(porProd).filter(function (k) { return esBV(porProd[k].nombre); })
+    .sort(function (a, b) { return porProd[a].t0 - porProd[b].t0; });
+
+  var n = 0;
+  bv.forEach(function (k) {
+    porProd[k].items.slice().sort(function (a, b) { return (a.num || 0) - (b.num || 0); })
+      .forEach(function (x) { n++; x.fisico = n; x.arreglado = true; });
+  });
+
+  Object.keys(porProd).forEach(function (k) {
+    var g = porProd[k];
+    g.items.forEach(function (x) {
+      if (x.fisico) return;
+      if (esUnico(g.nombre)) { x.fisico = (x.num || 0) + OFFSET_UNICO; x.arreglado = true; }
+      else { x.fisico = x.num; x.arreglado = false; }
+    });
+  });
+  return { bv: bv.length, cambiadas: n };
+}
+
+function rotuloDe(x) {
+  var c = texto(x.cuenta).toLowerCase();
+  if (!c) return 'sin rotulo';
+  if (/billystour/.test(c)) return 'billystour';
+  if (/billystaco/.test(c)) return 'billystacos';
+  if (/billysvlc/.test(c)) return 'billysvlc';
+  return c;
+}
+
+function tandaDe(cuantas) {
+  for (var i = 0; i < CORTES.length; i++) if (cuantas >= CORTES[i][0] && cuantas <= CORTES[i][1]) return i + 1;
+  return CORTES.length;
+}
+
+var TANDAS = [], COLOR = {}, VISTA = 0;
+
+function montar(pedidos) {
+  var r = numerar(pedidos);
+
+  var rots = {};
+  pedidos.forEach(function (p) { (p.prendas || []).forEach(function (x) { rots[rotuloDe(x)] = 1; }); });
+  Object.keys(rots).sort().forEach(function (k, i) { COLOR[k] = COLORES[i % COLORES.length]; });
+
+  var cajas = [];
+  pedidos.forEach(function (p) {
+    var vivas = (p.prendas || []).filter(function (x) { return !x.reverso; });
+    if (!vivas.length) return;
+    for (var i = 0; i < vivas.length; i += MAXPAQ) cajas.push({ id: p.pedido, prendas: vivas.slice(i, i + MAXPAQ) });
+  });
+
+  var por = {};
+  cajas.forEach(function (c) {
+    var t = tandaDe(c.prendas.length);
+    (por[t] = por[t] || []).push(c);
+  });
+
+  TANDAS = Object.keys(por).sort(function (a, b) { return a - b; }).map(function (t) {
+    var cs = por[t].map(function (c) {
+      var g = {};
+      c.prendas.forEach(function (x) {
+        var k = rotuloDe(x);
+        (g[k] = g[k] || []).push(x);
+      });
+      return {
+        id: c.id,
+        grupos: Object.keys(g).sort().map(function (k) {
+          return { rot: k, items: g[k].sort(function (a, b) { return (a.fisico || 0) - (b.fisico || 0); }) };
+        })
+      };
+    });
+    cs.sort(function (a, b) {
+      var x = a.grupos[0], y = b.grupos[0];
+      if (x.rot !== y.rot) return x.rot < y.rot ? -1 : 1;
+      return (x.items[0].fisico || 0) - (y.items[0].fisico || 0);
+    });
+    return { n: Number(t), cajas: cs };
+  });
+
+  return r;
+}
+
+function clave(x) { return rotuloDe(x) + '.' + (x.fisico || 0) + '.' + texto(x.skuId).slice(-6); }
+
+function pintar() {
+  var barra = document.getElementById('barra');
+  barra.innerHTML = '';
+  var b0 = document.createElement('button');
+  b0.textContent = 'Todo';
+  b0.className = VISTA === 0 ? 'on' : '';
+  b0.onclick = function () { VISTA = 0; pintar(); };
+  barra.appendChild(b0);
+  TANDAS.forEach(function (t) {
+    var b = document.createElement('button');
+    var quedan = 0, total = 0;
+    t.cajas.forEach(function (c) { c.grupos.forEach(function (g) { g.items.forEach(function (x) { total++; if (!MARCA[clave(x)]) quedan++; }); }); });
+    b.textContent = 'Tanda ' + t.n + ' (' + quedan + '/' + total + ')';
+    b.className = VISTA === t.n ? 'on' : '';
+    b.onclick = function () { VISTA = t.n; pintar(); };
+    barra.appendChild(b);
+  });
+
+  var lista = document.getElementById('lista');
+  lista.innerHTML = '';
+  var quedanT = 0, totalT = 0;
+
+  TANDAS.forEach(function (t) {
+    t.cajas.forEach(function (c) { c.grupos.forEach(function (g) { g.items.forEach(function (x) { totalT++; if (!MARCA[clave(x)]) quedanT++; }); }); });
+    if (VISTA !== 0 && VISTA !== t.n) return;
+    var sec = document.createElement('div');
+    sec.className = 'tanda';
+    var h = document.createElement('h2');
+    h.textContent = 'Tanda ' + t.n + ' · ' + t.cajas.length + ' paquetes';
+    sec.appendChild(h);
+    t.cajas.forEach(function (c) {
+      var d = document.createElement('div');
+      d.className = 'bulto';
+      var todasOk = true;
+      c.grupos.forEach(function (g) {
+        var gd = document.createElement('div');
+        gd.className = 'grupo';
+        var r = document.createElement('span');
+        r.className = 'rot';
+        r.style.background = COLOR[g.rot] || '#555';
+        r.textContent = g.rot;
+        gd.appendChild(r);
+        var nu = document.createElement('div');
+        nu.className = 'nums';
+        g.items.forEach(function (x) {
+          var k = clave(x);
+          var e = document.createElement('div');
+          e.className = 'n' + (MARCA[k] ? ' ok' : '');
+          if (!MARCA[k]) todasOk = false;
+          e.innerHTML = String(x.fisico == null ? '?' : x.fisico) + (x.arreglado ? '<small>antes ' + x.num + '</small>' : '');
+          e.onclick = function () {
+            if (MARCA[k]) delete MARCA[k]; else MARCA[k] = 1;
+            guardar(); pintar();
+          };
+          nu.appendChild(e);
+        });
+        gd.appendChild(nu);
+        d.appendChild(gd);
+      });
+      if (todasOk) d.className += ' listo';
+      sec.appendChild(d);
+    });
+    lista.appendChild(sec);
+  });
+
+  if (!TANDAS.length) lista.innerHTML = '<div class="vacio">No hay prendas pendientes.</div>';
+  document.getElementById('cuenta').textContent = 'Quedan ' + quedanT + ' de ' + totalT + ' prendas';
+}
+
+async function arrancar() {
+  document.getElementById('sub').textContent = 'Leyendo pedidos...';
+  var a = await traer('AWAITING_COLLECTION');
+  var b = await traer('AWAITING_SHIPMENT');
+  var map = {};
+  a.concat(b).forEach(function (p) { if (p && p.pedido) map[p.pedido] = p; });
+  var pedidos = Object.keys(map).map(function (k) { return map[k]; });
+  var r = montar(pedidos);
+  document.getElementById('sub').textContent = pedidos.length + ' pedidos · ' +
+    pedidos.reduce(function (s, p) { return s + (p.prendas || []).length; }, 0) + ' prendas';
+  var av = document.getElementById('aviso');
+  av.style.display = '';
+  av.innerHTML = 'Numeros arreglados: ' + r.cambiadas + ' prendas del experimento del dia 25 se han renumerado del 1 al ' + r.cambiadas +
+    ' por orden de creacion del producto. Al producto unico se le ha sumado ' + OFFSET_UNICO +
+    ', asi que su prenda 1 es la ' + (1 + OFFSET_UNICO) + '. Debajo de cada numero nuevo pone el numero viejo que daba TikTok.';
+  pintar();
+}
+
+document.getElementById('btnRe').onclick = function () { location.reload(); };
+if (!D) {
+  document.getElementById('lista').innerHTML = '<div class="vacio">Falta el codigo en el enlace.</div>';
+} else {
+  arrancar().catch(function (e) {
+    document.getElementById('lista').innerHTML = '<div class="vacio">No se han podido leer los pedidos: ' + String(e && e.message || e) + '</div>';
+  });
+}
+</script>
+</body>
+</html>
