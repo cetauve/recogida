@@ -23,7 +23,7 @@
  * SIN JUEGO SE USA LA FECHA, que es lo que el juego era hasta hoy. Así los
  * enlaces de antes y los móviles con la página en caché siguen funcionando.
  */
-const { db, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerpo } = require('./_lib');
+const { abrir, cerrar, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerpo } = require('./_lib');
 
 /* ===========================================================================
  * LO QUE EL ALMACÉN DICE QUE ES CADA PRENDA
@@ -586,22 +586,14 @@ async function accionDirecto(s, res, sesion, b) {
  * nadie. Antes eso salia por pantalla como "no se ha podido leer" y la tablet
  * parpadeaba sin motivo. Se tira esa conexion y se repite UNA vez con una
  * limpia. Si vuelve a fallar, entonces si es de verdad y se dice. */
-async function conReintento(hacer) {
+async function conReintento(s, hacer) {
   try {
-    return await hacer(db());
+    return await hacer(s);
   } catch (e) {
-    /* AQUI SE TIRABA LA CONEXION, Y ERA LA CAUSA DE TODO. 25 sep 2026.
-     *
-     * Tirar la conexion no la sustituye solo para quien falla: la conexion es
-     * UNA para toda la copia del servidor, y las llamadas que ya estaban en
-     * marcha se habian quedado con una referencia a la vieja. A partir de ese
-     * momento sus consultas no fallaban: se quedaban esperando a una conexion
-     * muerta, para siempre. Por eso unas llamadas iban bien y otras se colgaban
-     * a la vez, y por eso parecia que la base estaba atascada cuando la base
-     * estaba vacia y ociosa.
-     *
-     * Se reintenta y ya esta. Si falla dos veces, se dice y se acabo. */
-    return hacer(db());
+    /* El reintento va por una conexion nueva y propia: si la primera estaba
+     * mal, no se vuelve a pasar por ella. */
+    const otra = abrir();
+    try { return await hacer(otra); } finally { cerrar(otra); }
   }
 }
 
@@ -722,54 +714,44 @@ function traducirTandas(datos, mapa) {
 /* PASE LO QUE PASE, SE CONTESTA.
  *
  * Esto es una red, no un arreglo: si algo aqui dentro se queda colgado, a los
- * doce segundos se responde igualmente con un "voy lento" y quien pregunta
- * -la tablet, el panel, el almacen- puede seguir su vida y reintentar. Sin
- * esto, una llamada colgada deja al cliente esperando cinco minutos y a las
- * demas haciendo cola detras, que es como una tonteria se convierte en el
- * servidor entero mudo.
- *
- * Doce segundos es mucho: la llamada mas lenta que tenemos anda por medio. */
-const LIMITE = 12000;
+ * siete segundos se responde igualmente con un "voy lento", se corta la
+ * conexion de ESA llamada y quien pregunta -la tablet, el panel, el almacen-
+ * reintenta. Siete y no doce: la tablet y la extension se rinden a los ocho,
+ * y contestar despues de que se hayan rendido no sirve de nada. */
+const LIMITE = 7000;
 
-/* MIGAS DE PAN. Cuando algo se cuelga, lo unico que se veia era "voy lento", y
- * adivinar donde ha sido cuesta horas. Con esto la propia respuesta dice por
- * que paso iba cuando se quedo parado. No cuesta nada y se puede dejar puesto. */
+/* MIGAS DE PAN: por que paso iba la llamada cuando se quedo parada. Ahora son
+ * de cada llamada, no de la copia entera del servidor: antes se mezclaban las
+ * de unas llamadas con otras y decian cosas que no eran. */
 let paso = 'nada';
 const aqui = (x) => { paso = x; };
 
 module.exports = puerta(async (req, res) => {
   let contestado = false;
-  paso = 'entrando';
-  const marcar = (r) => { contestado = true; return r; };
+  const migas = { paso: 'entrando' };
+  const s = abrir();
   const reloj = setTimeout(() => {
     if (contestado) return;
     contestado = true;
-    /* AQUI SE TIRABA LA CONEXION Y ERA UN ERROR MIO, 25 sep 2026.
-     *
-     * La idea era razonable: si una llamada tarda doce segundos, su conexion
-     * esta colgada, se tira y la siguiente abre una limpia. El problema es que
-     * la conexion es UNA para toda la copia del servidor, y esa copia atiende
-     * varias llamadas a la vez. Al tirarla se cargaba tambien las llamadas de
-     * los demas que iban por la mitad. Resultado: cada vez que algo tardaba, se
-     * caian con el las peticiones de la tablet que estaban en curso, y desde
-     * fuera se veia como "la conexion se cae cada vez que toco algo".
-     *
-     * Se queda solo lo util: contestar siempre. Las conexiones viejas ya se
-     * reciclan solas por tiempo, que era lo que hacia falta de verdad. */
-    try { res.status(503).json({ ok: false, error: 'servidor-lento', paso }); } catch (_) {}
+    /* Se corta SU conexion, que es solo suya: no molesta a ninguna otra llamada
+     * y deja de gastar sitio en la base. */
+    cerrar(s, true);
+    try { res.status(503).json({ ok: false, error: 'servidor-lento', paso: migas.paso }); } catch (_) {}
   }, LIMITE);
   try {
-    return marcar(await atender(req, res));
+    return await atender(req, res, s, migas);
+  } catch (e) {
+    if (contestado) return;          /* ya se contesto por lento; lo demas sobra */
+    throw e;
   } finally {
     contestado = true;
     clearTimeout(reloj);
+    cerrar(s);
   }
 });
 
-async function atender(req, res) {
-  aqui('antes-de-db');
-  const s = db();
-  aqui('db-lista');
+async function atender(req, res, s, migas) {
+  const aqui = (x) => { migas.paso = x; };
 
   if (req.method === 'POST') {
     const bm = cuerpo(req);
@@ -832,7 +814,7 @@ async function atender(req, res) {
       aqui('panel');
       try {
         return res.status(200).json({ ok: true, ahora: new Date().toISOString(),
-                                      directos: await conReintento(panelDirectos) });
+                                      directos: await conReintento(s, panelDirectos) });
       } catch (e) {
         /* Si no se ha podido leer, se dice. Devolver una lista vacia haria que
          * el panel pintara los cinco puestos como apagados, que es justo lo
@@ -851,7 +833,7 @@ async function atender(req, res) {
         return res.status(400).json({ ok: false, error: 'sin-directo' });
       }
       aqui('live-leyendo');
-      const { hay, estado, cuando } = await conReintento((c) => leerDirecto(c, sesion));
+      const { hay, estado, cuando } = await conReintento(s, (c) => leerDirecto(c, sesion));
       aqui('live-leido');
       if (!hay) {
         return res.status(200).json({ ok: true, hay: false, sesion, canal,

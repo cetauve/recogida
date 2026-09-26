@@ -22,25 +22,62 @@ const crypto = require('crypto');
 
 let sql = null;
 
-function db() {
-  if (sql) return sql;
+function direccion() {
   const url = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL ||
               process.env.POSTGRES_URL_NON_POOLING;
   if (!url) { const e = new Error('No hay POSTGRES_URL en el proyecto'); e.falta = true; throw e; }
-  /* prepare:false es obligatorio: la conexión de Supabase pasa por pgbouncer
-   * en modo transacción y ahí las sentencias preparadas no sobreviven.
-   * max:1 porque cada lambda es un proceso suyo y no queremos abrir de más. */
-  sql = postgres(url, {
-    /* Supabase exige SSL; el Postgres de las pruebas, en esta misma máquina,
-     * no lo tiene. Se decide por la dirección para no tener dos ramas de
-     * configuración que se puedan desincronizar. */
+  return url;
+}
+
+function opciones(url) {
+  return {
+    /* Supabase exige SSL; el Postgres de las pruebas, en esta misma maquina,
+     * no lo tiene. Se decide por la direccion para no tener dos ramas de
+     * configuracion que se puedan desincronizar. */
     ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(url) ? false : 'require',
+    /* prepare:false es obligatorio: la conexion de Supabase pasa por el pooler
+     * en modo transaccion y ahi las sentencias preparadas no sobreviven. */
     prepare: false,
-            max: 6,
-        idle_timeout: 4,
-        connect_timeout: 5, max_lifetime: 120
-  });
+    connect_timeout: 5,
+    onnotice: () => {}        /* los "ya existe, me lo salto" no son noticia */
+  };
+}
+
+/* LA CONEXION COMPARTIDA, para las puertas tranquilas (cola, diario, pedidos).
+ * Pocas y de vida corta: en Vercel una copia del servidor se congela entre
+ * llamadas, y una conexion que pasa mucho rato congelada puede estar muerta al
+ * despertar sin que nadie lo sepa. */
+function db() {
+  if (sql) return sql;
+  const url = direccion();
+  sql = postgres(url, { ...opciones(url), max: 3, idle_timeout: 5, max_lifetime: 60 });
   return sql;
+}
+
+/* UNA CONEXION PROPIA POR LLAMADA, para /api/tandas, que es la que recibe el
+ * directo, las tablets y el almacen a todas horas.
+ *
+ * POR QUE, 26 sep 2026. Con la conexion compartida, una copia del servidor se
+ * quedaba de vez en cuando con conexiones muertas: Vercel congela la copia
+ * entre llamadas, el pooler de Supabase corta la conexion mientras tanto, y al
+ * despertar la consulta se escribe en un cable cortado y espera para siempre.
+ * Esa copia ya no contestaba a nadie hasta el siguiente despliegue, y como las
+ * llamadas se reparten entre copias, fallaba una de cada cinco o seis.
+ *
+ * Una conexion nueva por llamada no puede estar muerta de antes, y si algo se
+ * cuelga solo afecta a esa llamada y se puede cortar sin molestar a nadie. El
+ * precio es abrirla cada vez: unos 40 ms con el servidor en Frankfurt, al lado
+ * de la base (Zurich). Desde Washington eran mas de 500. */
+function abrir() {
+  const url = direccion();
+  return postgres(url, { ...opciones(url), max: 1, idle_timeout: 0 });
+}
+
+/* Cerrar sin esperar: si la conexion esta sana se despide sola, y si esta
+ * colgada se corta. Nunca deja a nadie esperando. */
+function cerrar(s, ya) {
+  if (!s) return;
+  try { s.end({ timeout: ya ? 0 : 2 }).catch(() => {}); } catch (_) {}
 }
 
 /* El esquema, una sentencia por elemento. Todas son "si no existe", así que
@@ -324,11 +361,19 @@ const ESQUEMA = [
 ];
 
 let creando = null;
+/* Una vez por copia del servidor, con su propia conexion y con reloj: si esto
+ * se colgara, la copia entera se quedaria esperando para siempre. */
 function asegurarTablas() {
   if (creando) return creando;
   creando = (async () => {
-    const s = db();
-    for (const sentencia of ESQUEMA) await s.unsafe(sentencia);
+    const s = abrir();
+    let reloj;
+    try {
+      await Promise.race([
+        (async () => { for (const sentencia of ESQUEMA) await s.unsafe(sentencia); })(),
+        new Promise((_, no) => { reloj = setTimeout(() => no(new Error('tablas-lento')), 8000); })
+      ]);
+    } finally { clearTimeout(reloj); cerrar(s, true); }
   })().catch((e) => { creando = null; throw e; });
   return creando;
 }
@@ -398,6 +443,9 @@ function puerta(manejar) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Billys-Token,X-Billys-Codigo,Authorization');
+    /* Que Chrome no pregunte permiso antes de CADA envio de la extension: con
+     * esto lo recuerda un dia. Antes esas preguntas eran la mitad del trafico. */
+    res.setHeader('Access-Control-Max-Age', '86400');
     res.setHeader('Cache-Control', 'no-store');
     if (req.method === 'OPTIONS') { res.status(204).end(); return; }
     try {
@@ -423,6 +471,6 @@ const noAutorizado = (res, quiere) => res.status(401).json({
 });
 
 module.exports = {
-  db, asegurarTablas, puerta, puedeEscribir, puedeLeer, noAutorizado,
+  db, abrir, cerrar, asegurarTablas, puerta, puedeEscribir, puedeLeer, noAutorizado,
   diaDeHoy, diaDe, aFecha, aEntero, aNumero, aTexto, cuerpo
 };
