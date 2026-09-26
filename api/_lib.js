@@ -73,11 +73,13 @@ function abrir() {
   return postgres(url, { ...opciones(url), max: 1, idle_timeout: 0 });
 }
 
-/* Cerrar sin esperar: si la conexion esta sana se despide sola, y si esta
- * colgada se corta. Nunca deja a nadie esperando. */
-function cerrar(s, ya) {
+/* Cerrar YA: si la conexion esta libre se despide bien, y si hay algo a medias
+ * se corta. Se llama justo antes de contestar, porque en cuanto se contesta
+ * Vercel puede congelar la copia, y una conexion que se queda abierta durante
+ * la congelacion es exactamente la que luego aparece muerta. */
+function cerrar(s) {
   if (!s) return;
-  try { s.end({ timeout: ya ? 0 : 2 }).catch(() => {}); } catch (_) {}
+  try { s.end({ timeout: 0 }).catch(() => {}); } catch (_) {}
 }
 
 /* El esquema, una sentencia por elemento. Todas son "si no existe", así que
@@ -370,10 +372,24 @@ function asegurarTablas() {
     let reloj;
     try {
       await Promise.race([
-        (async () => { for (const sentencia of ESQUEMA) await s.unsafe(sentencia); })(),
+        (async () => {
+          for (const sentencia of ESQUEMA) {
+            /* CON PACIENCIA LIMITADA. Algunas de estas piden un candado fuerte
+             * sobre la tabla aunque no haya nada que cambiar. Si alguien la esta
+             * usando, antes se quedaban esperando sin limite y detras de ellas
+             * todas las demas consultas de esa tabla. Ahora esperan 3 segundos
+             * y, si no pueden, se saltan: las tablas ya existen. */
+            try {
+              await s.unsafe("select set_config('lock_timeout', '3s', true); " + sentencia);
+            } catch (e) {
+              if (e && e.code === '55P03') continue;      /* candado ocupado: se salta */
+              throw e;
+            }
+          }
+        })(),
         new Promise((_, no) => { reloj = setTimeout(() => no(new Error('tablas-lento')), 8000); })
       ]);
-    } finally { clearTimeout(reloj); cerrar(s, true); }
+    } finally { clearTimeout(reloj); cerrar(s); }
   })().catch((e) => { creando = null; throw e; });
   return creando;
 }

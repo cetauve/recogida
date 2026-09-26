@@ -730,12 +730,18 @@ module.exports = puerta(async (req, res) => {
   let contestado = false;
   const migas = { paso: 'entrando' };
   const s = abrir();
+  /* La conexion se cierra JUSTO ANTES de contestar, no despues: en cuanto sale
+   * la respuesta Vercel puede congelar esta copia del servidor, y no debe
+   * quedar ninguna conexion abierta durante la congelacion. */
+  const json = res.json.bind(res), fin = res.end.bind(res);
+  res.json = (o) => { cerrar(s); return json(o); };
+  res.end = (...a) => { cerrar(s); return fin(...a); };
   const reloj = setTimeout(() => {
     if (contestado) return;
     contestado = true;
     /* Se corta SU conexion, que es solo suya: no molesta a ninguna otra llamada
      * y deja de gastar sitio en la base. */
-    cerrar(s, true);
+    cerrar(s);
     try { res.status(503).json({ ok: false, error: 'servidor-lento', paso: migas.paso }); } catch (_) {}
   }, LIMITE);
   try {
