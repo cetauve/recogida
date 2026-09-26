@@ -23,7 +23,7 @@
  * SIN JUEGO SE USA LA FECHA, que es lo que el juego era hasta hoy. Así los
  * enlaces de antes y los móviles con la página en caché siguen funcionando.
  */
-const { db, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerpo } = require('./_lib');
+const { abrir, cerrar, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerpo } = require('./_lib');
 
 /* ===========================================================================
  * LO QUE EL ALMACÉN DICE QUE ES CADA PRENDA
@@ -53,8 +53,14 @@ const { db, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerp
  * único que pueden escribir: una categoría por prenda. No mueve pedidos, no
  * crea etiquetas y no toca nada de TikTok.
  * ========================================================================= */
+/* MISMO CUIDADO QUE CON EL DIRECTO: esta orden no se ejecuta en camino normal.
+ * Los moviles del almacen preguntan por lo marcado a todas horas, y cada copia
+ * del servidor que arrancaba lanzaba una de estas. Pedir ese candado mientras
+ * alguien esta leyendo deja la tabla en cola y se lleva por delante una
+ * conexion durante cinco minutos. Ahora solo se crea si de verdad no existe. */
 let tablaMarcasHecha = false;
-async function tablaDeMarcas(s) {
+
+async function crearTablaMarcas(s) {
   if (tablaMarcasHecha) return;
   await s`
     create table if not exists marcado (
@@ -65,6 +71,17 @@ async function tablaDeMarcas(s) {
   tablaMarcasHecha = true;
 }
 
+async function conMarcado(s, hacer) {
+  try {
+    return await hacer();
+  } catch (e) {
+    const m = String((e && e.message) || e);
+    if (!(/marcado/.test(m) && /does not exist|no existe|undefined table/i.test(m))) throw e;
+    await crearTablaMarcas(s);
+    return hacer();
+  }
+}
+
 const sinNulos = (o) => {
   const r = {};
   for (const k of Object.keys(o || {})) if (o[k] !== null) r[k] = o[k];
@@ -73,8 +90,10 @@ const sinNulos = (o) => {
 
 async function leerMarcas(s, res, juego) {
   if (!juego) return res.status(400).json({ ok: false, error: 'sin-juego' });
-  await tablaDeMarcas(s);
-  const filas = await s`select marcas, cuando from marcado where juego = ${juego}`;
+  aqui('marcas-consultando');
+  const filas = await conMarcado(s, () =>
+    s`select marcas, cuando from marcado where juego = ${juego}`);
+  aqui('marcas-consultado');
   if (!filas.length) return res.status(200).json({ ok: true, hay: false, juego, marcas: {} });
   return res.status(200).json({ ok: true, hay: true, juego,
     marcas: sinNulos(filas[0].marcas), cuando: filas[0].cuando });
@@ -82,7 +101,6 @@ async function leerMarcas(s, res, juego) {
 
 async function guardarMarcas(s, res, juego, entran) {
   if (!juego) return res.status(400).json({ ok: false, error: 'sin-juego' });
-  await tablaDeMarcas(s);
 
   /* Solo llaves y valores con pinta de lo que son. Una llave es
    * "perchero.numero" y un valor es el nombre corto de una categoría, o nulo
@@ -101,13 +119,13 @@ async function guardarMarcas(s, res, juego, entran) {
 
   /* `||` en jsonb es unir: lo que llega gana llave a llave y lo que no venía
    * se queda como estaba, así dos móviles marcando a la vez no se pisan. */
-  const [f] = await s`
+  const [f] = await conMarcado(s, () => s`
     insert into marcado (juego, marcas, cuando)
     values (${juego}, ${s.json(limpio)}, now())
     on conflict (juego) do update set
       marcas = jsonb_strip_nulls(marcado.marcas || excluded.marcas),
       cuando = now()
-    returning marcas, cuando`;
+    returning marcas, cuando`);
 
   const marcas = sinNulos(f.marcas);
   return res.status(200).json({ ok: true, juego, marcas, cuando: f.cuando,
@@ -168,8 +186,27 @@ async function guardarMarcas(s, res, juego, entran) {
  * entre ellos en Postgres y la llamada se queda colgada PARA SIEMPRE: no da
  * error, no devuelve nada, y la pantalla se queda en "conectando". Así que se
  * hace una vez por instancia y quien lee no toca la estructura nunca. */
+/* EL `create table if not exists` NO SE EJECUTA NUNCA EN CAMINO NORMAL.
+ *
+ * ESTO YA NOS COSTO UN SERVIDOR CAIDO Y HOY CASI OTRO. Aunque la tabla exista,
+ * esa orden pide el candado mas fuerte que hay sobre ella. Basta con que una
+ * lectura este en marcha para que se quede esperando, y a partir de ese momento
+ * TODAS las lecturas y escrituras de esa tabla se ponen en cola detras. El
+ * servidor no da error: se queda mudo, que es peor. Con tres directos y cinco
+ * tablets preguntando, cada arranque de una copia del servidor era otra orden
+ * de esas.
+ *
+ * Ahora solo se crea SI DE VERDAD NO EXISTE: se intenta lo que se iba a hacer,
+ * y unicamente cuando la base contesta "esa tabla no existe" se crea y se
+ * reintenta. En funcionamiento normal esto no se ejecuta jamas. */
 let tablaDirectoHecha = false;
-async function tablaDeDirecto(s) {
+
+const noExisteLaTabla = (e) => {
+  const m = String((e && e.message) || e);
+  return /directo_vivo/.test(m) && /does not exist|no existe|undefined table/i.test(m);
+};
+
+async function crearTablaDirecto(s) {
   if (tablaDirectoHecha) return;
   await s`
     create table if not exists directo_vivo (
@@ -178,6 +215,17 @@ async function tablaDeDirecto(s) {
       cuando timestamptz not null default now()
     )`;
   tablaDirectoHecha = true;
+}
+
+/* Hace lo que se le pida y, solo si la tabla no estaba, la crea y lo repite. */
+async function conTabla(s, hacer) {
+  try {
+    return await hacer();
+  } catch (e) {
+    if (!noExisteLaTabla(e)) throw e;
+    await crearTablaDirecto(s);
+    return hacer();
+  }
 }
 
 /* UNA CAJA NUEVA CADA VEZ, y no un objeto suelto que se copia por encima.
@@ -222,8 +270,7 @@ async function guardarSiNadieToco(s, sesion, estado, marca) {
   return filas.length ? filas[0].cuando : null;
 }
 
-async function leerDirecto(s, sesion, crear) {
-  if (crear) await tablaDeDirecto(s);
+async function leerDirecto(s, sesion) {
   let filas;
   try {
     filas = await s`select estado, cuando from directo_vivo where sesion = ${sesion}`;
@@ -251,6 +298,55 @@ async function guardarDirecto(s, sesion, estado) {
 /* Lo que se devuelve a quien pregunta. Las últimas ventas van recortadas: la
  * tablet solo necesita ver las de ahora mismo, y mandar 400 cada dos segundos
  * es tirar batería y datos del iPad. */
+/* UNA ORDEN NO SE QUEDA EN "LANZANDO" PARA SIEMPRE.
+ *
+ * Si el ordenador lanza la subasta pero el aviso de "ya esta" se pierde por el
+ * camino, la orden se quedaba en pendiente sin fecha de caducidad y la tablet
+ * decia "starting" hasta el fin de los tiempos, con la vendedora mirandola sin
+ * poder hacer nada. Pasados dos minutos se da por perdida y se dice. No se
+ * escribe nada: se calcula al leer, asi que no cuesta ni una escritura y no
+ * puede pisar a nadie. */
+const CADUCA_ORDEN = 120000;
+
+function ordenVista(o) {
+  if (!o || o.estado !== 'pendiente') return o;
+  const edad = Date.now() - new Date(o.pedida).getTime();
+  if (!(edad > CADUCA_ORDEN)) return o;
+  return { ...o, estado: 'error',
+    error: 'no se pudo confirmar si salio. Mira el panel de TikTok antes de repetirla.' };
+}
+
+/* UNA SUBASTA CADA VEZ. TikTok no deja arrancar una subasta mientras hay otra
+ * en marcha: contesta con el codigo 11050001 y la prenda no sale. Probado en
+ * directo el 26 sep 2026. Asi que mientras dura una, la tablet no deja pedir
+ * otra. Se cuenta desde que el ordenador confirma que ha salido: 15 segundos,
+ * que es lo que duran las subastas del panel, y 2 de margen. Si alguien puja
+ * al final TikTok alarga la subasta y el candado se abre antes de tiempo; en
+ * ese caso TikTok la rechaza y la tablet lo explica claro, sin mas. */
+const DURA_SUBASTA = 15000, MARGEN_SUBASTA = 2000, ESPERA_PENDIENTE = 20000;
+
+function libreEn(e, ahora = Date.now()) {
+  let hasta = 0;
+  if (e.subasta_hasta) hasta = new Date(e.subasta_hasta).getTime() || 0;
+  const o = e.orden;
+  if (o && !o.prueba && o.estado === 'pendiente') {
+    hasta = Math.max(hasta, (new Date(o.pedida).getTime() || 0) + ESPERA_PENDIENTE);
+  }
+  return Math.max(0, hasta - ahora);
+}
+
+const TRADUCE_ERROR = [
+  [/11050001|IntroduceLiveAuctionConfig/i, 'another auction was still running. Wait for it to end and tap again.'],
+  /* El 26 sep 2026: pestaña del Live Manager enganchada a un directo ya cerrado. */
+  [/98001022|GetAuctionConfig/i, 'the computer is on an old LIVE. Close the Live Manager tab and open it again from the new LIVE.'],
+  [/directo no esta (iniciado|emitiendo)/i, 'the LIVE is not running on the computer.'],
+  [/ya no esta en el panel/i, 'that listing is no longer in the TikTok panel.']
+];
+function errorClaro(t) {
+  for (const [re, txt] of TRADUCE_ERROR) if (re.test(t)) return txt;
+  return t;
+}
+
 function vistaDirecto(sesion, e, cuando) {
   const ventas = e.ventas || [];
   return {
@@ -258,7 +354,8 @@ function vistaDirecto(sesion, e, cuando) {
     room: e.room || '',
     listados: e.listados || [],
     listados_cuando: e.listados_cuando || null,
-    orden: e.orden || null,
+    orden: ordenVista(e.orden) || null,
+    libre_en: libreEn(e),
     ficha: e.ficha || 0,
     ventas: ventas.length,
     ultimas: ventas.slice(-12)
@@ -277,9 +374,12 @@ function limpiarCanal(x) {
 async function sesionDeCanal(s, canal) {
   if (!canal) return '';
   try {
+    /* La fecha va PRIMERO a proposito: asi la base solo abre el contenido de
+     * los directos de hoy y no el de todos los que ha habido nunca. */
     const filas = await s`
       select sesion from directo_vivo
-      where estado->>'canal' = ${canal}
+      where cuando > now() - interval '24 hours'
+        and estado->>'canal' = ${canal}
       order by cuando desc limit 1`;
     return filas.length ? filas[0].sesion : '';
   } catch (e) { return ''; }
@@ -296,9 +396,9 @@ async function canalOcupado(s, canal, sesion, puesto) {
   try {
     const filas = await s`
       select sesion, coalesce(estado->>'puesto', '') as puesto from directo_vivo
-      where estado->>'canal' = ${canal} and sesion <> ${sesion}
+      where cuando > now() - interval '3 minutes'
+        and estado->>'canal' = ${canal} and sesion <> ${sesion}
         and coalesce(estado->>'puesto', '') <> ${puesto}
-        and cuando > now() - interval '3 minutes'
       order by cuando desc limit 1`;
     return filas.length ? filas[0].sesion : '';
   } catch (e) { return ''; }
@@ -320,6 +420,56 @@ async function vistaTablet(s, sesion) {
 /* LO QUE VE EL PANEL. Una fila por directo de las ultimas doce horas, y el
  * desglose lo hace la base: aqui solo llegan los cuatro datos que se pintan, no
  * el historial entero de ventas de cada uno. */
+/* EL BOTON DE DESCONECTAR, 26 sep 2026. UNO POR PUESTO.
+ *
+ * Si alguien se va a casa con el Live Manager abierto, ese ordenador sigue
+ * preguntando al servidor toda la noche, y lo mismo una tablet con la pantalla
+ * encendida. Cada pregunta cuenta para el limite de llamadas del mes.
+ *
+ * En el panel, cada puesto (BV, BTo, DE...) tiene su boton. Al pulsarlo se
+ * apunta aqui la hora para ESE canal y nada mas: los otros directos siguen
+ * como estaban. Es a proposito uno por puesto y no uno general, para que no se
+ * pueda cortar por error un directo que esta en marcha.
+ *
+ * Cada respuesta lleva la hora del servidor (`ahora`) y la del ultimo
+ * desconectar de ese canal (`apagado_en`). El ordenador o la tablet se apunta
+ * la hora del servidor de su primera respuesta; si luego llega un desconectar
+ * POSTERIOR a esa hora, se calla. Se comparan horas del servidor entre si, no
+ * con el reloj de cada aparato, que en alguno va mal. Y un desconectar de ayer
+ * no para a nadie que arranque hoy.
+ *
+ * Volver: recargar el Live Manager, o tocar la pantalla de la tablet.
+ *
+ * Se guarda en una fila aparte de la tabla de los directos, con un nombre que
+ * no es de ningun directo, para no crear tablas nuevas en pleno uso. */
+const CONTROL = '__apagar__';
+let apagadosCache = { valor: {}, cuando: 0 };
+async function apagados(s) {
+  if (Date.now() - apagadosCache.cuando < 10000) return apagadosCache.valor;
+  try {
+    const f = await s`select estado->'canales' as c from directo_vivo where sesion = ${CONTROL}`;
+    apagadosCache = { valor: (f[0] && f[0].c) || {}, cuando: Date.now() };
+  } catch (e) { /* si no se puede leer, se sigue como si nada */ }
+  return apagadosCache.valor;
+}
+async function apagadoEn(s, canal) {
+  if (!canal) return null;
+  return (await apagados(s))[canal] || null;
+}
+async function apagarCanal(s, canal) {
+  const ahora = new Date().toISOString();
+  await s`
+    insert into directo_vivo (sesion, estado, cuando)
+    values (${CONTROL}, ${s.json({ canales: { [canal]: ahora } })}, now())
+    on conflict (sesion) do update set
+      estado = coalesce(directo_vivo.estado, '{}'::jsonb) || jsonb_build_object('canales',
+                 coalesce(directo_vivo.estado->'canales', '{}'::jsonb) || jsonb_build_object(${canal}::text, ${ahora}::text)),
+      cuando = now()`;
+  apagadosCache = { valor: { ...apagadosCache.valor, [canal]: ahora }, cuando: 0 };
+  return ahora;
+}
+const marcaApagado = async (s, canal) => ({ ahora: new Date().toISOString(), apagado_en: await apagadoEn(s, canal) });
+
 async function panelDirectos(s) {
   const filas = await s`
     select sesion,
@@ -338,6 +488,7 @@ async function panelDirectos(s) {
            cuando
       from directo_vivo
      where cuando > now() - interval '12 hours'
+       and sesion <> ${CONTROL}
      order by cuando desc
      limit 40`;
   return filas.map((f) => ({
@@ -353,8 +504,10 @@ async function panelDirectos(s) {
                          precio: f.ultima.precio, hora: f.ultima.hora } : null,
     listados: f.listados || 0,
     listados_cuando: f.listados_cuando || null,
-    orden: f.orden ? { estado: f.orden.estado, nombre: f.orden.nombre,
-                       pedida: f.orden.pedida, error: f.orden.error || '' } : null,
+    orden: f.orden ? (function (o) {
+      const v = ordenVista(o);
+      return { estado: v.estado, nombre: v.nombre, pedida: v.pedida, error: v.error || '' };
+    })(f.orden) : null,
     tablet: f.tablet || null,
     cuando: f.cuando
   }));
@@ -392,6 +545,10 @@ function aplicarAccion(estado, accion, b) {
   if (accion === 'pedir') {
     const listado = aTexto(b.listado).slice(0, 32);
     if (!listado) return { error: 'sin-listado' };
+    if (!b.prueba) {
+      const falta = libreEn(estado);
+      if (falta > 0) return { error: 'subasta-en-marcha', faltan: Math.ceil(falta / 1000), status: 409 };
+    }
     /* Una orden pendiente cada vez. Si la vendedora toca dos veces seguidas, la
      * segunda sustituye a la primera en vez de encolarse: lo que quiere es
      * lanzar ESE, no lanzar dos subastas seguidas sin mirar. */
@@ -414,8 +571,11 @@ function aplicarAccion(estado, accion, b) {
     const id = aTexto(b.orden);
     if (estado.orden && estado.orden.id === id) {
       estado.orden.estado = b.error ? 'error' : 'hecha';
-      estado.orden.error = aTexto(b.error).slice(0, 300);
+      estado.orden.error = errorClaro(aTexto(b.error).slice(0, 300));
       estado.orden.resuelta = new Date().toISOString();
+      if (!b.error && !estado.orden.prueba) {
+        estado.subasta_hasta = new Date(Date.now() + DURA_SUBASTA + MARGEN_SUBASTA).toISOString();
+      }
     }
     return null;
   }
@@ -460,14 +620,13 @@ function aplicarAccion(estado, accion, b) {
 
 async function accionDirecto(s, res, sesion, b) {
   if (!sesion) return res.status(400).json({ ok: false, error: 'sin-directo' });
-  await tablaDeDirecto(s);
   const accion = aTexto(b.accion).trim();
 
   /* Cuatro intentos. Dos escrituras a la vez sobre el mismo directo son cosa de
    * milisegundos; que fallen cuatro seguidas significa que algo va muy mal y es
    * mejor decirlo que dejar a la tablet creyendo que se guardo. */
   for (let intento = 0; intento < 4; intento++) {
-    const { estado, marca } = await leerParaEscribir(s, sesion);
+    const { estado, marca } = await conTabla(s, () => leerParaEscribir(s, sesion));
     /* Solo al estrenar canal, no en cada vuelta. */
     if (accion === 'listados' && b.canal) {
       const canal = limpiarCanal(b.canal);
@@ -477,11 +636,12 @@ async function accionDirecto(s, res, sesion, b) {
       }
     }
     const r = aplicarAccion(estado, accion, b);
-    if (r && r.error) return res.status(400).json({ ok: false, error: r.error });
+    if (r && r.error) return res.status(r.status || 400).json({ ok: false, error: r.error, faltan: r.faltan });
     const cuando = await guardarSiNadieToco(s, sesion, estado, marca);
     if (cuando) {
       const salida = vistaDirecto(sesion, estado, cuando);
       if (r && typeof r.nuevas === 'number') salida.nuevas = r.nuevas;
+      Object.assign(salida, await marcaApagado(s, estado.canal || ''));
       return res.status(200).json(salida);
     }
   }
@@ -510,6 +670,45 @@ async function accionDirecto(s, res, sesion, b) {
  * septiembre, y cualquier directo de una sola listing, siguen funcionando
  * exactamente igual.
  * ========================================================================= */
+/* UN FALLO SUELTO NO ES UN FALLO.
+ *
+ * De vez en cuando una consulta falla a la primera: casi siempre es una
+ * conexion que acababa de morir por su cuenta y todavia no se habia enterado
+ * nadie. Antes eso salia por pantalla como "no se ha podido leer" y la tablet
+ * parpadeaba sin motivo. Se tira esa conexion y se repite UNA vez con una
+ * limpia. Si vuelve a fallar, entonces si es de verdad y se dice. */
+async function conReintento(s, hacer) {
+  try {
+    return await hacer(s);
+  } catch (e) {
+    /* El reintento va por una conexion nueva y propia: si la primera estaba
+     * mal, no se vuelve a pasar por ella. */
+    const otra = abrir();
+    try { return await hacer(otra); } finally { cerrar(otra); }
+  }
+}
+
+/* EL PRODUCTO UNICO NO SE TRADUCE, 26 sep 2026.
+ *
+ * Con el producto unico (el "1 €" de cada tienda) TikTok ya da un numero
+ * distinto a cada prenda, y ESE es el que se cuelga en la prenda, como toda la
+ * vida. La ficha del servidor solo sirve para los anuncios sueltos, donde cada
+ * anuncio numera desde el 1.
+ *
+ * El 25 sep en Alemania se vendio con el producto unico y la pestaña del Live
+ * Manager estaba abierta, asi que el servidor apunto fichas igualmente. Las
+ * tarjetas del dia siguiente salieron "traducidas" a esas fichas, que no eran
+ * las colgadas: el 43 de TikTok salia como 41, el 68 como 63. Mandaba a
+ * recoger la prenda equivocada. Ahora el producto unico se queda SIEMPRE con
+ * el numero de TikTok. Se reconoce por su identificador o, si es uno nuevo, por
+ * el nombre ("1 €", "1eur"). */
+const UNICOS = new Set([
+  '1729936778204780713',   // ES · vintage1eurobillys
+  '1729936845494982825'    // DE · Gebrauchtes 1€ Vintage Klamotten
+]);
+const esUnico = (producto, nombre) => UNICOS.has(String(producto || '')) ||
+  /\b1\s?€|1\s?eur|vintage1euro/i.test(String(nombre || ''));
+
 async function mapaDeFichas(s) {
   try {
     /* El desglose se hace EN LA BASE y no aqui. Antes se traia la caja entera de
@@ -521,15 +720,17 @@ async function mapaDeFichas(s) {
       select d.sesion        as sesion,
              v->>'producto' as producto,
              v->>'unidad'   as unidad,
-             v->>'ficha'    as ficha
+             v->>'ficha'    as ficha,
+             v->>'nombre'   as nombre
         from directo_vivo d,
              lateral jsonb_array_elements(
                case when jsonb_typeof(d.estado->'ventas') = 'array'
                     then d.estado->'ventas' else '[]'::jsonb end) v
-       where d.cuando > now() - interval '3 days'`;
+       where d.cuando > now() - interval '14 days'`;
     const m = {}, dueno = {}, dudosas = new Set();
     for (const f of filas) {
       if (!f.producto || !f.unidad || !f.ficha) continue;
+      if (esUnico(f.producto, f.nombre)) continue;
       const n = parseInt(String(f.unidad).replace(/[^0-9]/g, ''), 10);
       const ficha = parseInt(String(f.ficha), 10);
       if (!Number.isFinite(n) || !Number.isFinite(ficha)) continue;
@@ -573,6 +774,17 @@ async function mapaDeFichas(s) {
 function traducirTandas(datos, mapa) {
   if (!datos || !Array.isArray(datos.tandas) || !Object.keys(mapa).length) return { datos, n: 0 };
   let n = 0;
+  /* LO QUE NO SE PUEDE TRADUCIR SE AVISA. Si una venta de un directo con
+   * fichas no quedo apuntada (pestaña del panel cerrada, ordenador dormido), su
+   * tarjeta llega con el numero de TikTok, y ese numero parece una ficha normal:
+   * el "2" de TikTok manda a la chica a la ficha 2, que es otra prenda. Por eso
+   * esas tarjetas cambian de rotulo y salen en un perchero aparte, "REVISAR",
+   * para que se busquen a mano en vez de recogerse mal. */
+  const conFichas = new Set(Object.keys(mapa).map((k) => k.slice(0, k.lastIndexOf('.'))));
+  const marcarRevisar = (c) => {
+    if (!(c.porCuenta || []).some((g) => g.producto && conFichas.has(String(g.producto)))) return;
+    c._revisar = true;          /* el rotulo se cambia al final, en ponerRevisar */
+  };
   for (const t of datos.tandas) {
     for (const c of (t.compradores || t.detalle || [])) {
       const grupos = (c.porCuenta || []).filter((g) => Array.isArray(g.numeros) && g.numeros.length);
@@ -596,7 +808,7 @@ function traducirTandas(datos, mapa) {
          * la cuenta y su color siguen exactamente donde estaban. */
         nuevos.push({ ...g, numeros: fichas.slice().sort((a, b) => a - b) });
       }
-      if (liada) continue;
+      if (liada) { marcarRevisar(c); continue; }
 
       let bolsas = null;
       if (Array.isArray(c.bultos) && c.bultos.length) {
@@ -611,7 +823,7 @@ function traducirTandas(datos, mapa) {
           if (liada) break;
           bolsas.push({ ...b, numeros: nums });
         }
-        if (liada) continue;
+        if (liada) { marcarRevisar(c); continue; }
       }
 
       const todas = nuevos.reduce((a, g) => a.concat(g.numeros), []).sort((a, b) => a - b);
@@ -624,8 +836,191 @@ function traducirTandas(datos, mapa) {
   return { datos, n };
 }
 
+/* ===========================================================================
+ * EL DIRECTO DEL 25 SEP 2026 EN BILLYSVLC: DOS MANERAS DE NUMERAR EN UNO
+ * ===========================================================================
+ * Ese dia se probo a subastar anuncios sueltos, uno por tipo y marca. Cada
+ * anuncio numera desde el 1, asi que en las tarjetas salian nueve "1", seis
+ * "2"... Las 18 primeras prendas se vendieron asi y llevan colgada la ficha
+ * del taco EN ORDEN DE VENTA (1 a 18), que es justo la ficha que apunto la
+ * tablet. Despues se volvio al producto unico de siempre (vintage1eurobillys)
+ * y a esas prendas se les colgo EL NUMERO DE TIKTOK, como toda la vida.
+ *
+ * O sea que en billysvlc hay dos prendas con el 1, dos con el 2... hasta el 18.
+ * Por eso aqui no basta con cambiar numeros: hay que partir la cuenta en dos
+ * percheros con nombre propio, para que la app de recogida les de color y
+ * llave de marcado distintos:
+ *
+ *   "billysvlc · individuales"    las 18 sueltas, con su ficha (1 a 18)
+ *   "billysvlc · producto único"  lo demas, con el numero de TikTok
+ *
+ * Billystour no se toca: ese dia no tuvo repetidos.
+ *
+ * SE HACE POR PEDIDO, NO POR NUMERO. Un comprador puede llevarse el "1" de un
+ * anuncio suelto Y el "1" del producto unico: son dos prendas distintas y
+ * buscando "el 1" en la lista se confundirian. Cada pedido dice de que anuncio
+ * es y que ficha le dio la tablet.
+ *
+ * Y SI ALGO NO CUADRA, LA TARJETA SE QUEDA COMO ESTABA: una tarjeta sin
+ * repartir se recoge despacio; una tarjeta mal repartida se recoge mal. */
+const REPARTOS = [{
+  sesion: '2777060887',                       // el directo de billysvlc del 25 sep
+  cuenta: 'billysvlc',
+  unico: '1729936778204780713',               // vintage1eurobillys: numero de TikTok
+  sueltas: 'billysvlc · individuales',
+  resto: 'billysvlc · producto único'
+}];
+
+/* Despues de traducir y repartir: las tarjetas que siguen sin poder traducirse
+ * pasan al perchero "REVISAR". Va al final a proposito, para no estorbar al
+ * reparto del 25 sep, que busca el rotulo de la cuenta tal cual. */
+function ponerRevisar(datos) {
+  let n = 0;
+  if (!datos || !Array.isArray(datos.tandas)) return n;
+  for (const t of datos.tandas) for (const c of (t.compradores || t.detalle || [])) {
+    if (!c._revisar) continue;
+    delete c._revisar;
+    c.porCuenta = (c.porCuenta || []).map((g) => (/ · REVISAR$/.test(String(g.cuenta || '')) ? g
+      : { ...g, cuenta: (g.cuenta || '') + ' · REVISAR' }));
+    c.revisar = true;
+    n++;
+  }
+  return n;
+}
+
+/* AJUSTES DE UN DIA CONCRETO: cuando en el almacen se ha numerado distinto.
+ *
+ * 26 sep 2026, Alemania (directo del viernes 25, juego "de-2026-09-26-bv"): no
+ * quedaban fichas fisicas desde el 1 y se empezo por la 200. La prenda 1 de
+ * TikTok lleva colgada la 200, la 2 la 201... O sea, numero de TikTok + 199.
+ * Solo ese juego; los demas no se tocan. */
+const AJUSTES = { 'de-2026-09-26-bv': { sumar: 199 } };
+function ajustarJuego(juego, datos) {
+  const a = AJUSTES[juego];
+  if (!a || !datos || !Array.isArray(datos.tandas)) return 0;
+  const mas = (xs) => (Array.isArray(xs) ? xs.map((n) => (Number.isFinite(Number(n)) ? Number(n) + a.sumar : n)) : xs);
+  let n = 0;
+  for (const t of datos.tandas) for (const c of (t.compradores || t.detalle || [])) {
+    c.numeros = mas(c.numeros);
+    if (Array.isArray(c.porCuenta)) c.porCuenta = c.porCuenta.map((g) => ({ ...g, numeros: mas(g.numeros) }));
+    if (Array.isArray(c.bultos)) c.bultos = c.bultos.map((b) => ({ ...b, numeros: mas(b && b.numeros) }));
+    n += (c.numeros || []).length;
+  }
+  return n;
+}
+
+async function repartirSesiones(s, datos) {
+  let tocadas = 0;
+  if (!datos || !Array.isArray(datos.tandas)) return tocadas;
+  for (const r of REPARTOS) {
+    const pedidosDeLaCuenta = new Set();
+    for (const t of datos.tandas) for (const c of (t.compradores || [])) {
+      if ((c.porCuenta || []).some((g) => String(g.cuenta) === r.cuenta)) {
+        for (const p of (Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []))) pedidosDeLaCuenta.add(String(p));
+      }
+    }
+    if (!pedidosDeLaCuenta.size) continue;
+
+    let filas;
+    try {
+      filas = await s`
+        select v->>'pedido' as pedido, v->>'producto' as producto,
+               v->>'unidad' as unidad, v->>'ficha' as ficha
+          from directo_vivo d, lateral jsonb_array_elements(
+                 case when jsonb_typeof(d.estado->'ventas') = 'array'
+                      then d.estado->'ventas' else '[]'::jsonb end) v
+         where d.sesion = ${r.sesion}`;
+    } catch (e) { continue; }                     /* sin datos del directo, nada que repartir */
+
+    const porPedido = {};
+    for (const f of filas) {
+      const n = parseInt(String(f.unidad || '').replace(/[^0-9]/g, ''), 10);
+      const ficha = parseInt(String(f.ficha || ''), 10);
+      if (!f.pedido || !Number.isFinite(n)) continue;
+      (porPedido[f.pedido] = porPedido[f.pedido] || []).push({ n, ficha, unico: String(f.producto) === r.unico });
+    }
+    /* Solo si este juego es de verdad el de ese directo: al menos un pedido suyo. */
+    if (![...pedidosDeLaCuenta].some((p) => porPedido[p])) continue;
+
+    for (const t of datos.tandas) for (const c of (t.compradores || [])) {
+      const mios = (c.porCuenta || []).filter((g) => String(g.cuenta) === r.cuenta);
+      if (!mios.length || (Array.isArray(c.bultos) && c.bultos.length > 1)) continue;
+      const todos = [].concat(...mios.map((g) => g.numeros || []));
+      const quedan = todos.slice();
+      const sueltas = [];
+      let mal = false;
+      for (const p of (Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []))) {
+        for (const v of (porPedido[String(p)] || [])) {
+          if (v.unico) continue;                    /* se queda con su numero de TikTok */
+          const k = quedan.indexOf(v.n);
+          if (k < 0 || !Number.isFinite(v.ficha)) { mal = true; break; }
+          quedan.splice(k, 1);
+          sueltas.push(v.ficha);
+        }
+        if (mal) break;
+      }
+      if (mal || sueltas.length + quedan.length !== todos.length) continue;
+
+      const nuevos = [];
+      if (sueltas.length) nuevos.push({ cuenta: r.sueltas, numeros: sueltas.sort((a, b) => a - b) });
+      if (quedan.length) nuevos.push({ cuenta: r.resto, numeros: quedan.sort((a, b) => a - b) });
+      const otros = (c.porCuenta || []).filter((g) => String(g.cuenta) !== r.cuenta);
+      c.porCuenta = nuevos.concat(otros);
+      c.numeros = [].concat(...c.porCuenta.map((g) => g.numeros || [])).sort((a, b) => a - b);
+      delete c._revisar;         /* repartida a mano: ya esta bien */
+      tocadas++;
+    }
+  }
+  return tocadas;
+}
+
+/* PASE LO QUE PASE, SE CONTESTA.
+ *
+ * Esto es una red, no un arreglo: si algo aqui dentro se queda colgado, a los
+ * siete segundos se responde igualmente con un "voy lento", se corta la
+ * conexion de ESA llamada y quien pregunta -la tablet, el panel, el almacen-
+ * reintenta. Siete y no doce: la tablet y la extension se rinden a los ocho,
+ * y contestar despues de que se hayan rendido no sirve de nada. */
+const LIMITE = 7000;
+
+/* MIGAS DE PAN: por que paso iba la llamada cuando se quedo parada. Ahora son
+ * de cada llamada, no de la copia entera del servidor: antes se mezclaban las
+ * de unas llamadas con otras y decian cosas que no eran. */
+let paso = 'nada';
+const aqui = (x) => { paso = x; };
+
 module.exports = puerta(async (req, res) => {
-  const s = db();
+  let contestado = false;
+  const migas = { paso: 'entrando' };
+  const s = abrir();
+  /* La conexion se cierra JUSTO ANTES de contestar, no despues: en cuanto sale
+   * la respuesta Vercel puede congelar esta copia del servidor, y no debe
+   * quedar ninguna conexion abierta durante la congelacion. */
+  const json = res.json.bind(res), fin = res.end.bind(res);
+  res.json = (o) => { cerrar(s); return json(o); };
+  res.end = (...a) => { cerrar(s); return fin(...a); };
+  const reloj = setTimeout(() => {
+    if (contestado) return;
+    contestado = true;
+    /* Se corta SU conexion, que es solo suya: no molesta a ninguna otra llamada
+     * y deja de gastar sitio en la base. */
+    cerrar(s);
+    try { res.status(503).json({ ok: false, error: 'servidor-lento', paso: migas.paso }); } catch (_) {}
+  }, LIMITE);
+  try {
+    return await atender(req, res, s, migas);
+  } catch (e) {
+    if (contestado) return;          /* ya se contesto por lento; lo demas sobra */
+    throw e;
+  } finally {
+    contestado = true;
+    clearTimeout(reloj);
+    cerrar(s);
+  }
+});
+
+async function atender(req, res, s, migas) {
+  const aqui = (x) => { migas.paso = x; };
 
   if (req.method === 'POST') {
     const bm = cuerpo(req);
@@ -636,6 +1031,11 @@ module.exports = puerta(async (req, res) => {
      * menos trabajo hace el resto. */
     if (bm && bm.live) {
       if (!puedeLeer(req)) return noAutorizado(res, 'leer');
+      if (bm.accion === 'apagar') {
+        const canal = limpiarCanal(bm.canal);
+        if (!canal) return res.status(400).json({ ok: false, error: 'sin-canal' });
+        return res.status(200).json({ ok: true, canal, apagado_en: await apagarCanal(s, canal) });
+      }
       let sesion = aTexto(bm.directo || (req.query || {}).directo).trim();
       /* La tablet manda su canal, no un numero: su enlace es fijo para siempre. */
       if (!sesion && (bm.canal || (req.query || {}).canal)) {
@@ -644,6 +1044,14 @@ module.exports = puerta(async (req, res) => {
         if (!sesion) return res.status(200).json({ ok: false, error: 'canal-sin-directo', canal });
       }
       return accionDirecto(s, res, sesion, bm);
+    }
+    /* EL PIN DE ADMIN DE LA APP DEL ALMACEN, 26 sep 2026. Los costes solo se
+     * ensenan a quien lo pone. Se comprueba aqui y no en la pagina para que el
+     * numero no este escrito en ella. Es el mismo pin que el del panel de la
+     * cola (variable BILLYS_ADMIN). Es un pestillo, no seguridad de verdad. */
+    if (bm && typeof bm.pinAdmin === 'string') {
+      if (!puedeLeer(req)) return noAutorizado(res, 'leer');
+      return res.status(200).json({ ok: bm.pinAdmin.trim() === (process.env.BILLYS_ADMIN || '2003') });
     }
     if (bm && bm.marcas && typeof bm.marcas === 'object' && !bm.datos) {
       if (!puedeLeer(req)) return noAutorizado(res, 'leer');
@@ -680,37 +1088,50 @@ module.exports = puerta(async (req, res) => {
   }
 
   if (req.method === 'GET') {
+    aqui('get');
     if (!puedeLeer(req)) return noAutorizado(res, 'leer');
     const q = req.query || {};
+    aqui('get-permiso-ok');
     if (q.panel) {
+      aqui('panel');
       try {
         return res.status(200).json({ ok: true, ahora: new Date().toISOString(),
-                                      directos: await panelDirectos(s) });
+                                      directos: await conReintento(s, panelDirectos),
+                                      apagados: await apagados(s) });
       } catch (e) {
-        return res.status(200).json({ ok: true, ahora: new Date().toISOString(), directos: [] });
+        /* Si no se ha podido leer, se dice. Devolver una lista vacia haria que
+         * el panel pintara los cinco puestos como apagados, que es justo lo
+         * contrario de lo que hace falta saber. */
+        return res.status(200).json({ ok: false, error: 'no-se-ha-podido-leer' });
       }
     }
     if (q.live) {
+      aqui('live');
       let sesion = aTexto(q.directo).trim();
       const canal = limpiarCanal(q.canal);
-      if (!sesion && canal) sesion = await sesionDeCanal(s, canal);
+      if (!sesion && canal) { aqui('live-buscando-canal'); sesion = await sesionDeCanal(s, canal); aqui('live-canal-resuelto'); }
       if (!sesion) {
         if (canal) return res.status(200).json({ ok: true, hay: false, canal, sesion: '',
-          room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
+          room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [],
+          ...(await marcaApagado(s, canal)) });
         return res.status(400).json({ ok: false, error: 'sin-directo' });
       }
-      const { hay, estado, cuando } = await leerDirecto(s, sesion);
+      aqui('live-leyendo');
+      const { hay, estado, cuando } = await conReintento(s, (c) => leerDirecto(c, sesion));
+      aqui('live-leido');
       if (!hay) {
         return res.status(200).json({ ok: true, hay: false, sesion, canal,
-          room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
+          room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [],
+          ...(await marcaApagado(s, canal)) });
       }
       if (canal) await vistaTablet(s, sesion);
       const v = vistaDirecto(sesion, estado, cuando);
       v.canal = estado.canal || canal;
       v.cuenta = estado.cuenta || '';
+      Object.assign(v, await marcaApagado(s, v.canal));
       return res.status(200).json(v);
     }
-    if (q.marcas) return leerMarcas(s, res, aTexto(q.juego).trim());
+    if (q.marcas) { aqui('marcas'); return leerMarcas(s, res, aTexto(q.juego).trim()); }
     const dia = diaDe(q.dia);
     const juego = aTexto(q.juego).trim() || dia;
     const filas = await s`select dia, juego, titulo, datos, generado from tandas where juego = ${juego}`;
@@ -722,11 +1143,14 @@ module.exports = puerta(async (req, res) => {
     const f = filas[0];
     const mapa = await mapaDeFichas(s);
     const { datos, n } = traducirTandas(f.datos, mapa);
+    const repartidas = await repartirSesiones(s, datos);
+    const revisar = ponerRevisar(datos);
+    const ajustadas = ajustarJuego(f.juego, datos);
     return res.status(200).json({
       ok: true, hay: true, dia: f.dia, juego: f.juego,
-      generado: f.generado, titulo: f.titulo, datos, traducidas: n
+      generado: f.generado, titulo: f.titulo, datos, traducidas: n, repartidas, revisar, ajustadas
     });
   }
 
   return res.status(405).json({ ok: false, error: 'metodo' });
-});
+}
