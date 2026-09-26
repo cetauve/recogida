@@ -88,6 +88,12 @@
   .aviso.error{border-color:var(--malo);color:#8c1f14;background:#fdecea}
   .tapa{position:fixed;inset:0;background:rgba(238,241,244,.55);display:none;z-index:8}
   .tapa.ver{display:block}
+  body.ocupado button.marca{opacity:.35}
+  .parada{position:fixed;inset:0;z-index:20;background:rgba(20,26,31,.92);color:#fff;display:none;
+    align-items:center;justify-content:center;text-align:center;font-size:26px;font-weight:700;line-height:1.4;padding:30px}
+  .parada.ver{display:flex}
+  .parada small{display:block;font-size:17px;font-weight:500;opacity:.8;margin-top:14px}
+  body.ocupado #txtEstado{color:#c0392b;font-weight:700}
   .vacio{padding:30px 6px;color:var(--suave);font-size:17px;line-height:1.7}
 </style>
 </head>
@@ -164,6 +170,7 @@
 </div>
 
 <div class="tapa" id="tapa"></div>
+<div class="parada" id="parada"><div>Disconnected from the panel.<small>Tap anywhere to reconnect.</small></div></div>
 <div class="aviso" id="aviso"></div>
 <script>
 /* Billy's · pantalla del directo.
@@ -276,6 +283,19 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;',
 const vibrar = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
 let estado = null, elegido = null, bloqueoHasta = 0, ordenMia = null, fichaPintada = null;
 let mapa = new Map(), huella = '';
+/* Hasta cuando hay una subasta en marcha, en el reloj de ESTE iPad: el servidor
+ * dice cuanto falta y aqui se suma a la hora local, asi da igual que el reloj
+ * del iPad vaya adelantado o atrasado. */
+let libreHasta = 0;
+const faltan = () => Math.ceil(Math.max(0, libreHasta - Date.now()) / 1000);
+function pintarOcupado() {
+  const f = faltan();
+  document.body.classList.toggle('ocupado', f > 0 && !PRUEBA);
+  const arrancando = estado && estado.orden && estado.orden.estado === 'pendiente';
+  if (f > 0 && !PRUEBA && !arrancando && $('punto').classList.contains('on')) $('txtEstado').textContent = 'auction running · ' + f + ' s';
+  else if ($('txtEstado').textContent.indexOf('auction running') === 0) $('txtEstado').textContent = 'ready';
+}
+setInterval(pintarOcupado, 500);
 
 function aviso(txt, malo) {
   const a = $('aviso');
@@ -373,6 +393,11 @@ document.addEventListener('click', (e) => {
 async function pedir(item) {
   const ahora = Date.now();
   if (ahora < bloqueoHasta) return;
+  if (!PRUEBA && faltan() > 0) {
+    vibrar(120);
+    aviso('Auction still running. Wait ' + faltan() + ' s and tap again.', true);
+    return;
+  }
   bloqueoHasta = ahora + 1400;
   $('tapa').classList.add('ver');
   setTimeout(() => $('tapa').classList.remove('ver'), 1100);
@@ -385,8 +410,16 @@ async function pedir(item) {
         listado: item.id, nombre: item.nombre, prueba: PRUEBA ? 1 : 0 })
     });
     const j = await r.json();
+    if (!j.ok && j.error === 'subasta-en-marcha') {
+      libreHasta = Date.now() + (Number(j.faltan) || 3) * 1000; pintarOcupado();
+      vibrar(120);
+      aviso('Auction still running. Wait ' + faltan() + ' s and tap again.', true);
+      return;
+    }
     if (!j.ok) throw new Error(j.error || 'no');
     estado = j; ordenMia = j.orden ? j.orden.id : null;
+    if (typeof j.libre_en === 'number') libreHasta = Date.now() + j.libre_en;
+    pintarOcupado();
     aviso((PRUEBA ? 'TEST · ' : '') + queEra + ' ' + (item.marca || 'no brand'));
     /* Se vuelve a cero: la siguiente prenda no tiene por que parecerse a esta. */
     elegido = null; pintarPrendas(); pintarMarcas(); cabecera();
@@ -435,7 +468,24 @@ function cabecera() {
 /* Preguntar sin tumbar el servidor: vueltas encadenadas, corte a los 8 segundos
  * y freno progresivo. El 22 sep 2026 tres cosas preguntando cada dos segundos
  * dejaron toda la API sin responder, también las tandas del almacén. */
-const RITMO = 3000, MAX = 60000, CORTE = 8000;
+/* DESCONECTAR desde el panel, puesto a puesto. El servidor manda su hora y la
+ * del ultimo "desconectar" de este canal. Se apunta la hora del servidor de la
+ * primera respuesta; si llega un desconectar posterior, se deja de preguntar.
+ * Asi una tablet olvidada encendida no llama toda la noche. Tocar la pantalla
+ * vuelve a conectar. */
+let arranque, parada = false;
+function tocaParar(j) {
+  if (!j || !j.ahora) return false;
+  if (arranque === undefined) arranque = j.ahora;
+  return !!j.apagado_en && j.apagado_en > arranque;
+}
+$('parada').addEventListener('click', () => {
+  if (!parada) return;
+  parada = false; arranque = undefined;
+  $('parada').classList.remove('ver');
+  mirar();
+});
+const RITMO = 3000, MAX = 6000, CORTE = 8000;   /* MAX 6 s: con 60 la tablet se quedaba un minuto en "no response" tras dos fallos seguidos */
 let espera = RITMO;
 function llamar(url) {
   const corta = new AbortController();
@@ -446,10 +496,16 @@ async function mirar() {
   try {
     const j = await llamar(API + '?d=' + encodeURIComponent(CODIGO) +
       QUIEN + '&live=1&_=' + Date.now());
+    if (tocaParar(j)) {
+      parada = true; $('parada').classList.add('ver');
+      $('punto').className = 'punto off'; $('txtEstado').textContent = 'disconnected';
+      return;                       /* sin setTimeout: deja de preguntar */
+    }
     if (CANAL) pintarPuesto(j && j.cuenta);
     if (!j.ok) { $('punto').className = 'punto off'; $('txtEstado').textContent = j.error || 'server refused'; }
     else {
-      estado = j; cabecera();
+      estado = j; if (typeof j.libre_en === 'number') libreHasta = Date.now() + j.libre_en;
+      cabecera(); pintarOcupado();
       const h = JSON.stringify((j.listados || []).map((x) => [x.id, x.nombre]));
       if (h !== huella) { huella = h; mapa = organizar(j.listados || []);
         if (elegido && !mapa.has(elegido)) elegido = null;

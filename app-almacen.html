@@ -311,7 +311,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     <div class="fila">
       <span class="tanda" id="tanda"></span>
       <span class="cuenta" id="cuenta"></span>
-      <span class="coste" id="coste">0,00 €<small id="estado">Guardado</small></span>
+      <span class="coste" id="coste"><small id="estado">Guardado</small></span>
     </div>
     <div class="progreso"><i id="tripa" style="width:0%"></i></div>
   </div>
@@ -326,6 +326,33 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
   const eur = (n) => n.toFixed(2).replace('.', ',') + ' €';
   const vibrar = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+
+  /* LOS COSTES SOLO CON EL PIN DE ADMIN, 26 sep 2026. Quien recoge y marca no
+   * tiene por que ver cuanto cuesta cada prenda. Donde iba el coste sale un
+   * candado; al tocarlo se pide el pin y se comprueba en el servidor, que es
+   * donde esta guardado (no en esta pagina). Un movil con el pin puesto lo
+   * recuerda doce horas: el de Aaron no tiene que ponerlo cada vez, y el de una
+   * trabajadora en el que alguien lo puso un dia se olvida solo al siguiente. */
+  const DOCE_HORAS = 12 * 3600 * 1000;
+  let ADMIN = false;
+  try { ADMIN = Number(localStorage.getItem('billys_admin_hasta') || 0) > Date.now(); } catch (e) {}
+  const cifraCoste = (valor) => ADMIN
+    ? `<div class="cifra verde"><u>${valor}</u><span>coste</span></div>`
+    : `<button class="cifra" data-vercoste style="cursor:pointer;font:inherit;color:inherit"><u>🔒</u><span>coste · admin</span></button>`;
+  document.addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-vercoste]')) return;
+    const pin = (window.prompt('Pin de admin:') || '').trim();
+    if (!pin) return;
+    try {
+      const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO), { method: 'POST',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pinAdmin: pin }) });
+      const j = await r.json();
+      if (!j.ok) { window.alert('Ese pin no es.'); return; }
+      ADMIN = true;
+      try { localStorage.setItem('billys_admin_hasta', String(Date.now() + DOCE_HORAS)); } catch (e2) {}
+      repintar();
+    } catch (e2) { window.alert('Sin conexión. Prueba otra vez.'); }
+  });
 
   /* ======================================================================
      DE DÓNDE SALEN LAS TANDAS
@@ -1032,7 +1059,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
           orden que las hojas del taco que ya está impreso.</p>
         <div class="cifras">
           <div class="cifra"><u>${total}/${PRENDAS}</u><span>marcadas</span></div>
-          <div class="cifra verde"><u>${eur(costeTodo())}</u><span>coste</span></div>
+          ${cifraCoste(eur(costeTodo()))}
           <div class="cifra"><u>${TANDAS.length}</u><span>tandas</span></div>
         </div>
         <div class="tandas">
@@ -1070,7 +1097,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   function pintarBarra() {
     $('tanda').textContent = TANDAS[T].e;
     $('cuenta').textContent = hechasDe(T) + '/' + prendasDe(T);
-    $('coste').innerHTML = eur(costeTodo()) + '<small id="estado"></small>';
+    $('coste').innerHTML = (ADMIN ? eur(costeTodo()) : '') + '<small id="estado"></small>';
     pintarEstado();
     $('tripa').style.width = (hechasDe(T) / prendasDe(T) * 100) + '%';
   }
@@ -1419,7 +1446,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     const cuenta = {};
     todasLasPiezas().forEach((id) => { if (id) cuenta[id] = (cuenta[id] || 0) + 1; });
     const filas = Object.entries(cuenta).map(([id, n]) => ({ c: deId(id), n }))
-      .filter((f) => f.c).sort((a, b) => (b.c.coste || 0) * b.n - (a.c.coste || 0) * a.n);
+      .filter((f) => f.c).sort((a, b) => ADMIN ? (b.c.coste || 0) * b.n - (a.c.coste || 0) * a.n : b.n - a.n);
     const sinSaber = cuenta.nose || 0;
     /* Dónde está cada "No sé", para poder volver sin buscarla a mano. */
     const dudas = [];
@@ -1428,7 +1455,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     })));
     const texto = 'Billy\'s · ' + JUEGO + '\n' +
       filas.map((f) => f.c.n + ': ' + f.n).join('\n') +
-      '\nTOTAL: ' + hechasTodo() + ' prendas · ' + eur(costeTodo());
+      '\nTOTAL: ' + hechasTodo() + ' prendas' + (ADMIN ? ' · ' + eur(costeTodo()) : '');
 
     $('pantalla').innerHTML = `
       <div class="fin">
@@ -1436,14 +1463,14 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
         <h1>Lo marcado hasta ahora</h1>
         <div class="cifras">
           <div class="cifra"><u>${hechasTodo()}/${PRENDAS}</u><span>prendas</span></div>
-          <div class="cifra verde"><u>${eur(costeTodo())}</u><span>coste</span></div>
+          ${cifraCoste(eur(costeTodo()))}
           <div class="cifra"><u>${filas.length}</u><span>categorías</span></div>
         </div>
         <table class="tabla"><thead><tr>
-          <th>Categoría</th><th class="n">Prendas</th><th class="n">Coste</th>
+          <th>Categoría</th><th class="n">Prendas</th>${ADMIN ? '<th class="n">Coste</th>' : ''}
         </tr></thead><tbody>
           ${filas.map((f) => `<tr><td>${f.c.n}</td><td class="n">${f.n}</td>
-            <td class="n">${f.c.coste == null ? '—' : eur(f.c.coste * f.n)}</td></tr>`).join('')}
+            ${ADMIN ? `<td class="n">${f.c.coste == null ? '—' : eur(f.c.coste * f.n)}</td>` : ''}</tr>`).join('')}
         </tbody></table>
         ${sinSaber ? `<div class="nota"><div><b>${sinSaber}
           ${sinSaber === 1 ? 'prenda ha ido' : 'prendas han ido'} a "No sé".</b> Toca una para

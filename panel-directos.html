@@ -70,6 +70,9 @@
   .fallo{background:#fdecea;border:1px solid #f0b8b0;color:#8c1f14;
     border-radius:12px;padding:14px 16px;font-size:14px;margin-bottom:14px}
   .apagado{opacity:.62}
+  .desconectar{appearance:none;font:inherit;cursor:pointer;background:var(--caja);color:var(--malo);
+    border:1.5px solid var(--malo);border-radius:10px;padding:10px 16px;font-size:14px;font-weight:700;min-height:44px}
+  .desconectar:active{background:#fdecea}
 </style>
 </head>
 <body>
@@ -192,10 +195,18 @@ function filaHTML(p, d, choque) {
   var pie = '';
   if (canal || (d && d.sesion)) {
     var url = enlaceTablet(canal, d && d.sesion);
+    var apagadoEn = canal ? apagados[canal] : null;
+    /* Desconectado y sin senales desde entonces: se dice, para que nadie crea
+     * que se ha caido solo. Si el ordenador ha vuelto a hablar despues, ya no. */
+    var callado = apagadoEn && !(d && d.listados_cuando && d.listados_cuando > apagadoEn);
     pie = '<div class="pie">' +
       '<a class="abrir" href="' + esc(url) + '"><span class="fl">▸</span>Abrir la tablet' +
         (nombre ? ' de ' + esc(nombre) : '') + '</a>' +
       '<button class="copiar" data-copiar="' + esc(location.origin + '/' + url) + '">Copiar enlace</button>' +
+      (canal && d ? '<button class="desconectar" data-apagar="' + esc(canal) + '" data-nombre="' + esc(nombre) + '">' +
+        'Desconectar ' + esc(nombre) + '</button>' : '') +
+      (callado ? '<span class="cuenta">Desconectado a las ' +
+        esc(new Date(apagadoEn).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })) + '</span>' : '') +
     '</div>';
   }
 
@@ -272,6 +283,33 @@ document.addEventListener('click', function (e) {
   } catch (_) { window.prompt('Copia el enlace:', txt); }
 });
 
+/* DESCONECTAR, UNO POR PUESTO. Para el final del dia: si alguien se deja el
+ * Live Manager abierto o una tablet encendida, siguen preguntando al servidor
+ * toda la noche. El boton de cada fila para SOLO ese puesto (su ordenador y sus
+ * tablets); los demas directos no se enteran. No toca TikTok: el directo sigue
+ * donde este. Se vuelve recargando el Live Manager o tocando la tablet. */
+var apagados = {};
+document.addEventListener('click', async function (e) {
+  var b = e.target.closest('[data-apagar]');
+  if (!b) return;
+  var canal = b.dataset.apagar, nombre = b.dataset.nombre || canal;
+  if (!window.confirm('¿Desconectar ' + nombre + '?\n\nSu ordenador y sus tablets dejan de hablar con el servidor. ' +
+                      'No cierra el directo de TikTok. Los demas puestos siguen igual.\n\n' +
+                      'Para volver: recargar el Live Manager de ' + nombre + ' y tocar su tablet.')) return;
+  b.disabled = true; b.textContent = 'Desconectando…';
+  try {
+    var r = await fetch(API + '?d=' + encodeURIComponent(CODIGO), { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ live: 1, accion: 'apagar', canal: canal }) });
+    var j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'no');
+    apagados[canal] = j.apagado_en;
+    b.textContent = 'Desconectado';
+  } catch (err) {
+    b.disabled = false; b.textContent = 'Desconectar ' + nombre;
+    window.alert('No se ha podido desconectar ' + nombre + '. Prueba otra vez.');
+  }
+});
+
 async function vuelta() {
   if (!CODIGO) {
     $('fallo').innerHTML = '<div class="fallo">Falta el codigo en la direccion. ' +
@@ -289,6 +327,7 @@ async function vuelta() {
                         { signal: corte.signal, cache: 'no-store' });
     var j = await r.json();
     if (!j.ok) throw new Error(j.error || 'el servidor dice que no');
+    apagados = j.apagados || apagados;
     pintar(j);
     $('fallo').innerHTML = '';
     $('reloj').textContent = 'al dia · ' + new Date().toLocaleTimeString('es-ES');
