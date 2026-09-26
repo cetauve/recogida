@@ -21,7 +21,6 @@ const crypto = require('crypto');
 /* ------------------------------------------------------------------ base */
 
 let sql = null;
-
 function db() {
   if (sql) return sql;
   const url = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL ||
@@ -36,9 +35,9 @@ function db() {
      * configuración que se puedan desincronizar. */
     ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(url) ? false : 'require',
     prepare: false,
-            max: 6,
-        idle_timeout: 4,
-        connect_timeout: 5, max_lifetime: 120
+    max: 1,
+    idle_timeout: 20,
+    connect_timeout: 15
   });
   return sql;
 }
