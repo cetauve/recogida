@@ -711,6 +711,105 @@ function traducirTandas(datos, mapa) {
   return { datos, n };
 }
 
+/* ===========================================================================
+ * EL DIRECTO DEL 25 SEP 2026 EN BILLYSVLC: DOS MANERAS DE NUMERAR EN UNO
+ * ===========================================================================
+ * Ese dia se probo a subastar anuncios sueltos, uno por tipo y marca. Cada
+ * anuncio numera desde el 1, asi que en las tarjetas salian nueve "1", seis
+ * "2"... Las 18 primeras prendas se vendieron asi y llevan colgada la ficha
+ * del taco EN ORDEN DE VENTA (1 a 18), que es justo la ficha que apunto la
+ * tablet. Despues se volvio al producto unico de siempre (vintage1eurobillys)
+ * y a esas prendas se les colgo EL NUMERO DE TIKTOK, como toda la vida.
+ *
+ * O sea que en billysvlc hay dos prendas con el 1, dos con el 2... hasta el 18.
+ * Por eso aqui no basta con cambiar numeros: hay que partir la cuenta en dos
+ * percheros con nombre propio, para que la app de recogida les de color y
+ * llave de marcado distintos:
+ *
+ *   "billysvlc · individuales"    las 18 sueltas, con su ficha (1 a 18)
+ *   "billysvlc · producto único"  lo demas, con el numero de TikTok
+ *
+ * Billystour no se toca: ese dia no tuvo repetidos.
+ *
+ * SE HACE POR PEDIDO, NO POR NUMERO. Un comprador puede llevarse el "1" de un
+ * anuncio suelto Y el "1" del producto unico: son dos prendas distintas y
+ * buscando "el 1" en la lista se confundirian. Cada pedido dice de que anuncio
+ * es y que ficha le dio la tablet.
+ *
+ * Y SI ALGO NO CUADRA, LA TARJETA SE QUEDA COMO ESTABA: una tarjeta sin
+ * repartir se recoge despacio; una tarjeta mal repartida se recoge mal. */
+const REPARTOS = [{
+  sesion: '2777060887',                       // el directo de billysvlc del 25 sep
+  cuenta: 'billysvlc',
+  unico: '1729936778204780713',               // vintage1eurobillys: numero de TikTok
+  sueltas: 'billysvlc · individuales',
+  resto: 'billysvlc · producto único'
+}];
+
+async function repartirSesiones(s, datos) {
+  let tocadas = 0;
+  if (!datos || !Array.isArray(datos.tandas)) return tocadas;
+  for (const r of REPARTOS) {
+    const pedidosDeLaCuenta = new Set();
+    for (const t of datos.tandas) for (const c of (t.compradores || [])) {
+      if ((c.porCuenta || []).some((g) => String(g.cuenta) === r.cuenta)) {
+        for (const p of (Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []))) pedidosDeLaCuenta.add(String(p));
+      }
+    }
+    if (!pedidosDeLaCuenta.size) continue;
+
+    let filas;
+    try {
+      filas = await s`
+        select v->>'pedido' as pedido, v->>'producto' as producto,
+               v->>'unidad' as unidad, v->>'ficha' as ficha
+          from directo_vivo d, lateral jsonb_array_elements(
+                 case when jsonb_typeof(d.estado->'ventas') = 'array'
+                      then d.estado->'ventas' else '[]'::jsonb end) v
+         where d.sesion = ${r.sesion}`;
+    } catch (e) { continue; }                     /* sin datos del directo, nada que repartir */
+
+    const porPedido = {};
+    for (const f of filas) {
+      const n = parseInt(String(f.unidad || '').replace(/[^0-9]/g, ''), 10);
+      const ficha = parseInt(String(f.ficha || ''), 10);
+      if (!f.pedido || !Number.isFinite(n)) continue;
+      (porPedido[f.pedido] = porPedido[f.pedido] || []).push({ n, ficha, unico: String(f.producto) === r.unico });
+    }
+    /* Solo si este juego es de verdad el de ese directo: al menos un pedido suyo. */
+    if (![...pedidosDeLaCuenta].some((p) => porPedido[p])) continue;
+
+    for (const t of datos.tandas) for (const c of (t.compradores || [])) {
+      const mios = (c.porCuenta || []).filter((g) => String(g.cuenta) === r.cuenta);
+      if (!mios.length || (Array.isArray(c.bultos) && c.bultos.length > 1)) continue;
+      const todos = [].concat(...mios.map((g) => g.numeros || []));
+      const quedan = todos.slice();
+      const sueltas = [];
+      let mal = false;
+      for (const p of (Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []))) {
+        for (const v of (porPedido[String(p)] || [])) {
+          if (v.unico) continue;                    /* se queda con su numero de TikTok */
+          const k = quedan.indexOf(v.n);
+          if (k < 0 || !Number.isFinite(v.ficha)) { mal = true; break; }
+          quedan.splice(k, 1);
+          sueltas.push(v.ficha);
+        }
+        if (mal) break;
+      }
+      if (mal || sueltas.length + quedan.length !== todos.length) continue;
+
+      const nuevos = [];
+      if (sueltas.length) nuevos.push({ cuenta: r.sueltas, numeros: sueltas.sort((a, b) => a - b) });
+      if (quedan.length) nuevos.push({ cuenta: r.resto, numeros: quedan.sort((a, b) => a - b) });
+      const otros = (c.porCuenta || []).filter((g) => String(g.cuenta) !== r.cuenta);
+      c.porCuenta = nuevos.concat(otros);
+      c.numeros = [].concat(...c.porCuenta.map((g) => g.numeros || [])).sort((a, b) => a - b);
+      tocadas++;
+    }
+  }
+  return tocadas;
+}
+
 /* PASE LO QUE PASE, SE CONTESTA.
  *
  * Esto es una red, no un arreglo: si algo aqui dentro se queda colgado, a los
@@ -863,9 +962,10 @@ async function atender(req, res, s, migas) {
     const f = filas[0];
     const mapa = await mapaDeFichas(s);
     const { datos, n } = traducirTandas(f.datos, mapa);
+    const repartidas = await repartirSesiones(s, datos);
     return res.status(200).json({
       ok: true, hay: true, dia: f.dia, juego: f.juego,
-      generado: f.generado, titulo: f.titulo, datos, traducidas: n
+      generado: f.generado, titulo: f.titulo, datos, traducidas: n, repartidas
     });
   }
 
