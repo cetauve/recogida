@@ -53,14 +53,8 @@ const { db, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerp
  * único que pueden escribir: una categoría por prenda. No mueve pedidos, no
  * crea etiquetas y no toca nada de TikTok.
  * ========================================================================= */
-/* MISMO CUIDADO QUE CON EL DIRECTO: esta orden no se ejecuta en camino normal.
- * Los moviles del almacen preguntan por lo marcado a todas horas, y cada copia
- * del servidor que arrancaba lanzaba una de estas. Pedir ese candado mientras
- * alguien esta leyendo deja la tabla en cola y se lleva por delante una
- * conexion durante cinco minutos. Ahora solo se crea si de verdad no existe. */
 let tablaMarcasHecha = false;
-
-async function crearTablaMarcas(s) {
+async function tablaDeMarcas(s) {
   if (tablaMarcasHecha) return;
   await s`
     create table if not exists marcado (
@@ -71,17 +65,6 @@ async function crearTablaMarcas(s) {
   tablaMarcasHecha = true;
 }
 
-async function conMarcado(s, hacer) {
-  try {
-    return await hacer();
-  } catch (e) {
-    const m = String((e && e.message) || e);
-    if (!(/marcado/.test(m) && /does not exist|no existe|undefined table/i.test(m))) throw e;
-    await crearTablaMarcas(s);
-    return hacer();
-  }
-}
-
 const sinNulos = (o) => {
   const r = {};
   for (const k of Object.keys(o || {})) if (o[k] !== null) r[k] = o[k];
@@ -90,10 +73,8 @@ const sinNulos = (o) => {
 
 async function leerMarcas(s, res, juego) {
   if (!juego) return res.status(400).json({ ok: false, error: 'sin-juego' });
-  aqui('marcas-consultando');
-  const filas = await conMarcado(s, () =>
-    s`select marcas, cuando from marcado where juego = ${juego}`);
-  aqui('marcas-consultado');
+  await tablaDeMarcas(s);
+  const filas = await s`select marcas, cuando from marcado where juego = ${juego}`;
   if (!filas.length) return res.status(200).json({ ok: true, hay: false, juego, marcas: {} });
   return res.status(200).json({ ok: true, hay: true, juego,
     marcas: sinNulos(filas[0].marcas), cuando: filas[0].cuando });
@@ -101,6 +82,7 @@ async function leerMarcas(s, res, juego) {
 
 async function guardarMarcas(s, res, juego, entran) {
   if (!juego) return res.status(400).json({ ok: false, error: 'sin-juego' });
+  await tablaDeMarcas(s);
 
   /* Solo llaves y valores con pinta de lo que son. Una llave es
    * "perchero.numero" y un valor es el nombre corto de una categoría, o nulo
@@ -119,13 +101,13 @@ async function guardarMarcas(s, res, juego, entran) {
 
   /* `||` en jsonb es unir: lo que llega gana llave a llave y lo que no venía
    * se queda como estaba, así dos móviles marcando a la vez no se pisan. */
-  const [f] = await conMarcado(s, () => s`
+  const [f] = await s`
     insert into marcado (juego, marcas, cuando)
     values (${juego}, ${s.json(limpio)}, now())
     on conflict (juego) do update set
       marcas = jsonb_strip_nulls(marcado.marcas || excluded.marcas),
       cuando = now()
-    returning marcas, cuando`);
+    returning marcas, cuando`;
 
   const marcas = sinNulos(f.marcas);
   return res.status(200).json({ ok: true, juego, marcas, cuando: f.cuando,
@@ -186,27 +168,8 @@ async function guardarMarcas(s, res, juego, entran) {
  * entre ellos en Postgres y la llamada se queda colgada PARA SIEMPRE: no da
  * error, no devuelve nada, y la pantalla se queda en "conectando". Así que se
  * hace una vez por instancia y quien lee no toca la estructura nunca. */
-/* EL `create table if not exists` NO SE EJECUTA NUNCA EN CAMINO NORMAL.
- *
- * ESTO YA NOS COSTO UN SERVIDOR CAIDO Y HOY CASI OTRO. Aunque la tabla exista,
- * esa orden pide el candado mas fuerte que hay sobre ella. Basta con que una
- * lectura este en marcha para que se quede esperando, y a partir de ese momento
- * TODAS las lecturas y escrituras de esa tabla se ponen en cola detras. El
- * servidor no da error: se queda mudo, que es peor. Con tres directos y cinco
- * tablets preguntando, cada arranque de una copia del servidor era otra orden
- * de esas.
- *
- * Ahora solo se crea SI DE VERDAD NO EXISTE: se intenta lo que se iba a hacer,
- * y unicamente cuando la base contesta "esa tabla no existe" se crea y se
- * reintenta. En funcionamiento normal esto no se ejecuta jamas. */
 let tablaDirectoHecha = false;
-
-const noExisteLaTabla = (e) => {
-  const m = String((e && e.message) || e);
-  return /directo_vivo/.test(m) && /does not exist|no existe|undefined table/i.test(m);
-};
-
-async function crearTablaDirecto(s) {
+async function tablaDeDirecto(s) {
   if (tablaDirectoHecha) return;
   await s`
     create table if not exists directo_vivo (
@@ -215,17 +178,6 @@ async function crearTablaDirecto(s) {
       cuando timestamptz not null default now()
     )`;
   tablaDirectoHecha = true;
-}
-
-/* Hace lo que se le pida y, solo si la tabla no estaba, la crea y lo repite. */
-async function conTabla(s, hacer) {
-  try {
-    return await hacer();
-  } catch (e) {
-    if (!noExisteLaTabla(e)) throw e;
-    await crearTablaDirecto(s);
-    return hacer();
-  }
 }
 
 /* UNA CAJA NUEVA CADA VEZ, y no un objeto suelto que se copia por encima.
@@ -270,7 +222,8 @@ async function guardarSiNadieToco(s, sesion, estado, marca) {
   return filas.length ? filas[0].cuando : null;
 }
 
-async function leerDirecto(s, sesion) {
+async function leerDirecto(s, sesion, crear) {
+  if (crear) await tablaDeDirecto(s);
   let filas;
   try {
     filas = await s`select estado, cuando from directo_vivo where sesion = ${sesion}`;
@@ -298,24 +251,6 @@ async function guardarDirecto(s, sesion, estado) {
 /* Lo que se devuelve a quien pregunta. Las últimas ventas van recortadas: la
  * tablet solo necesita ver las de ahora mismo, y mandar 400 cada dos segundos
  * es tirar batería y datos del iPad. */
-/* UNA ORDEN NO SE QUEDA EN "LANZANDO" PARA SIEMPRE.
- *
- * Si el ordenador lanza la subasta pero el aviso de "ya esta" se pierde por el
- * camino, la orden se quedaba en pendiente sin fecha de caducidad y la tablet
- * decia "starting" hasta el fin de los tiempos, con la vendedora mirandola sin
- * poder hacer nada. Pasados dos minutos se da por perdida y se dice. No se
- * escribe nada: se calcula al leer, asi que no cuesta ni una escritura y no
- * puede pisar a nadie. */
-const CADUCA_ORDEN = 120000;
-
-function ordenVista(o) {
-  if (!o || o.estado !== 'pendiente') return o;
-  const edad = Date.now() - new Date(o.pedida).getTime();
-  if (!(edad > CADUCA_ORDEN)) return o;
-  return { ...o, estado: 'error',
-    error: 'no se pudo confirmar si salio. Mira el panel de TikTok antes de repetirla.' };
-}
-
 function vistaDirecto(sesion, e, cuando) {
   const ventas = e.ventas || [];
   return {
@@ -323,7 +258,7 @@ function vistaDirecto(sesion, e, cuando) {
     room: e.room || '',
     listados: e.listados || [],
     listados_cuando: e.listados_cuando || null,
-    orden: ordenVista(e.orden) || null,
+    orden: e.orden || null,
     ficha: e.ficha || 0,
     ventas: ventas.length,
     ultimas: ventas.slice(-12)
@@ -342,12 +277,9 @@ function limpiarCanal(x) {
 async function sesionDeCanal(s, canal) {
   if (!canal) return '';
   try {
-    /* La fecha va PRIMERO a proposito: asi la base solo abre el contenido de
-     * los directos de hoy y no el de todos los que ha habido nunca. */
     const filas = await s`
       select sesion from directo_vivo
-      where cuando > now() - interval '24 hours'
-        and estado->>'canal' = ${canal}
+      where estado->>'canal' = ${canal}
       order by cuando desc limit 1`;
     return filas.length ? filas[0].sesion : '';
   } catch (e) { return ''; }
@@ -364,9 +296,9 @@ async function canalOcupado(s, canal, sesion, puesto) {
   try {
     const filas = await s`
       select sesion, coalesce(estado->>'puesto', '') as puesto from directo_vivo
-      where cuando > now() - interval '3 minutes'
-        and estado->>'canal' = ${canal} and sesion <> ${sesion}
+      where estado->>'canal' = ${canal} and sesion <> ${sesion}
         and coalesce(estado->>'puesto', '') <> ${puesto}
+        and cuando > now() - interval '3 minutes'
       order by cuando desc limit 1`;
     return filas.length ? filas[0].sesion : '';
   } catch (e) { return ''; }
@@ -421,10 +353,8 @@ async function panelDirectos(s) {
                          precio: f.ultima.precio, hora: f.ultima.hora } : null,
     listados: f.listados || 0,
     listados_cuando: f.listados_cuando || null,
-    orden: f.orden ? (function (o) {
-      const v = ordenVista(o);
-      return { estado: v.estado, nombre: v.nombre, pedida: v.pedida, error: v.error || '' };
-    })(f.orden) : null,
+    orden: f.orden ? { estado: f.orden.estado, nombre: f.orden.nombre,
+                       pedida: f.orden.pedida, error: f.orden.error || '' } : null,
     tablet: f.tablet || null,
     cuando: f.cuando
   }));
@@ -530,13 +460,14 @@ function aplicarAccion(estado, accion, b) {
 
 async function accionDirecto(s, res, sesion, b) {
   if (!sesion) return res.status(400).json({ ok: false, error: 'sin-directo' });
+  await tablaDeDirecto(s);
   const accion = aTexto(b.accion).trim();
 
   /* Cuatro intentos. Dos escrituras a la vez sobre el mismo directo son cosa de
    * milisegundos; que fallen cuatro seguidas significa que algo va muy mal y es
    * mejor decirlo que dejar a la tablet creyendo que se guardo. */
   for (let intento = 0; intento < 4; intento++) {
-    const { estado, marca } = await conTabla(s, () => leerParaEscribir(s, sesion));
+    const { estado, marca } = await leerParaEscribir(s, sesion);
     /* Solo al estrenar canal, no en cada vuelta. */
     if (accion === 'listados' && b.canal) {
       const canal = limpiarCanal(b.canal);
@@ -579,32 +510,6 @@ async function accionDirecto(s, res, sesion, b) {
  * septiembre, y cualquier directo de una sola listing, siguen funcionando
  * exactamente igual.
  * ========================================================================= */
-/* UN FALLO SUELTO NO ES UN FALLO.
- *
- * De vez en cuando una consulta falla a la primera: casi siempre es una
- * conexion que acababa de morir por su cuenta y todavia no se habia enterado
- * nadie. Antes eso salia por pantalla como "no se ha podido leer" y la tablet
- * parpadeaba sin motivo. Se tira esa conexion y se repite UNA vez con una
- * limpia. Si vuelve a fallar, entonces si es de verdad y se dice. */
-async function conReintento(hacer) {
-  try {
-    return await hacer(db());
-  } catch (e) {
-    /* AQUI SE TIRABA LA CONEXION, Y ERA LA CAUSA DE TODO. 25 sep 2026.
-     *
-     * Tirar la conexion no la sustituye solo para quien falla: la conexion es
-     * UNA para toda la copia del servidor, y las llamadas que ya estaban en
-     * marcha se habian quedado con una referencia a la vieja. A partir de ese
-     * momento sus consultas no fallaban: se quedaban esperando a una conexion
-     * muerta, para siempre. Por eso unas llamadas iban bien y otras se colgaban
-     * a la vez, y por eso parecia que la base estaba atascada cuando la base
-     * estaba vacia y ociosa.
-     *
-     * Se reintenta y ya esta. Si falla dos veces, se dice y se acabo. */
-    return hacer(db());
-  }
-}
-
 async function mapaDeFichas(s) {
   try {
     /* El desglose se hace EN LA BASE y no aqui. Antes se traia la caja entera de
@@ -719,57 +624,8 @@ function traducirTandas(datos, mapa) {
   return { datos, n };
 }
 
-/* PASE LO QUE PASE, SE CONTESTA.
- *
- * Esto es una red, no un arreglo: si algo aqui dentro se queda colgado, a los
- * doce segundos se responde igualmente con un "voy lento" y quien pregunta
- * -la tablet, el panel, el almacen- puede seguir su vida y reintentar. Sin
- * esto, una llamada colgada deja al cliente esperando cinco minutos y a las
- * demas haciendo cola detras, que es como una tonteria se convierte en el
- * servidor entero mudo.
- *
- * Doce segundos es mucho: la llamada mas lenta que tenemos anda por medio. */
-const LIMITE = 12000;
-
-/* MIGAS DE PAN. Cuando algo se cuelga, lo unico que se veia era "voy lento", y
- * adivinar donde ha sido cuesta horas. Con esto la propia respuesta dice por
- * que paso iba cuando se quedo parado. No cuesta nada y se puede dejar puesto. */
-let paso = 'nada';
-const aqui = (x) => { paso = x; };
-
 module.exports = puerta(async (req, res) => {
-  let contestado = false;
-  paso = 'entrando';
-  const marcar = (r) => { contestado = true; return r; };
-  const reloj = setTimeout(() => {
-    if (contestado) return;
-    contestado = true;
-    /* AQUI SE TIRABA LA CONEXION Y ERA UN ERROR MIO, 25 sep 2026.
-     *
-     * La idea era razonable: si una llamada tarda doce segundos, su conexion
-     * esta colgada, se tira y la siguiente abre una limpia. El problema es que
-     * la conexion es UNA para toda la copia del servidor, y esa copia atiende
-     * varias llamadas a la vez. Al tirarla se cargaba tambien las llamadas de
-     * los demas que iban por la mitad. Resultado: cada vez que algo tardaba, se
-     * caian con el las peticiones de la tablet que estaban en curso, y desde
-     * fuera se veia como "la conexion se cae cada vez que toco algo".
-     *
-     * Se queda solo lo util: contestar siempre. Las conexiones viejas ya se
-     * reciclan solas por tiempo, que era lo que hacia falta de verdad. */
-    try { res.status(503).json({ ok: false, error: 'servidor-lento', paso }); } catch (_) {}
-  }, LIMITE);
-  try {
-    return marcar(await atender(req, res));
-  } finally {
-    contestado = true;
-    clearTimeout(reloj);
-  }
-});
-
-async function atender(req, res) {
-  aqui('antes-de-db');
   const s = db();
-  aqui('db-lista');
 
   if (req.method === 'POST') {
     const bm = cuerpo(req);
@@ -824,35 +680,26 @@ async function atender(req, res) {
   }
 
   if (req.method === 'GET') {
-    aqui('get');
     if (!puedeLeer(req)) return noAutorizado(res, 'leer');
     const q = req.query || {};
-    aqui('get-permiso-ok');
     if (q.panel) {
-      aqui('panel');
       try {
         return res.status(200).json({ ok: true, ahora: new Date().toISOString(),
-                                      directos: await conReintento(panelDirectos) });
+                                      directos: await panelDirectos(s) });
       } catch (e) {
-        /* Si no se ha podido leer, se dice. Devolver una lista vacia haria que
-         * el panel pintara los cinco puestos como apagados, que es justo lo
-         * contrario de lo que hace falta saber. */
-        return res.status(200).json({ ok: false, error: 'no-se-ha-podido-leer' });
+        return res.status(200).json({ ok: true, ahora: new Date().toISOString(), directos: [] });
       }
     }
     if (q.live) {
-      aqui('live');
       let sesion = aTexto(q.directo).trim();
       const canal = limpiarCanal(q.canal);
-      if (!sesion && canal) { aqui('live-buscando-canal'); sesion = await sesionDeCanal(s, canal); aqui('live-canal-resuelto'); }
+      if (!sesion && canal) sesion = await sesionDeCanal(s, canal);
       if (!sesion) {
         if (canal) return res.status(200).json({ ok: true, hay: false, canal, sesion: '',
           room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
         return res.status(400).json({ ok: false, error: 'sin-directo' });
       }
-      aqui('live-leyendo');
-      const { hay, estado, cuando } = await conReintento((c) => leerDirecto(c, sesion));
-      aqui('live-leido');
+      const { hay, estado, cuando } = await leerDirecto(s, sesion);
       if (!hay) {
         return res.status(200).json({ ok: true, hay: false, sesion, canal,
           room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [] });
@@ -863,7 +710,7 @@ async function atender(req, res) {
       v.cuenta = estado.cuenta || '';
       return res.status(200).json(v);
     }
-    if (q.marcas) { aqui('marcas'); return leerMarcas(s, res, aTexto(q.juego).trim()); }
+    if (q.marcas) return leerMarcas(s, res, aTexto(q.juego).trim());
     const dia = diaDe(q.dia);
     const juego = aTexto(q.juego).trim() || dia;
     const filas = await s`select dia, juego, titulo, datos, generado from tandas where juego = ${juego}`;
@@ -882,4 +729,4 @@ async function atender(req, res) {
   }
 
   return res.status(405).json({ ok: false, error: 'metodo' });
-}
+});
