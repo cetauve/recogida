@@ -170,7 +170,7 @@
 </div>
 
 <div class="tapa" id="tapa"></div>
-<div class="parada" id="parada"><div>Disconnected from the panel.<small>Tap anywhere to reconnect.</small></div></div>
+<div class="parada" id="parada"><div><span id="paradaTxt">Disconnected from the panel.</span><small>Tap anywhere to reconnect.</small></div></div>
 <div class="aviso" id="aviso"></div>
 <script>
 /* Billy's · pantalla del directo.
@@ -473,15 +473,35 @@ function cabecera() {
  * primera respuesta; si llega un desconectar posterior, se deja de preguntar.
  * Asi una tablet olvidada encendida no llama toda la noche. Tocar la pantalla
  * vuelve a conectar. */
-let arranque, parada = false;
+/* Y SE PARA SOLA, 27 sep 2026: una tablet olvidada encendida estuvo llamando
+ * toda la noche. Ahora deja de preguntar en tres casos, y tocar la pantalla la
+ * despierta en todos:
+ *  - la desconectan desde el panel;
+ *  - es de noche (de 1:00 a 9:00 el servidor dice "a dormir");
+ *  - lleva 15 minutos sin directo: sin ordenador que conteste, sin servidor o
+ *    sin directo abierto. Durante un directo de verdad el ordenador da senales
+ *    cada pocos segundos, asi que esto solo salta cuando ya no hay nada. */
+const QUIETA = 15 * 60 * 1000;
+let arranque, parada = false, forzada = false, inactivaDesde = 0;
 function tocaParar(j) {
-  if (!j || !j.ahora) return false;
+  if (!j || !j.ahora) return '';
   if (arranque === undefined) arranque = j.ahora;
-  return !!j.apagado_en && j.apagado_en > arranque;
+  if (j.apagado_en && j.apagado_en > arranque) return 'Disconnected from the panel.';
+  if (j.dormir && !forzada) return 'Paused for the night.';
+  return '';
+}
+function mirarInactiva(viva) {
+  if (viva) { inactivaDesde = 0; return ''; }
+  if (!inactivaDesde) inactivaDesde = Date.now();
+  return (Date.now() - inactivaDesde > QUIETA) ? 'Paused: no LIVE for 15 minutes.' : '';
+}
+function parar(txt) {
+  parada = true; $('paradaTxt').textContent = txt; $('parada').classList.add('ver');
+  $('punto').className = 'punto off'; $('txtEstado').textContent = 'paused';
 }
 $('parada').addEventListener('click', () => {
   if (!parada) return;
-  parada = false; arranque = undefined;
+  parada = false; arranque = undefined; forzada = true; inactivaDesde = 0;
   $('parada').classList.remove('ver');
   mirar();
 });
@@ -496,11 +516,9 @@ async function mirar() {
   try {
     const j = await llamar(API + '?d=' + encodeURIComponent(CODIGO) +
       QUIEN + '&live=1&_=' + Date.now());
-    if (tocaParar(j)) {
-      parada = true; $('parada').classList.add('ver');
-      $('punto').className = 'punto off'; $('txtEstado').textContent = 'disconnected';
-      return;                       /* sin setTimeout: deja de preguntar */
-    }
+    const motivo = tocaParar(j) || mirarInactiva(!!(j && j.ok && j.hay && j.listados_cuando &&
+      Date.now() - new Date(j.listados_cuando).getTime() < 90000));
+    if (motivo) { parar(motivo); return; }      /* sin setTimeout: deja de preguntar */
     if (CANAL) pintarPuesto(j && j.cuenta);
     if (!j.ok) { $('punto').className = 'punto off'; $('txtEstado').textContent = j.error || 'server refused'; }
     else {
@@ -515,6 +533,8 @@ async function mirar() {
   } catch (e) {
     $('punto').className = 'punto off'; $('txtEstado').textContent = 'no response';
     espera = Math.min(espera * 2, MAX);
+    const motivo = mirarInactiva(false);
+    if (motivo) { parar(motivo); return; }
   }
   setTimeout(mirar, espera);
 }

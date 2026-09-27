@@ -289,6 +289,23 @@ document.addEventListener('click', function (e) {
  * tablets); los demas directos no se enteran. No toca TikTok: el directo sigue
  * donde este. Se vuelve recargando el Live Manager o tocando la tablet. */
 var apagados = {};
+
+/* EL PANEL TAMBIEN SE PARA SOLO, 27 sep 2026. Si se queda abierto en un
+ * ordenador pregunta cada cinco segundos toda la noche. Se para de noche (de
+ * 1:00 a 9:00) y cuando lleva media hora sin que nadie lo toque. Un toque en
+ * cualquier sitio lo vuelve a poner en marcha. */
+var QUIETO = 30 * 60 * 1000, tocado = Date.now(), pausado = false, forzado = false;
+['click', 'touchstart', 'keydown'].forEach(function (ev) {
+  document.addEventListener(ev, function () {
+    tocado = Date.now();
+    if (pausado) { pausado = false; forzado = true; $('fallo').innerHTML = ''; vuelta(); }
+  }, true);
+});
+function pausar(txt) {
+  pausado = true;
+  $('reloj').textContent = 'en pausa';
+  $('fallo').innerHTML = '<div class="fallo">' + txt + ' Toca en cualquier sitio para volver a mirar.</div>';
+}
 document.addEventListener('click', async function (e) {
   var b = e.target.closest('[data-apagar]');
   if (!b) return;
@@ -311,6 +328,8 @@ document.addEventListener('click', async function (e) {
 });
 
 async function vuelta() {
+  if (pausado) return;
+  if (Date.now() - tocado > QUIETO) { pausar('Panel en pausa: media hora sin usarlo.'); return; }
   if (!CODIGO) {
     $('fallo').innerHTML = '<div class="fallo">Falta el codigo en la direccion. ' +
       'Abre este panel desde el enlace de siempre, el que lleva <b>?d=</b>.</div>';
@@ -329,6 +348,7 @@ async function vuelta() {
     if (!j.ok) throw new Error(j.error || 'el servidor dice que no');
     apagados = j.apagados || apagados;
     pintar(j);
+    if (j.dormir && !forzado) { pausar('Panel en pausa por la noche.'); return; }
     $('fallo').innerHTML = '';
     $('reloj').textContent = 'al dia · ' + new Date().toLocaleTimeString('es-ES');
     espera = RITMO;
@@ -347,7 +367,7 @@ async function vuelta() {
     if (!$('lista').innerHTML) pintar(null);
   } finally {
     clearTimeout(reloj);
-    setTimeout(vuelta, espera);
+    if (!pausado) setTimeout(vuelta, espera);
   }
 }
 
