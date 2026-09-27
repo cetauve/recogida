@@ -24,6 +24,22 @@
  * enlaces de antes y los móviles con la página en caché siguen funcionando.
  */
 const { abrir, cerrar, puerta, puedeEscribir, puedeLeer, noAutorizado, diaDe, aTexto, cuerpo } = require('./_lib');
+const crypto = require('crypto');
+
+/* LA VERSION DE LA LISTA DE ANUNCIOS, 27 sep 2026. Una huella corta de la
+ * lista tal y como se guarda. Sirve para dos ahorros: la tablet pregunta "tengo
+ * esta version, ¿ha cambiado?" y, si no, no se le manda la lista; y el aviso de
+ * "sigo vivo" del ordenador, si trae la misma lista, solo apunta la hora sin
+ * abrir la caja entera del directo. */
+function normalizarListados(xs) {
+  return (Array.isArray(xs) ? xs : []).slice(0, 300).map((x) => ({
+    id: aTexto(x.id).slice(0, 32),
+    nombre: aTexto(x.nombre).slice(0, 255),
+    vendidas: Number(x.vendidas) || 0,
+    stock: Number(x.stock) || 0
+  })).filter((x) => x.id);
+}
+const verDeListados = (l) => crypto.createHash('md5').update(JSON.stringify(l)).digest('hex').slice(0, 16);
 
 /* ===========================================================================
  * LO QUE EL ALMACÉN DICE QUE ES CADA PRENDA
@@ -545,13 +561,8 @@ async function panelDirectos(s) {
  * al guardar resulta que otro habia escrito antes. */
 function aplicarAccion(estado, accion, b) {
   if (accion === 'listados') {
-    const entran = Array.isArray(b.listados) ? b.listados : [];
-    estado.listados = entran.slice(0, 300).map((x) => ({
-      id: aTexto(x.id).slice(0, 32),
-      nombre: aTexto(x.nombre).slice(0, 255),
-      vendidas: Number(x.vendidas) || 0,
-      stock: Number(x.stock) || 0
-    })).filter((x) => x.id);
+    estado.listados = normalizarListados(b.listados);
+    estado.listados_ver = verDeListados(estado.listados);
     estado.listados_cuando = new Date().toISOString();
     if (b.room) estado.room = aTexto(b.room).slice(0, 32);
     /* EL CANAL. El numero que TikTok le pone a cada directo cambia cada vez que
@@ -645,9 +656,58 @@ function aplicarAccion(estado, accion, b) {
   return { error: 'accion-desconocida' };
 }
 
+/* EL "SIGO VIVO" SIN ABRIR LA CAJA, 27 sep 2026. El ordenador del directo
+ * manda la lista de anuncios cada 15 segundos aunque no cambie: es su forma de
+ * decir que sigue ahi (la tablet y el panel lo usan para el punto verde, y la
+ * tablet para saber a que directo ir). Antes cada aviso abria la caja entera
+ * del directo, con todas las ventas del dia, solo para apuntar la hora, y eso
+ * era una buena parte del cupo del mes de la base de datos.
+ *
+ * Ahora, si la lista es la misma que la guardada y no cambia nada mas (sala,
+ * canal, cuenta, puesto), solo se apunta la hora. Si algo es distinto, no se
+ * hace nada aqui y sigue el camino de siempre. Cualquier fallo, tambien. */
+async function latidoLigero(s, sesion, b) {
+  try {
+    const ver = verDeListados(normalizarListados(b.listados));
+    const room = b.room ? aTexto(b.room).slice(0, 32) : null;
+    const canal = b.canal ? limpiarCanal(b.canal) : null;
+    const cuenta = b.cuenta ? aTexto(b.cuenta).slice(0, 60) : null;
+    const puesto = b.puesto ? aTexto(b.puesto).slice(0, 40) : null;
+    const ahora = new Date().toISOString();
+    const f = await s`
+      update directo_vivo
+         set estado = estado || jsonb_build_object('listados_cuando', ${ahora}::text), cuando = now()
+       where sesion = ${sesion}
+         and estado->>'listados_ver' = ${ver}
+         and (${room}::text   is null or coalesce(estado->>'room', '')   = ${room}::text)
+         and (${canal}::text  is null or coalesce(estado->>'canal', '')  = ${canal}::text)
+         and (${cuenta}::text is null or coalesce(estado->>'cuenta', '') = ${cuenta}::text)
+         and (${puesto}::text is null or coalesce(estado->>'puesto', '') = ${puesto}::text)
+      returning cuando, estado->>'room' as room, estado->'orden' as orden,
+                coalesce((estado->>'ficha')::int, 0) as ficha, estado->>'canal' as canal,
+                estado->>'subasta_hasta' as subasta_hasta,
+                case when jsonb_typeof(estado->'ventas') = 'array'
+                     then jsonb_array_length(estado->'ventas') else 0 end as nventas`;
+    if (!f.length) return null;
+    const x = f[0];
+    return {
+      ok: true, hay: true, sesion, cuando: x.cuando, ligero: true,
+      room: x.room || '', listados_cuando: ahora,
+      orden: ordenVista(x.orden) || null,
+      libre_en: libreEn({ subasta_hasta: x.subasta_hasta, orden: x.orden }),
+      ficha: x.ficha || 0, ventas: Number(x.nventas) || 0,
+      ...(await marcaApagado(s, x.canal || ''))
+    };
+  } catch (e) { return null; }
+}
+
 async function accionDirecto(s, res, sesion, b) {
   if (!sesion) return res.status(400).json({ ok: false, error: 'sin-directo' });
   const accion = aTexto(b.accion).trim();
+  if (accion === 'listados') {
+    const ligero = await latidoLigero(s, sesion, b);
+    if (ligero) return res.status(200).json(ligero);
+  }
 
   /* Cuatro intentos. Dos escrituras a la vez sobre el mismo directo son cosa de
    * milisegundos; que fallen cuatro seguidas significa que algo va muy mal y es
@@ -1142,6 +1202,48 @@ async function atender(req, res, s, migas) {
           room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [],
           ...(await marcaApagado(s, canal)) });
         return res.status(400).json({ ok: false, error: 'sin-directo' });
+      }
+      /* LA TABLET NUEVA manda la version de la lista que ya tiene (?v=). Se le
+       * contesta con lo pequeño (ficha, si salio la prenda, la ultima venta) y
+       * la lista solo si ha cambiado. Las tablets viejas no mandan ?v= y siguen
+       * por el camino de siempre, de abajo. */
+      if (q.v !== undefined) {
+        aqui('live-ligero');
+        const vcli = aTexto(q.v).slice(0, 32);
+        const f = await conReintento(s, (c) => c`
+          select estado->>'listados_ver' as ver,
+                 case when ${vcli} <> '' and coalesce(estado->>'listados_ver', '') = ${vcli}
+                      then null else coalesce(estado->'listados', '[]'::jsonb) end as listados,
+                 estado->>'room' as room, estado->>'listados_cuando' as lc,
+                 estado->'orden' as orden, coalesce((estado->>'ficha')::int, 0) as ficha,
+                 estado->>'canal' as canal, estado->>'cuenta' as cuenta,
+                 estado->>'subasta_hasta' as subasta_hasta,
+                 case when jsonb_typeof(estado->'ventas') = 'array'
+                      then jsonb_array_length(estado->'ventas') else 0 end as nventas,
+                 case when jsonb_typeof(estado->'ventas') = 'array'
+                      then estado->'ventas'->-1 else null end as ultima,
+                 cuando
+            from directo_vivo where sesion = ${sesion}`);
+        if (!f.length) {
+          return res.status(200).json({ ok: true, hay: false, sesion, canal,
+            room: '', listados: [], orden: null, ficha: 0, ventas: 0, ultimas: [],
+            ...(await marcaApagado(s, canal)) });
+        }
+        if (canal) await vistaTablet(s, sesion);
+        const x = f[0];
+        const salida = {
+          ok: true, hay: true, sesion, cuando: x.cuando,
+          room: x.room || '', listados_cuando: x.lc || null,
+          orden: ordenVista(x.orden) || null,
+          libre_en: libreEn({ subasta_hasta: x.subasta_hasta, orden: x.orden }),
+          ficha: x.ficha || 0, ventas: Number(x.nventas) || 0,
+          ultimas: x.ultima ? [x.ultima] : [],
+          listados_ver: x.ver || '',
+          canal: x.canal || canal, cuenta: x.cuenta || ''
+        };
+        if (Array.isArray(x.listados)) salida.listados = x.listados; else salida.lista = 'igual';
+        Object.assign(salida, await marcaApagado(s, salida.canal));
+        return res.status(200).json(salida);
       }
       aqui('live-leyendo');
       const { hay, estado, cuando } = await conReintento(s, (c) => leerDirecto(c, sesion));
