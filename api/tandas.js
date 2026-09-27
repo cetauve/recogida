@@ -273,7 +273,20 @@ async function guardarSiNadieToco(s, sesion, estado, marca) {
 async function leerDirecto(s, sesion) {
   let filas;
   try {
-    filas = await s`select estado, cuando from directo_vivo where sesion = ${sesion}`;
+    /* SIN LA LISTA ENTERA DE VENTAS, 27 sep 2026. Esto lo pregunta la tablet
+     * cada tres segundos y el ordenador cada uno o dos. Antes se traia el
+     * directo entero, con todas las ventas del dia (25 KB y creciendo), y eso
+     * es lo que se comio el cupo del mes de la base de datos. Quien pregunta
+     * solo necesita cuantas hay y las ultimas doce, asi que la base manda solo
+     * eso. Escribir sigue leyendo la caja entera, que es mucho menos a menudo. */
+    filas = await s`
+      select (estado - 'ventas') as estado,
+             case when jsonb_typeof(estado->'ventas') = 'array'
+                  then jsonb_array_length(estado->'ventas') else 0 end as nventas,
+             case when jsonb_typeof(estado->'ventas') = 'array'
+                  then jsonb_path_query_array(estado->'ventas', '$[last-11 to last]') else '[]'::jsonb end as ultimas,
+             cuando
+        from directo_vivo where sesion = ${sesion}`;
   } catch (e) {
     /* Todavia no existe la tabla: es el primer dia y nadie ha escrito nada.
      * Eso no es un error para quien lee, es un "aun no hay nada". */
@@ -283,7 +296,9 @@ async function leerDirecto(s, sesion) {
     throw e;
   }
   if (!filas.length) return { hay: false, estado: cajaVacia() };
-  return { hay: true, estado: { ...cajaVacia(), ...(filas[0].estado || {}) }, cuando: filas[0].cuando };
+  const f = filas[0];
+  return { hay: true, estado: { ...cajaVacia(), ...(f.estado || {}), ventas: f.ultimas || [], _nventas: Number(f.nventas) || 0 },
+           cuando: f.cuando };
 }
 
 async function guardarDirecto(s, sesion, estado) {
@@ -349,6 +364,7 @@ function errorClaro(t) {
 
 function vistaDirecto(sesion, e, cuando) {
   const ventas = e.ventas || [];
+  const cuantas = typeof e._nventas === 'number' ? e._nventas : ventas.length;
   return {
     ok: true, hay: true, sesion, cuando,
     room: e.room || '',
@@ -357,7 +373,7 @@ function vistaDirecto(sesion, e, cuando) {
     orden: ordenVista(e.orden) || null,
     libre_en: libreEn(e),
     ficha: e.ficha || 0,
-    ventas: ventas.length,
+    ventas: cuantas,
     ultimas: ventas.slice(-12)
   };
 }
@@ -468,7 +484,18 @@ async function apagarCanal(s, canal) {
   apagadosCache = { valor: { ...apagadosCache.valor, [canal]: ahora }, cuando: 0 };
   return ahora;
 }
-const marcaApagado = async (s, canal) => ({ ahora: new Date().toISOString(), apagado_en: await apagadoEn(s, canal) });
+/* DE NOCHE NO SE HABLA, 27 sep 2026. Una pantalla olvidada abierta estuvo
+ * preguntando toda la noche y eso se come el cupo del mes de la base de datos.
+ * Entre la 1:00 y las 9:00 (hora de Madrid, la misma que Alemania) no hay
+ * ningun directo, asi que el servidor contesta "a dormir" y la tablet, el
+ * ordenador y el panel dejan de preguntar solos. Si alguien de verdad trabaja
+ * a esas horas, en la tablet basta con tocar la pantalla. */
+function esDeNoche(d = new Date()) {
+  const h = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false }).format(d));
+  return h >= 1 && h < 9;
+}
+const marcaApagado = async (s, canal) => ({ ahora: new Date().toISOString(), apagado_en: await apagadoEn(s, canal),
+                                            dormir: esDeNoche() });
 
 async function panelDirectos(s) {
   const filas = await s`
@@ -1097,7 +1124,7 @@ async function atender(req, res, s, migas) {
       try {
         return res.status(200).json({ ok: true, ahora: new Date().toISOString(),
                                       directos: await conReintento(s, panelDirectos),
-                                      apagados: await apagados(s) });
+                                      apagados: await apagados(s), dormir: esDeNoche() });
       } catch (e) {
         /* Si no se ha podido leer, se dice. Devolver una lista vacia haria que
          * el panel pintara los cinco puestos como apagados, que es justo lo
