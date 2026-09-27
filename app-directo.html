@@ -283,6 +283,10 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;',
 const vibrar = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
 let estado = null, elegido = null, bloqueoHasta = 0, ordenMia = null, fichaPintada = null;
 let mapa = new Map(), huella = '';
+/* La version de la lista de anuncios que ya tiene esta tablet. Se manda en
+ * cada pregunta y, si no ha cambiado, el servidor no la vuelve a mandar: solo
+ * lo pequeño (ficha, si salio la prenda, la ultima venta). 27 sep 2026. */
+let verLista = '';
 /* Hasta cuando hay una subasta en marcha, en el reloj de ESTE iPad: el servidor
  * dice cuanto falta y aqui se suma a la hora local, asi da igual que el reloj
  * del iPad vaya adelantado o atrasado. */
@@ -515,7 +519,7 @@ function llamar(url) {
 async function mirar() {
   try {
     const j = await llamar(API + '?d=' + encodeURIComponent(CODIGO) +
-      QUIEN + '&live=1&_=' + Date.now());
+      QUIEN + '&live=1&v=' + encodeURIComponent(verLista) + '&_=' + Date.now());
     const motivo = tocaParar(j) || mirarInactiva(!!(j && j.ok && j.hay && j.listados_cuando &&
       Date.now() - new Date(j.listados_cuando).getTime() < 90000));
     if (motivo) { parar(motivo); return; }      /* sin setTimeout: deja de preguntar */
@@ -524,10 +528,16 @@ async function mirar() {
     else {
       estado = j; if (typeof j.libre_en === 'number') libreHasta = Date.now() + j.libre_en;
       cabecera(); pintarOcupado();
-      const h = JSON.stringify((j.listados || []).map((x) => [x.id, x.nombre]));
-      if (h !== huella) { huella = h; mapa = organizar(j.listados || []);
-        if (elegido && !mapa.has(elegido)) elegido = null;
-        pintarPrendas(); pintarMarcas(); }
+      /* Si el servidor dice que la lista es la misma, no viene: se deja la que
+       * ya hay. Si viene (o es un servidor viejo que la manda siempre), se mira
+       * igual que antes. */
+      if (Array.isArray(j.listados)) {
+        const h = JSON.stringify(j.listados.map((x) => [x.id, x.nombre]));
+        if (h !== huella) { huella = h; mapa = organizar(j.listados);
+          if (elegido && !mapa.has(elegido)) elegido = null;
+          pintarPrendas(); pintarMarcas(); }
+      }
+      if (typeof j.listados_ver === 'string') verLista = j.listados_ver;
     }
     espera = RITMO;
   } catch (e) {
