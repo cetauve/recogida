@@ -1650,10 +1650,10 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
       <p class="sub">${esc(s)}</p></div>`;
   }
 
-  async function unJuego(l) {
+  async function unJuego(l, porPais) {
     try {
       const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) +
-        '&juego=' + encodeURIComponent(l), { cache: 'no-store' });
+        (porPais ? '&ultimo=' + encodeURIComponent(l) : '&juego=' + encodeURIComponent(l)), { cache: 'no-store' });
       if (!r.ok) return null;
       const j = await r.json();
       if (!j || !j.hay || !j.datos || !(j.datos.tandas || []).length) return null;
@@ -1664,6 +1664,14 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   }
 
   async function bajarTandas() {
+    /* EL ENLACE GENERAL (sin juego ni dia): la ultima recogida mandada del pais
+     * del enlace, España si no dice pais. 28 sep 2026: probar "la fecha de hoy"
+     * a secas abria juegos viejos de Holanda en España y en Alemania. */
+    if (!JUEGO && !DIA) {
+      const d = await unJuego(PAIS || 'es', true);
+      if (d) { JUEGO = d.juego; return d; }
+      return null;
+    }
     for (const l of llavesAProbar()) {
       const d = await unJuego(l);
       if (d) { JUEGO = d.juego || l; return d; }
