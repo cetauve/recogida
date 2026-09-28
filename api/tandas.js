@@ -720,6 +720,23 @@ async function accionDirecto(s, res, sesion, b) {
       if (canal && estado.canal !== canal) {
         const otro = await canalOcupado(s, canal, sesion, aTexto(b.puesto).slice(0, 40));
         if (otro) return res.status(409).json({ ok: false, error: 'canal-ocupado', canal });
+        /* SI SE PARA Y SE REANUDA EL DIRECTO, LA FICHA SIGUE, 28 sep 2026.
+         * TikTok da un numero de directo nuevo al reanudar, y este directo nuevo
+         * empezaba la cuenta de fichas en el 1 otra vez: la tablet diria "TAG 1"
+         * con el taco ya por el 60, y habria dos prendas con la misma ficha. Si
+         * este canal ya tuvo otro directo HOY (hora de Madrid), se sigue por su
+         * numero. Un directo de otro dia empieza en el 1, como siempre. */
+        if (!(estado.ficha > 0) && !(estado.ventas || []).length) {
+          try {
+            const prev = await s`
+              select coalesce((estado->>'ficha')::int, 0) as ficha from directo_vivo
+               where estado->>'canal' = ${canal} and sesion <> ${sesion}
+                 and cuando > now() - interval '20 hours'
+                 and (cuando at time zone 'Europe/Madrid')::date = (now() at time zone 'Europe/Madrid')::date
+               order by cuando desc limit 1`;
+            if (prev.length && prev[0].ficha > 0) estado.ficha = prev[0].ficha;
+          } catch (e) { /* si no se puede mirar, empieza en el 1 como antes */ }
+        }
       }
     }
     const r = aplicarAccion(estado, accion, b);
