@@ -1262,7 +1262,18 @@ async function atender(req, res, s, migas) {
     }
     if (q.marcas) { aqui('marcas'); return leerMarcas(s, res, aTexto(q.juego).trim()); }
     const dia = diaDe(q.dia);
-    const juego = aTexto(q.juego).trim() || dia;
+    let juego = aTexto(q.juego).trim() || dia;
+    /* EL ENLACE GENERAL DE CADA PAIS, 28 sep 2026. ?ultimo=es (o de, nl) abre
+     * la ultima recogida que se haya mandado de ese pais, se llame como se
+     * llame el juego. Antes el enlace sin juego probaba "la fecha de hoy" a
+     * secas, y habia juegos viejos de Holanda guardados con la fecha pelada:
+     * en España y en Alemania salia Holanda. */
+    if (!aTexto(q.juego).trim() && q.ultimo) {
+      const pais = aTexto(q.ultimo).trim().toLowerCase().replace(/[^a-z]/g, '').slice(0, 4);
+      const u = pais ? await s`select juego from tandas where juego like ${pais + '-%'} order by generado desc limit 1` : [];
+      if (!u.length) return res.status(200).json({ ok: true, hay: false, dia, juego: '', datos: null });
+      juego = u[0].juego;
+    }
     const filas = await s`select dia, juego, titulo, datos, generado from tandas where juego = ${juego}`;
     if (!filas.length) {
       /* Sin datos de hoy no devolvemos un 404 pelado: la app necesita poder
