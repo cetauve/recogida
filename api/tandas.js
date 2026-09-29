@@ -915,7 +915,7 @@ function traducirPorPedido(datos, porPedido) {
           if (porValor[num] === undefined) porValor[num] = f; else if (porValor[num] !== f) porValor[num] = null;
         });
         const orden = cogidas.slice().sort((a, b) => a.ficha - b.ficha);
-        nuevos.push({ ...g, numeros: orden.map((v) => v.ficha),
+        nuevos.push({ ...g, _pp: true, numeros: orden.map((v) => v.ficha),
                       nombres: orden.reduce((o, v) => { o[v.ficha] = v.nombre; return o; }, {}) });
         traducidos += cogidas.length;
       } else {
@@ -924,6 +924,22 @@ function traducirPorPedido(datos, porPedido) {
       }
     }
     if (!traducidos) continue;
+    /* UNA CUENTA, UN MONTON, DE MENOR A MAYOR. 29 sep 2026. Cada grupo de la
+     * tarjeta era un anuncio (Sudadera Nike, Camiseta Adidas...), y una vez
+     * traducido a fichas eso ya no le dice nada a quien recoge: le salian once
+     * cajas sueltas con el rotulo repetido y los numeros sin orden (32, 210,
+     * 295, 179, 48...). Ahora las fichas de la misma cuenta van juntas y
+     * ordenadas, como en el taco. Lo que no se ha podido traducir se queda
+     * aparte, tal cual estaba. Lo marcado no se mueve: va por cuenta y numero. */
+    const juntos = [];
+    for (const g of nuevos) {
+      if (!g._pp) { juntos.push(g); continue; }
+      const o = juntos.find((x) => x._pp && x.cuenta === g.cuenta && (x.dir || 1) === (g.dir || 1));
+      if (o) { o.numeros = o.numeros.concat(g.numeros); Object.assign(o.nombres, g.nombres); }
+      else juntos.push({ ...g, numeros: g.numeros.slice(), nombres: { ...g.nombres } });
+    }
+    for (const g of juntos) if (g._pp) { g.numeros.sort((a, b) => a - b); delete g._pp; }
+    nuevos.length = 0; nuevos.push(...juntos);
     let bolsas = null, bolsaMal = false;
     if (Array.isArray(c.bultos) && c.bultos.length) {
       bolsas = c.bultos.map((b) => {
