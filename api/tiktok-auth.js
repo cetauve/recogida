@@ -109,7 +109,13 @@ module.exports = puerta(async (req, res) => {
    * Y SI NO CUADRA, NO SE GUARDA. Es la parte que importa: un fallo que se ve
    * cuesta cinco minutos y uno que se guarda en silencio cuesta un dia de
    * prendas enviadas al pais equivocado. */
+  /* EL 29 SEP 2026 PASO LO MISMO AL REVES: se reautorizo billysvlc (España)
+   * y TikTok devolvio Holanda la primera, asi que billysvlc quedo apuntando a
+   * Holanda. Los nombres de España no llevan sufijo de pais, asi que se fijan
+   * aqui a mano: billysvlc y billystourvlc son SIEMPRE España. */
+  const FIJAS = { billysvlc: 'ES', billystourvlc: 'ES' };
   const regionPedida = (() => {
+    if (FIJAS[cuenta]) return FIJAS[cuenta];
     const trozos = cuenta.split(/[_-]/);
     const ultimo = trozos[trozos.length - 1];
     return (trozos.length > 1 && /^[a-z]{2}$/.test(ultimo)) ? ultimo.toUpperCase() : null;
