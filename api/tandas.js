@@ -868,6 +868,66 @@ async function mapaDeFichas(s) {
   }
 }
 
+/* EL INFORME DE UN DIA, 29 sep 2026. Lo vendido en cada directo con tablet:
+ * cuantas prendas, por cuanto, y de que anuncio (el nombre dice que prenda
+ * es, y con eso se saca el coste). Solo lee; no cambia nada.
+ *
+ *   GET ?d=CODIGO&informe=2026-09-28[&juego=es-2026-09-29]
+ *
+ * Con juego, ademas separa lo que llego a tarjeta (pagado y enviado) de lo que
+ * se quedo por el camino (sin pagar, cancelado). Se pregunta a mano, no lo
+ * mira nadie a menudo, asi que no pesa. */
+const aEuros = (x) => {
+  const t = String(x == null ? '' : x).replace(/[^0-9,.\-]/g, '');
+  if (!t) return 0;
+  const n = /,\d{1,2}$/.test(t) ? Number(t.replace(/\./g, '').replace(',', '.')) : Number(t.replace(/,/g, ''));
+  return Number.isFinite(n) ? n : 0;
+};
+async function informeDelDia(s, res, dia, juego) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return res.status(400).json({ ok: false, error: 'dia-raro' });
+  const filas = await conReintento(s, (c) => c`
+    select d.sesion as sesion, d.estado->>'canal' as canal, d.estado->>'cuenta' as cuenta,
+           v->>'pedido' as pedido, v->>'nombre' as nombre, v->>'precio' as precio,
+           v->>'hora' as hora, v->>'ficha' as ficha
+      from directo_vivo d,
+           lateral jsonb_array_elements(
+             case when jsonb_typeof(d.estado->'ventas') = 'array'
+                  then d.estado->'ventas' else '[]'::jsonb end) v
+     where d.cuando > now() - interval '14 days'`);
+  const enTarjeta = new Set();
+  if (juego) {
+    const t = await s`select datos from tandas where juego = ${juego}`;
+    for (const ta of ((t[0] && t[0].datos && t[0].datos.tandas) || []))
+      for (const c of (ta.compradores || ta.detalle || []))
+        for (const p of (Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []))) enTarjeta.add(String(p));
+  }
+  const diaMadrid = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+  const ses = {};
+  for (const f of filas) {
+    const ms = Number(f.hora);
+    if (!Number.isFinite(ms) || ms <= 0 || diaMadrid(ms) !== dia) continue;
+    const x = ses[f.sesion] = ses[f.sesion] || { sesion: f.sesion, canal: f.canal || '', cuenta: f.cuenta || CUENTA_DE_CANAL[f.canal] || '',
+      desde: ms, hasta: ms, ventas: 0, euros: 0, enTarjeta: 0, eurosEnTarjeta: 0, fichas: [Infinity, 0], porAnuncio: {} };
+    const eur = aEuros(f.precio), ok = enTarjeta.has(String(f.pedido));
+    const ficha = parseInt(f.ficha, 10);
+    x.desde = Math.min(x.desde, ms); x.hasta = Math.max(x.hasta, ms);
+    if (Number.isFinite(ficha)) { x.fichas[0] = Math.min(x.fichas[0], ficha); x.fichas[1] = Math.max(x.fichas[1], ficha); }
+    x.ventas++; x.euros += eur;
+    const a = x.porAnuncio[f.nombre || '?'] = x.porAnuncio[f.nombre || '?'] || { ventas: 0, euros: 0, enTarjeta: 0, eurosEnTarjeta: 0 };
+    a.ventas++; a.euros += eur;
+    if (ok) { x.enTarjeta++; x.eurosEnTarjeta += eur; a.enTarjeta++; a.eurosEnTarjeta += eur; }
+  }
+  const redondo = (n) => Math.round(n * 100) / 100;
+  const directos = Object.values(ses).map((x) => ({
+    ...x, euros: redondo(x.euros), eurosEnTarjeta: redondo(x.eurosEnTarjeta),
+    desde: new Date(x.desde).toISOString(), hasta: new Date(x.hasta).toISOString(),
+    fichas: x.fichas[1] ? x.fichas : null,
+    porAnuncio: Object.entries(x.porAnuncio).map(([nombre, a]) => ({ nombre, ...a,
+      euros: redondo(a.euros), eurosEnTarjeta: redondo(a.eurosEnTarjeta) })).sort((a, b) => b.ventas - a.ventas)
+  })).sort((a, b) => a.desde.localeCompare(b.desde));
+  return res.status(200).json({ ok: true, dia, juego: juego || null, conTarjetas: enTarjeta.size, directos });
+}
+
 /* TRADUCIR POR PEDIDO, 29 sep 2026. Es la forma buena y no depende de la
  * version de la extension que haya subido las tarjetas.
  *
@@ -1380,6 +1440,7 @@ async function atender(req, res, s, migas) {
       return res.status(200).json(v);
     }
     if (q.marcas) { aqui('marcas'); return leerMarcas(s, res, aTexto(q.juego).trim()); }
+    if (q.informe) { aqui('informe'); return informeDelDia(s, res, aTexto(q.informe).trim(), aTexto(q.juego).trim()); }
     const dia = diaDe(q.dia);
     let juego = aTexto(q.juego).trim() || dia;
     /* EL ENLACE GENERAL DE CADA PAIS, 28 sep 2026. ?ultimo=es (o de, nl) abre
