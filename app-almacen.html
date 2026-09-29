@@ -383,6 +383,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   /* rotulo de la cuenta -> numero de color (1, 2, 3...) */
   let COLOR_DE = {};
   let GENERADO = '', VALIDAS = new Set();
+  let NOMBRES = {};
 
   /* LAS CATEGORÍAS, con el coste por prenda con IVA y porte dentro. Estos son
      los precios de España, sacados de las facturas de compra, así que aquí el
@@ -548,6 +549,9 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 
     for (const t of (DATOS.tandas || [])) {
       for (const c of (t.compradores || [])) {
+        /* Tarjeta ya traducida a fichas del taco (29 sep 2026): sus numeros ya no
+         * son los de TikTok y cruzarlos con los pedidos los mezclaria. */
+        if (c.porFicha) continue;
         /* TODOS los grupos de esa cuenta, no el primero. La extension ya parte
          * los numeros de un comprador en varios trozos con el MISMO nombre de
          * cuenta —cuatro pedidos sueltos salen en dos grupos de billys_nl— y
@@ -1147,7 +1151,8 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
       </div>
       <div class="marcar">
         <p class="pregunta">${SIN_MARCAR ? 'Coge la' : 'Tienes la'} <b>${pieza.n}</b>${VARIOS ? ` de
-          <b style="color:var(--p${pieza.p}rot)">${esc(pieza.r)}</b>` : ''}${SIN_MARCAR ? ' y pulsa cuando la tengas.' : ' en la mano. ¿Qué es?'}</p>
+          <b style="color:var(--p${pieza.p}rot)">${esc(pieza.r)}</b>` : ''}${SIN_MARCAR ? ' y pulsa cuando la tengas.' : ' en la mano. ¿Qué es?'}
+          ${NOMBRES[pieza.r + '|' + pieza.n] ? `<br><span style="display:inline-block;margin-top:6px;font-size:.95em;opacity:.85">Tiene que ser: <b>${esc(NOMBRES[pieza.r + '|' + pieza.n])}</b></span>` : ''}</p>
         ${rejilla}
       </div>
       <div style="display:flex;gap:9px;margin-top:14px">
@@ -1700,6 +1705,14 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     }
     DATOS = d; GENERADO = d.generado || '';
     SIN_MARCAR = !!d.sinMarcar || P.get('marcar') === 'no';
+    /* QUE PRENDA ES CADA FICHA (29 sep 2026): el anuncio con el que se vendio,
+     * para que quien recoge pueda comprobar que la 32 es de verdad la sudadera
+     * Nike y no otra cosa. */
+    NOMBRES = {};
+    for (const ta of (d.tandas || [])) for (const c of (ta.compradores || []))
+      for (const g of (c.porCuenta || [])) for (const [n, nom] of Object.entries(g.nombres || {}))
+        NOMBRES[(g.cuenta || '') + '|' + n] = String(nom || '')
+          .replace(/^\s*de segunda mano\s+/i, '').replace(/\s+(BTa|BTo|BV|DE|NL)\s*$/i, '').trim();
     /* Si hubo dos directos en la misma cuenta, esto parte los percheros antes
        de montar las tarjetas. Tarda unos segundos y puede fallar sin romper
        nada: si falla, las prendas salen todas juntas como siempre. */
