@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Billy's · Finanzas</title>
+<meta name="robots" content="noindex">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* Finanzas de los directos, 29 sep 2026. Solo para Aaron (pide su codigo).
+ * Cruza cada prenda vendida con tablet con lo que TikTok liquida por ella. */
+:root {
+  color-scheme: light;
+  --fondo: #f4f3f0; --panel: #fcfcfb; --linea: #e4e2dc; --linea-2: #d3d1ca;
+  --t1: #0b0b0b; --t2: #52514e; --t3: #7d7b75;
+  --es: #2a78d6; --de: #eb6834; --nl: #1baf7a;
+  --bien: #0f7a3a; --mal: #c0392b; --aviso-fondo: #fff4d6; --aviso-t: #6b4e00;
+  --acento: #0b0b0b; --acento-t: #ffffff; --sel: #eef3fb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --fondo: #121211; --panel: #1a1a19; --linea: #2c2c2a; --linea-2: #3a3a37;
+    --t1: #ffffff; --t2: #c3c2b7; --t3: #8f8e86;
+    --es: #3987e5; --de: #d95926; --nl: #199e70;
+    --bien: #4cc27a; --mal: #ff7b6b; --aviso-fondo: #3a2f0f; --aviso-t: #f3d98b;
+    --acento: #ffffff; --acento-t: #0b0b0b; --sel: #1f2a3a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --fondo: #121211; --panel: #1a1a19; --linea: #2c2c2a; --linea-2: #3a3a37;
+  --t1: #ffffff; --t2: #c3c2b7; --t3: #8f8e86;
+  --es: #3987e5; --de: #d95926; --nl: #199e70;
+  --bien: #4cc27a; --mal: #ff7b6b; --aviso-fondo: #3a2f0f; --aviso-t: #f3d98b;
+  --acento: #ffffff; --acento-t: #0b0b0b; --sel: #1f2a3a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--fondo); color: var(--t1);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
+.envoltura { max-width: 1440px; margin: 0 auto; padding: 20px 24px 60px; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--t2); font-size: 13px; }
+.cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.filtros { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; background: var(--panel);
+  border: 1px solid var(--linea); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+.filtros label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--t2); }
+input, select, button { font: inherit; color: var(--t1); }
+input, select { background: var(--fondo); border: 1px solid var(--linea-2); border-radius: 7px; padding: 6px 8px; }
+button { background: var(--panel); border: 1px solid var(--linea-2); border-radius: 7px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--t3); }
+button.principal { background: var(--acento); color: var(--acento-t); border-color: var(--acento); }
+button:disabled { opacity: .5; cursor: default; }
+.hueco { flex: 1; }
+.estado-sync { font-size: 12px; color: var(--t2); min-width: 220px; }
+.aviso { background: var(--aviso-fondo); color: var(--aviso-t); border-radius: 8px; padding: 9px 12px; margin-bottom: 12px; font-size: 13px; }
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { background: var(--panel); border: 1px solid var(--linea); border-radius: 10px; padding: 12px 14px; }
+.kpi .n { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.kpi .e { font-size: 12px; color: var(--t2); }
+.kpi .x { font-size: 12px; color: var(--t3); margin-top: 2px; }
+.pestanas { display: flex; gap: 4px; border-bottom: 1px solid var(--linea); margin-bottom: 14px; }
+.pestanas button { border: none; background: none; border-radius: 0; padding: 9px 14px; color: var(--t2); border-bottom: 2px solid transparent; }
+.pestanas button.activa { color: var(--t1); border-bottom-color: var(--t1); font-weight: 600; }
+.caja { background: var(--panel); border: 1px solid var(--linea); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+.caja h2 { font-size: 14px; margin: 0 0 2px; }
+.caja .nota { font-size: 12px; color: var(--t3); margin-bottom: 10px; }
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grafico { position: relative; height: 320px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+th, td { padding: 7px 8px; border-bottom: 1px solid var(--linea); text-align: right; white-space: nowrap; }
+th { font-weight: 600; color: var(--t2); font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
+th:first-child, td:first-child, th.izq, td.izq { text-align: left; }
+tbody tr:hover { background: var(--sel); }
+tr.clic { cursor: pointer; }
+tr.elegida { background: var(--sel); }
+.tabla-alta { max-height: 620px; overflow: auto; }
+.pos { color: var(--bien); } .neg { color: var(--mal); }
+.muted { color: var(--t3); }
+.punto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+.etiqueta { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 10px; border: 1px solid var(--linea-2); color: var(--t2); }
+.migas { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; font-size: 13px; }
+.oculto { display: none !important; }
+#entrar { max-width: 360px; margin: 18vh auto; background: var(--panel); border: 1px solid var(--linea); border-radius: 12px; padding: 22px; }
+#entrar input { width: 100%; margin: 10px 0; }
+.ajustes-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; }
+.ajustes-grid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+.ajustes-grid input { width: 80px; text-align: right; }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } .dos { grid-template-columns: 1fr; } .ajustes-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+
+<div id="entrar" class="oculto">
+  <h1>Finanzas</h1>
+  <p class="sub">Pon tu código de finanzas. Se queda guardado en este ordenador.</p>
+  <input id="codigo" type="password" autocomplete="off" placeholder="fin-...">
+  <button class="principal" id="btn-entrar">Entrar</button>
+  <p id="entrar-error" class="neg"></p>
+</div>
+
+<div class="envoltura oculto" id="app">
+  <div class="cabecera">
+    <div>
+      <h1>Finanzas de los directos</h1>
+      <div class="sub" id="sub-cabecera">Cada prenda vendida con tablet, cruzada con lo que TikTok liquida por ella.</div>
+    </div>
+    <div class="sub" id="actualizado"></div>
+  </div>
+
+  <div class="filtros">
+    <label>Desde <input type="date" id="f-desde"></label>
+    <label>Hasta <input type="date" id="f-hasta"></label>
+    <label>País
+      <select id="f-pais"><option value="">Todos</option><option value="es">España</option><option value="de">Alemania</option><option value="nl">Holanda</option></select>
+    </label>
+    <label>Cuenta
+      <select id="f-canal"><option value="">Todas</option><option value="bv">BV</option><option value="bto">BTo</option><option value="bta">BTa</option><option value="de">DE</option><option value="nl">NL</option></select>
+    </label>
+    <label>Categoría <select id="f-cat"><option value="">Todas</option></select></label>
+    <label>Comisión
+      <select id="f-comision"><option value="real">La real de TikTok</option><option value="9">Simular al 9 %</option></select>
+    </label>
+    <button id="btn-cargar">Ver</button>
+    <div class="hueco"></div>
+    <span class="estado-sync" id="estado-sync"></span>
+    <button class="principal" id="btn-sync">Traer datos nuevos de TikTok</button>
+    <button id="btn-ajustes">Costes y sueldos</button>
+  </div>
+
+  <div class="caja oculto" id="ajustes">
+    <h2>Costes y sueldos</h2>
+    <div class="nota">Coste por prenda con IVA y porte (precios de factura). Camisa, track pant y vaquero están estimados, no pesados. Se guardan en este ordenador.</div>
+    <div class="ajustes-grid" id="ajustes-costes"></div>
+    <div style="height:12px"></div>
+    <div class="ajustes-grid" id="ajustes-sueldos"></div>
+    <div style="margin-top:12px; display:flex; gap:8px">
+      <button id="btn-guardar-ajustes" class="principal">Guardar</button>
+      <button id="btn-reset-ajustes">Volver a los de fábrica</button>
+    </div>
+  </div>
+
+  <div id="avisos"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="migas oculto" id="migas">
+    <button id="btn-quitar-directo">← Todos los directos</button>
+    <span id="migas-texto"></span>
+  </div>
+
+  <div class="pestanas" id="pestanas">
+    <button data-p="directos" class="activa">Directos</button>
+    <button data-p="categorias">Categorías</button>
+    <button data-p="marcas">Marcas</button>
+    <button data-p="evolucion">Evolución</button>
+    <button data-p="prendas">Prendas</button>
+    <button data-p="tiktok">Cargos de TikTok</button>
+  </div>
+
+  <section data-s="directos">
+    <div class="caja">
+      <h2>Beneficio por directo</h2>
+      <div class="nota">Pulsa un directo para ver solo ese en todas las pestañas. Liquidado = lo que TikTok paga (real si ya liquidó, estimado si no). Beneficio = liquidado − coste de las prendas − vendedora.</div>
+      <div class="tabla-alta"><table id="t-directos"></table></div>
+    </div>
+  </section>
+
+  <section data-s="categorias" class="oculto">
+    <div class="dos">
+      <div class="caja"><h2>Beneficio por prenda</h2><div class="nota">Media por prenda cobrada, por país.</div><div class="grafico"><canvas id="g-cat-benef"></canvas></div></div>
+      <div class="caja"><h2>Precio medio de remate</h2><div class="nota">Lo que paga el cliente por prenda, por país.</div><div class="grafico"><canvas id="g-cat-precio"></canvas></div></div>
+    </div>
+    <div class="caja"><h2>Por categoría</h2><div class="nota" id="nota-cat"></div><div class="tabla-alta"><table id="t-cat"></table></div></div>
+  </section>
+
+  <section data-s="marcas" class="oculto">
+    <div class="caja"><h2>Marcas que más beneficio dejan</h2><div class="nota">Las 15 primeras por beneficio total en el periodo. Usa el filtro de categoría de arriba para ver, por ejemplo, solo sudaderas.</div><div class="grafico" style="height:380px"><canvas id="g-marcas"></canvas></div></div>
+    <div class="caja"><h2>Todas las marcas</h2><div class="nota">Ordena pulsando en la cabecera. Marcas con menos de 5 prendas: la media no es fiable.</div><div class="tabla-alta"><table id="t-marcas"></table></div></div>
+  </section>
+
+  <section data-s="evolucion" class="oculto">
+    <div class="dos">
+      <div class="caja"><h2>Beneficio por día</h2><div class="nota">Por país. Los últimos días son sobre todo estimación.</div><div class="grafico"><canvas id="g-ev-benef"></canvas></div></div>
+      <div class="caja"><h2>Beneficio por prenda, por día</h2><div class="nota">Si baja, o se vende más barato o lo vendido cuesta más.</div><div class="grafico"><canvas id="g-ev-prenda"></canvas></div></div>
+    </div>
+    <div class="caja"><h2>Día a día</h2><div class="tabla-alta"><table id="t-dias"></table></div></div>
+  </section>
+
+  <section data-s="prendas" class="oculto">
+    <div class="caja"><h2>Cada prenda</h2><div class="nota">Sin datos del comprador ni números de pedido. "Sin cobrar" = TikTok no tiene dinero de ese pedido: sin pagar, cancelado o todavía no traído.</div><div class="tabla-alta"><table id="t-prendas"></table></div></div>
+  </section>
+
+  <section data-s="tiktok" class="oculto">
+    <div class="caja"><h2>En qué se va el dinero en TikTok</h2><div class="nota">Suma de los desgloses de TikTok de las prendas del filtro. Negativo = lo que TikTok descuenta; positivo = lo que abona.</div><div class="tabla-alta"><table id="t-desglose"></table></div></div>
+    <div class="caja"><h2>Cargos que no son de ninguna prenda de tablet</h2><div class="nota">Liquidado por TikTok en el periodo sin pedido de tablet: ajustes, cargos de envío sueltos y pedidos vendidos fuera del directo. No entran en el beneficio de los directos, pero sí salen de tu bolsillo.</div><div class="tabla-alta"><table id="t-otros"></table></div></div>
+  </section>
+</div>
+
+<script>
+'use strict';
+/* =================================================================== datos */
+const API = '/api/finanzas';
+const PRIMER_DIA = '2026-09-28';
+const PAISES = { es: 'España', de: 'Alemania', nl: 'Holanda' };
+const CUENTAS = { bv: 'BV', bto: 'BTo', bta: 'BTa', de: 'DE', nl: 'NL' };
+const COSTES_FABRICA = { 'Sudadera': 1.87, 'Camiseta': 0.33, 'Polo': 0.67, 'Punto': 5.65, 'NBA': 4.08, 'Fútbol': 6.10,
+  'Camisa': 2.95, 'Shorts': 1.05, 'Track pant': 3.73, 'Vaquero': 1.34, 'Chaqueta': 6.07, 'Chaleco': 3.73,
+  'Track jacket': 2.52, 'Anorak': 11.14, 'Producto 1 €': 0, 'Otra': 0 };
+const SUELDOS_FABRICA = { es: 9, de: 15, nl: 0, vendedoras: 1 };
+
+/* Lo que dice el nombre del anuncio. El orden importa: "track jacket" antes
+ * que "jacket", "football shirt" antes que "shirt", "t shirt" antes que "shirt". */
+const REGLAS = [
+  ['Producto 1 €', [/\b1\s?€/, /1\s?eur/, /vintage1euro/]],
+  ['NBA', [/\bnba\b/]],
+  ['Fútbol', [/football shirt/, /fu(ss|ß)ball/, /trikot/, /camiseta de f[uú]tbol/, /f[uú]tbol/]],
+  ['Track jacket', [/track jacket/, /chaqueta de ch[aá]ndal/, /trainingsjacke/]],
+  ['Track pant', [/track pants?/, /pantal[oó]n de ch[aá]ndal/, /jogginghose/, /trainingshose/]],
+  ['Shorts', [/pantal[oó]n corto/, /\bshorts?\b/, /kurze hose/]],
+  ['Sudadera', [/hoodie/, /sudadera/, /sweatshirt/, /crewneck/, /kapuzenpullover/]],
+  ['Camiseta', [/t[\s-]?shirt/, /camiseta/, /\btee\b/]],
+  ['Polo', [/\bpolo\b/]],
+  ['Vaquero', [/vaqueros?/, /\bjeans\b/, /denim/]],
+  ['Chaleco', [/chaleco/, /\bweste\b/, /\bvest\b/, /gilet/]],
+  ['Anorak', [/anorak/]],
+  ['Punto', [/jersey/, /\bpunto\b/, /strick/, /pullover/, /knit/]],
+  ['Camisa', [/camisa/, /\bhemd\b/, /\bshirt\b/]],
+  ['Chaqueta', [/chaqueta/, /jacket/, /jacke/, /cazadora/]],
+];
+const RELLENO = /\b(de segunda mano|segunda mano|second ?hand|gebrauchte[srn]?|gebraucht|vintage|usad[oa]s?|tweedehands)\b/gi;
+const ETIQUETAS = /\b(bta|bto|bv|billys\w*|billy'?s|nl|de|es)\b/gi;
+
+function leerAnuncio(nombre) {
+  const original = String(nombre || '');
+  const bajo = original.toLowerCase();
+  let cat = 'Otra', quitar = null;
+  for (const [c, rs] of REGLAS) { const r = rs.find((x) => x.test(bajo)); if (r) { cat = c; quitar = r; break; } }
+  /* La marca es lo que queda al quitar "de segunda mano", la prenda y la
+   * etiqueta de la cuenta. Se trabaja sobre el nombre tal cual, para no
+   * estropear mayusculas como "The North Face" o "Levi's". "Vintage" en el
+   * sitio de la marca quiere decir que no tiene marca. */
+  let resto = original.replace(RELLENO, ' ');
+  if (quitar) resto = resto.replace(new RegExp(quitar.source, 'gi'), ' ');
+  resto = resto.replace(ETIQUETAS, ' ').replace(/[#\-–·|,()]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const marca = cat === 'Producto 1 €' ? '—' : (resto || 'Sin marca');
+  return { cat, marca };
+}
+
+/* ============================================================== utilidades */
+const $ = (s) => document.querySelector(s);
+const eur = (n, dec = 2) => (n == null || !isFinite(n)) ? '—' : (Math.abs(n) < 0.5 * Math.pow(10, -dec) ? 0 : n).toLocaleString('es-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + ' €';
+const eur0 = (n) => eur(n, 0);
+const pct = (n, dec = 1) => (n == null || !isFinite(n)) ? '—' : (n * 100).toLocaleString('es-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + ' %';
+const ent = (n) => (n == null || !isFinite(n)) ? '—' : Math.round(n).toLocaleString('es-ES');
+const signo = (n) => n > 0.005 ? 'pos' : (n < -0.005 ? 'neg' : '');
+const hoyMadrid = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+const hora = (ms) => new Date(ms).toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' });
+const diaCorto = (d) => { const [y, m, dd] = d.split('-'); return dd + '/' + m; };
+const color = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const guardarLocal = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const leerLocal = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let CODIGO = leerLocal('fin_codigo', '');
+let COSTES = { ...COSTES_FABRICA, ...leerLocal('fin_costes', {}) };
+let SUELDOS = { ...SUELDOS_FABRICA, ...leerLocal('fin_sueldos', {}) };
+let CRUDO = null;         /* respuesta del servidor */
+let PRENDAS = [];         /* prendas ya calculadas */
+let DIRECTO = '';         /* sesion elegida, o '' */
+let PESTANA = 'directos';
+const graficos = {};
+
+async function pedir(params) {
+  const q = new URLSearchParams({ ...params, f: CODIGO });
+  const r = await fetch(API + '?' + q.toString());
+  const j = await r.json().catch(() => ({ ok: false, error: 'respuesta-rara' }));
+  if (r.status === 401) { salir(); throw new Error('Código no válido'); }
+  return j;
+}
+function salir() { guardarLocal('fin_codigo', ''); CODIGO = ''; $('#app').classList.add('oculto'); $('#entrar').classList.remove('oculto'); }
+
+/* ================================================================ calculos */
+function calcular() {
+  const comision9 = $('#f-comision').value === '9';
+  /* Horas y prendas de cada directo, para repartir el sueldo de la vendedora. */
+  const ses = {};
+  for (const v of CRUDO.ventas) {
+    const s = ses[v.sesion] = ses[v.sesion] || { desde: v.h, hasta: v.h, n: 0, pais: v.pais };
+    s.desde = Math.min(s.desde, v.h); s.hasta = Math.max(s.hasta, v.h); s.n++;
+  }
+  for (const s of Object.values(ses)) {
+    s.horas = Math.max((s.hasta - s.desde) / 3600000, 0.25);
+    s.sueldo = s.horas * (Number(SUELDOS[s.pais]) || 0) * (Number(SUELDOS.vendedoras) || 1);
+  }
+  PRENDAS = CRUDO.ventas.map((v) => {
+    const { cat, marca } = leerAnuncio(v.anuncio);
+    const cobrada = v.estado === 'L' || v.estado === 'P';
+    let comision = cobrada ? v.comision : 0, neto = cobrada ? v.neto : 0;
+    if (cobrada && comision9) { const nueva = -0.09 * v.ingreso; neto = neto - comision + nueva; comision = nueva; }
+    const coste = cobrada ? (Number(COSTES[cat]) || 0) : 0;
+    const s = ses[v.sesion];
+    const vendedora = s.sueldo / s.n;           /* se reparte entre TODAS las vendidas, cobradas o no */
+    return { ...v, cat, marca, cobrada, comision, neto, coste, vendedora,
+      beneficio: (cobrada ? neto - coste : 0) - vendedora, sinCoste: cobrada && !(Number(COSTES[cat]) > 0) };
+  });
+  return ses;
+}
+
+function filtradas() {
+  const pais = $('#f-pais').value, canal = $('#f-canal').value, cat = $('#f-cat').value;
+  return PRENDAS.filter((p) => (!pais || p.pais === pais) && (!canal || p.canal === canal) &&
+    (!cat || p.cat === cat) && (!DIRECTO || p.sesion === DIRECTO));
+}
+
+/* Suma de un grupo de prendas: lo que se enseña en todas las tablas. */
+function sumar(ps) {
+  const a = { n: ps.length, cobradas: 0, remate: 0, remateCobrado: 0, ingreso: 0, comision: 0, envio: 0, ajuste: 0, neto: 0,
+    netoEstimado: 0, coste: 0, vendedora: 0, beneficio: 0, liquidadas: 0, sinCoste: 0 };
+  for (const p of ps) {
+    a.remate += p.remate; a.vendedora += p.vendedora; a.beneficio += p.beneficio;
+    if (p.sinCoste) a.sinCoste++;
+    if (!p.cobrada) continue;
+    a.cobradas++; a.remateCobrado += p.remate; a.ingreso += p.ingreso; a.comision += p.comision; a.envio += p.envio;
+    a.ajuste += p.ajuste; a.neto += p.neto; a.coste += p.coste;
+    if (p.estado === 'L') a.liquidadas++; else a.netoEstimado += p.neto;
+  }
+  a.tasaCobro = a.n ? a.cobradas / a.n : null;
+  a.comisionPct = a.ingreso ? -a.comision / a.ingreso : null;
+  a.porPrenda = a.cobradas ? a.beneficio / a.cobradas : null;
+  a.precioMedio = a.cobradas ? a.remateCobrado / a.cobradas : null;
+  a.netoMedio = a.cobradas ? a.neto / a.cobradas : null;
+  a.margen = a.neto ? a.beneficio / a.neto : null;
+  return a;
+}
+const agrupar = (ps, clave) => { const g = {}; for (const p of ps) (g[clave(p)] = g[clave(p)] || []).push(p); return g; };
+
+/* ================================================================== tablas */
+const orden = {};
+function tabla(id, columnas, filas, opciones = {}) {
+  const el = document.getElementById(id);
+  const o = orden[id] || opciones.orden || null;
+  if (o) filas = filas.slice().sort((a, b) => { const x = a[o.k], y = b[o.k];
+    return (typeof x === 'string' ? String(x).localeCompare(String(y)) : ((x ?? -Infinity) - (y ?? -Infinity))) * o.d; });
+  const cab = '<thead><tr>' + columnas.map((c) => `<th data-k="${c.k}" class="${c.izq ? 'izq' : ''}" title="${esc(c.ayuda || '')}">${c.t}${o && o.k === c.k ? (o.d > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr></thead>';
+  const cuerpo = '<tbody>' + filas.map((f) => `<tr class="${opciones.clic ? 'clic' : ''} ${opciones.elegida && opciones.elegida(f) ? 'elegida' : ''}" data-id="${esc(f._id || '')}">` +
+    columnas.map((c) => { const v = f[c.k]; const txt = c.f ? c.f(v, f) : esc(v ?? '—');
+      return `<td class="${c.izq ? 'izq' : ''} ${c.color ? signo(v) : ''} ${c.muted ? 'muted' : ''}">${txt}</td>`; }).join('') + '</tr>').join('') + '</tbody>';
+  const pie = opciones.total ? '<tfoot><tr>' + columnas.map((c, i) => { const v = opciones.total[c.k];
+    return `<th class="${c.izq ? 'izq' : ''} ${c.color ? signo(v) : ''}" style="position:static">${i === 0 ? 'Total' : (v === undefined ? '' : (c.f ? c.f(v, opciones.total) : esc(v)))}</th>`; }).join('') + '</tr></tfoot>' : '';
+  el.innerHTML = cab + cuerpo + pie;
+  el.querySelectorAll('thead th').forEach((th) => th.onclick = () => {
+    const k = th.dataset.k; const ya = orden[id];
+    orden[id] = { k, d: ya && ya.k === k ? -ya.d : -1 }; pintar();
+  });
+  if (opciones.clic) el.querySelectorAll('tbody tr').forEach((tr) => tr.onclick = () => opciones.clic(tr.dataset.id));
+}
+
+const colsDinero = [
+  { k: 'cobradas', t: 'Cobradas', f: (v, f) => ent(v) + ` <span class="muted">(${pct(f.tasaCobro, 0)})</span>`, ayuda: 'Prendas con dinero en TikTok. Entre paréntesis, sobre las vendidas.' },
+  { k: 'precioMedio', t: 'Precio medio', f: (v) => eur(v), ayuda: 'Remate medio de las cobradas' },
+  { k: 'remateCobrado', t: 'Remate', f: eur0, ayuda: 'Suma de remates de las cobradas' },
+  { k: 'neto', t: 'Liquidado', f: (v, f) => eur0(v) + (f.netoEstimado ? ` <span class="etiqueta" title="De esto, ${eur0(f.netoEstimado)} es estimación de TikTok">${pct(f.neto ? f.netoEstimado / f.neto : 0, 0)} est.</span>` : ''), ayuda: 'Lo que TikTok paga. Real si ya liquidó; estimado si no.' },
+  { k: 'comision', t: 'Comisión', f: (v, f) => eur0(v) + ` <span class="muted">${pct(f.comisionPct)}</span>`, color: true },
+  { k: 'envio', t: 'Envío neto', f: eur0, color: true, ayuda: 'Lo que TikTok abona (+) o cobra (−) por envío, neto' },
+  { k: 'coste', t: 'Coste prendas', f: (v) => eur0(-v), color: false },
+  { k: 'vendedora', t: 'Vendedora', f: (v) => eur0(-v) },
+  { k: 'beneficio', t: 'Beneficio', f: (v) => '<b>' + eur0(v) + '</b>', color: true },
+  { k: 'porPrenda', t: '€/prenda', f: (v) => eur(v), color: true, ayuda: 'Beneficio por prenda cobrada' },
+];
+
+/* ================================================================= pintar */
+function pintar() {
+  if (!CRUDO) return;
+  const ps = filtradas();
+  const t = sumar(ps);
+  const ses = calcular.ses || {};
+
+  /* ---- avisos */
+  const av = [];
+  const sinSync = Object.entries(CRUDO.actualizado || {}).filter(([p, v]) => !v && ps.some((x) => x.pais === p)).map(([p]) => PAISES[p]);
+  if (sinSync.length) av.push('Aún no se han traído los datos de TikTok de ' + sinSync.join(' y ') + '. Pulsa «Traer datos nuevos de TikTok».');
+  if (t.sinCoste) av.push(`${t.sinCoste} prendas cobradas son de una categoría sin coste puesto (${[...new Set(ps.filter((p) => p.sinCoste).map((p) => p.cat))].join(', ')}). Su beneficio sale inflado: ponle coste en «Costes y sueldos».`);
+  if ($('#f-comision').value === '9') av.push('Estás viendo la comisión simulada al 9 %, no la real.');
+  $('#avisos').innerHTML = av.map((x) => `<div class="aviso">${esc(x)}</div>`).join('');
+
+  /* ---- cifras de arriba */
+  const horasTot = Object.entries(ses).filter(([k]) => ps.some((p) => p.sesion === k)).reduce((a, [, s]) => a + s.horas, 0);
+  const kpis = [
+    ['Prendas vendidas', ent(t.n), `${ent(t.cobradas)} cobradas · ${pct(t.tasaCobro, 0)}`],
+    ['Precio medio', eur(t.precioMedio), `remate de las cobradas`],
+    ['Liquidado', eur0(t.neto), t.netoEstimado ? `${eur0(t.netoEstimado)} aún estimado` : 'todo real'],
+    ['Comisión real', pct(t.comisionPct), `${eur0(-t.comision)} en total`],
+    ['Beneficio', eur0(t.beneficio), `${eur(t.porPrenda)} por prenda · margen ${pct(t.margen, 0)}`],
+    ['Beneficio por hora', eur0(horasTot ? t.beneficio / horasTot : null), `${horasTot.toLocaleString('es-ES', { maximumFractionDigits: 1 })} h de directo`],
+  ];
+  $('#kpis').innerHTML = kpis.map(([e, n, x]) => `<div class="kpi"><div class="e">${e}</div><div class="n ${e === 'Beneficio' ? signo(t.beneficio) : ''}">${n}</div><div class="x">${x}</div></div>`).join('');
+
+  /* ---- migas del directo elegido */
+  if (DIRECTO && ses[DIRECTO]) {
+    const p0 = PRENDAS.find((p) => p.sesion === DIRECTO);
+    $('#migas').classList.remove('oculto');
+    $('#migas-texto').textContent = `Viendo solo el directo de ${CUENTAS[p0.canal] || p0.canal} del ${diaCorto(p0.dia)} (${hora(ses[DIRECTO].desde)} a ${hora(ses[DIRECTO].hasta)})`;
+  } else $('#migas').classList.add('oculto');
+
+  /* ---- pestañas */
+  document.querySelectorAll('section[data-s]').forEach((s) => s.classList.toggle('oculto', s.dataset.s !== PESTANA));
+  ({ directos: pDirectos, categorias: pCategorias, marcas: pMarcas, evolucion: pEvolucion, prendas: pPrendas, tiktok: pTiktok })[PESTANA](ps, t, ses);
+}
+
+function pDirectos(ps, t, ses) {
+  /* Aqui no se aplica el filtro de directo: se ven todos, con el elegido marcado. */
+  const base = PRENDAS.filter((p) => (!$('#f-pais').value || p.pais === $('#f-pais').value) &&
+    (!$('#f-canal').value || p.canal === $('#f-canal').value) && (!$('#f-cat').value || p.cat === $('#f-cat').value));
+  const filas = Object.entries(agrupar(base, (p) => p.sesion)).map(([k, g]) => {
+    const s = ses[k], a = sumar(g);
+    return { _id: k, dia: g[0].dia, cuenta: CUENTAS[g[0].canal] || g[0].canal, pais: g[0].pais, desde: s.desde,
+      horas: s.horas, n: g.length, porHora: a.beneficio / s.horas, ...a };
+  });
+  const tot = sumar(base); tot.horas = filas.reduce((x, f) => x + f.horas, 0); tot.porHora = tot.horas ? tot.beneficio / tot.horas : null;
+  tabla('t-directos', [
+    { k: 'dia', t: 'Día', izq: true, f: (v, f) => diaCorto(v) + ' <span class="muted">' + hora(f.desde) + '</span>' },
+    { k: 'cuenta', t: 'Cuenta', izq: true, f: (v, f) => `<span class="punto" style="background:var(--${f.pais})"></span>${esc(v)}` },
+    { k: 'horas', t: 'Horas', f: (v) => v == null ? '' : v.toLocaleString('es-ES', { maximumFractionDigits: 1 }) },
+    { k: 'n', t: 'Vendidas', f: ent },
+    ...colsDinero,
+    { k: 'porHora', t: '€/hora', f: eur0, color: true },
+  ], filas, { orden: { k: 'desde', d: -1 }, clic: (id) => { DIRECTO = DIRECTO === id ? '' : id; pintar(); },
+    elegida: (f) => f._id === DIRECTO, total: tot });
+}
+
+function porCategoria(ps) {
+  const g = agrupar(ps, (p) => p.cat);
+  return Object.entries(g).map(([cat, gp]) => {
+    const a = sumar(gp);
+    const porPais = {};
+    for (const [p, x] of Object.entries(agrupar(gp, (y) => y.pais))) porPais[p] = sumar(x);
+    return { _id: cat, cat, ...a, costeUd: COSTES[cat], porPais };
+  });
+}
+
+function pCategorias(ps) {
+  const filas = porCategoria(ps).filter((f) => f.cobradas > 0 || f.n > 0);
+  const paises = Object.keys(PAISES).filter((p) => ps.some((x) => x.pais === p));
+  const cats = filas.filter((f) => f.cobradas >= 3).sort((a, b) => b.cobradas - a.cobradas).map((f) => f.cat);
+  const serie = (fn) => paises.map((p) => ({ label: PAISES[p], backgroundColor: color('--' + p),
+    data: cats.map((c) => { const f = filas.find((x) => x.cat === c); const a = f && f.porPais[p]; return a && a.cobradas >= 3 ? fn(a) : null; }),
+    borderRadius: 4, borderSkipped: 'start', barPercentage: 0.8, categoryPercentage: 0.7 }));
+  barras('g-cat-benef', cats, serie((a) => a.porPrenda), true);
+  barras('g-cat-precio', cats, serie((a) => a.precioMedio), true);
+  $('#nota-cat').textContent = 'Solo salen en los gráficos las categorías con 3 o más prendas cobradas en ese país. Coste unitario editable en «Costes y sueldos».';
+  tabla('t-cat', [
+    { k: 'cat', t: 'Categoría', izq: true },
+    { k: 'costeUd', t: 'Coste/ud', f: (v) => eur(v), muted: true },
+    { k: 'n', t: 'Vendidas', f: ent },
+    { k: 'netoMedio', t: 'Liquidado/prenda', f: (v) => eur(v) },
+    ...colsDinero,
+    { k: 'margen', t: 'Margen', f: (v) => pct(v, 0), color: true, ayuda: 'Beneficio sobre liquidado' },
+  ], filas, { orden: { k: 'beneficio', d: -1 }, total: sumar(ps) });
+}
+
+function pMarcas(ps) {
+  const filas = Object.entries(agrupar(ps.filter((p) => p.marca !== '—'), (p) => p.marca)).map(([m, g]) => {
+    const cats = Object.entries(agrupar(g, (p) => p.cat)).sort((a, b) => b[1].length - a[1].length).slice(0, 3).map(([c, x]) => c + ' ' + x.length).join(', ');
+    return { _id: m, marca: m, cats, ...sumar(g) };
+  });
+  const top = filas.filter((f) => f.cobradas > 0).sort((a, b) => b.beneficio - a.beneficio).slice(0, 15);
+  barras('g-marcas', top.map((f) => f.marca), [{ label: 'Beneficio total', data: top.map((f) => f.beneficio), backgroundColor: color('--es'), borderRadius: 4, borderSkipped: 'start' }], true, true);
+  tabla('t-marcas', [
+    { k: 'marca', t: 'Marca', izq: true, f: (v, f) => esc(v) + (f.cobradas < 5 ? ' <span class="etiqueta">pocas</span>' : '') },
+    { k: 'cats', t: 'Qué se vende', izq: true, muted: true },
+    { k: 'n', t: 'Vendidas', f: ent },
+    { k: 'netoMedio', t: 'Liquidado/prenda', f: (v) => eur(v) },
+    ...colsDinero.filter((c) => !['remateCobrado', 'vendedora', 'envio'].includes(c.k)),
+  ], filas, { orden: { k: 'beneficio', d: -1 } });
+}
+
+function pEvolucion(ps) {
+  const dias = [...new Set(ps.map((p) => p.dia))].sort();
+  const paises = Object.keys(PAISES).filter((p) => ps.some((x) => x.pais === p));
+  const porDia = {};
+  for (const p of paises) for (const d of dias) porDia[p + d] = sumar(ps.filter((x) => x.pais === p && x.dia === d));
+  const linea = (fn) => paises.map((p) => ({ label: PAISES[p], borderColor: color('--' + p), backgroundColor: color('--' + p),
+    data: dias.map((d) => porDia[p + d].n ? fn(porDia[p + d]) : null), spanGaps: true, borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, tension: 0 }));
+  lineas('g-ev-benef', dias.map(diaCorto), linea((a) => a.beneficio));
+  lineas('g-ev-prenda', dias.map(diaCorto), linea((a) => a.porPrenda));
+  const filas = [];
+  for (const d of dias) for (const p of paises) { const a = porDia[p + d]; if (a.n) filas.push({ _id: p + d, dia: d, pais: p, ...a }); }
+  tabla('t-dias', [
+    { k: 'dia', t: 'Día', izq: true, f: diaCorto },
+    { k: 'pais', t: 'País', izq: true, f: (v) => `<span class="punto" style="background:var(--${v})"></span>${PAISES[v]}` },
+    { k: 'n', t: 'Vendidas', f: ent },
+    ...colsDinero,
+  ], filas, { orden: { k: 'dia', d: -1 } });
+}
+
+function pPrendas(ps) {
+  const filas = ps.map((p, i) => ({ _id: String(i), ...p, cuenta: CUENTAS[p.canal] || p.canal,
+    estadoTxt: p.estado === 'L' ? 'Liquidada' : (p.estado === 'P' ? 'Estimada' : 'Sin cobrar') }));
+  tabla('t-prendas', [
+    { k: 'h', t: 'Cuándo', izq: true, f: (v, f) => diaCorto(f.dia) + ' ' + hora(v) },
+    { k: 'cuenta', t: 'Cuenta', izq: true, f: (v, f) => `<span class="punto" style="background:var(--${f.pais})"></span>${esc(v)}` },
+    { k: 'ficha', t: 'Ficha', f: (v) => v ?? '—' },
+    { k: 'cat', t: 'Categoría', izq: true },
+    { k: 'marca', t: 'Marca', izq: true },
+    { k: 'remate', t: 'Remate', f: (v) => eur(v) },
+    { k: 'estadoTxt', t: 'Estado', izq: true, f: (v, f) => `<span class="etiqueta">${v}</span>${f.prendasPedido > 1 ? ` <span class="muted" title="Pedido con ${f.prendasPedido} prendas: el dinero se reparte por precio">×${f.prendasPedido}</span>` : ''}` },
+    { k: 'neto', t: 'Liquidado', f: (v, f) => f.cobrada ? eur(v) : '—' },
+    { k: 'comision', t: 'Comisión', f: (v, f) => f.cobrada ? eur(v) : '—', color: true },
+    { k: 'envio', t: 'Envío', f: (v, f) => f.cobrada ? eur(v) : '—', color: true },
+    { k: 'coste', t: 'Coste', f: (v, f) => f.cobrada ? eur(-v) : '—' },
+    { k: 'beneficio', t: 'Beneficio', f: (v) => eur(v), color: true },
+  ], filas, { orden: { k: 'h', d: -1 } });
+}
+
+const NOMBRES_DESGLOSE = {
+  platform_commission: 'Comisión de plataforma', referral_fee: 'Comisión por venta', transaction_fee: 'Comisión de pago',
+  affiliate_commission: 'Comisión de afiliados', sfp_service_fee: 'Servicio de envío prioritario', live_specials_fee: 'Tarifa de directos',
+  fee_per_item_sold: 'Tarifa por artículo', refund_administration_fee: 'Gestión de reembolsos',
+  actual_shipping_fee: 'Envío real (lo que cuesta)', customer_paid_shipping_fee: 'Envío que paga el cliente',
+  shipping_fee_discount: 'Descuento de envío', platform_shipping_fee_discount: 'Descuento de envío que pone TikTok',
+  return_shipping_fee: 'Envío de devoluciones', shipping_fee_subsidy: 'Subvención de envío',
+  subtotal_before_discount: 'Venta antes de descuentos', seller_discount: 'Descuentos del vendedor',
+  refund_subtotal_before_discount: 'Reembolsos', seller_discount_refund: 'Devolución de descuentos',
+  vat: 'IVA', gst: 'IVA',
+};
+function pTiktok(ps) {
+  const det = {};
+  for (const p of ps) if (p.det) for (const [k, v] of Object.entries(p.det)) det[k] = (det[k] || 0) + v;
+  const filas = Object.entries(det).map(([k, v]) => ({ _id: k, que: NOMBRES_DESGLOSE[k] || k.replace(/_/g, ' '), clave: k, total: v,
+    porPrenda: v / (ps.filter((p) => p.cobrada).length || 1) }));
+  tabla('t-desglose', [
+    { k: 'que', t: 'Concepto', izq: true },
+    { k: 'clave', t: 'Nombre en TikTok', izq: true, muted: true },
+    { k: 'total', t: 'Total', f: (v) => eur(v), color: true },
+    { k: 'porPrenda', t: 'Por prenda cobrada', f: (v) => eur(v), color: true },
+  ], filas, { orden: { k: 'total', d: 1 } });
+  const pais = $('#f-pais').value;
+  const otros = (CRUDO.otros || []).filter((o) => !pais || o.pais === pais).map((o, i) => ({ _id: String(i), ...o,
+    queTxt: o.que === 'pedido-fuera-de-tablet' ? 'Pedidos de fuera del directo' : (o.que === 'ADJUSTMENT' ? 'Ajustes' : o.que) }));
+  const tot = { n: 0, ingreso: 0, comision: 0, envio: 0, ajuste: 0, neto: 0 };
+  for (const o of otros) for (const k of Object.keys(tot)) tot[k] += o[k];
+  tabla('t-otros', [
+    { k: 'dia', t: 'Liquidado el', izq: true, f: diaCorto },
+    { k: 'pais', t: 'País', izq: true, f: (v) => `<span class="punto" style="background:var(--${v})"></span>${PAISES[v] || v}` },
+    { k: 'queTxt', t: 'Qué', izq: true },
+    { k: 'n', t: 'Movimientos', f: ent },
+    { k: 'ingreso', t: 'Venta', f: (v) => eur(v) },
+    { k: 'comision', t: 'Comisión', f: (v) => eur(v), color: true },
+    { k: 'envio', t: 'Envío', f: (v) => eur(v), color: true },
+    { k: 'ajuste', t: 'Ajustes', f: (v) => eur(v), color: true },
+    { k: 'neto', t: 'Neto', f: (v) => eur(v), color: true },
+  ], otros, { orden: { k: 'dia', d: -1 }, total: tot });
+}
+
+/* ================================================================ graficos */
+function baseGrafico(horizontal) {
+  const t2 = color('--t2'), lin = color('--linea');
+  const ejeValor = { grid: { color: lin }, border: { display: false }, ticks: { color: t2, callback: (v) => eur0(v) } };
+  const ejeCat = { grid: { display: false }, border: { color: lin }, ticks: { color: t2 } };
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    indexAxis: horizontal ? 'y' : 'x',
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', align: 'start', labels: { color: t2, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8 } },
+      tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${eur(horizontal ? c.parsed.x : c.parsed.y)}` } },
+    },
+    scales: horizontal ? { x: ejeValor, y: ejeCat } : { x: ejeCat, y: ejeValor },
+  };
+}
+function barras(id, etiquetas, series, horizontal, sinLeyenda) {
+  if (graficos[id]) graficos[id].destroy();
+  const op = baseGrafico(horizontal);
+  if (sinLeyenda || series.length < 2) op.plugins.legend.display = false;
+  graficos[id] = new Chart(document.getElementById(id), { type: 'bar', data: { labels: etiquetas, datasets: series }, options: op });
+}
+function lineas(id, etiquetas, series) {
+  if (graficos[id]) graficos[id].destroy();
+  const op = baseGrafico(false);
+  if (series.length < 2) op.plugins.legend.display = false;
+  graficos[id] = new Chart(document.getElementById(id), { type: 'line', data: { labels: etiquetas, datasets: series }, options: op });
+}
+
+/* ================================================================== cargar */
+async function cargar() {
+  $('#btn-cargar').disabled = true;
+  try {
+    const j = await pedir({ accion: 'datos', desde: $('#f-desde').value, hasta: $('#f-hasta').value });
+    if (!j.ok) throw new Error(j.detalle || j.error || 'fallo');
+    CRUDO = j;
+    calcular.ses = calcular();
+    const cats = [...new Set(PRENDAS.map((p) => p.cat))].sort();
+    const sel = $('#f-cat'), ya = sel.value;
+    sel.innerHTML = '<option value="">Todas</option>' + cats.map((c) => `<option ${c === ya ? 'selected' : ''}>${esc(c)}</option>`).join('');
+    const act = Object.entries(j.actualizado || {}).filter(([, v]) => v).map(([p, v]) => PAISES[p] + ' ' +
+      new Date(v).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
+    $('#actualizado').textContent = act.length ? 'Datos de TikTok traídos: ' + act.join(' · ') : 'Todavía no se han traído datos de TikTok';
+    pintar();
+  } catch (e) {
+    $('#avisos').innerHTML = `<div class="aviso">No se han podido leer los datos: ${esc(e.message)}</div>`;
+  } finally { $('#btn-cargar').disabled = false; }
+}
+
+/* Traer de TikTok, a trozos: cada llamada al servidor dura menos de 8 s. */
+async function sincronizar() {
+  const b = $('#btn-sync'), est = $('#estado-sync');
+  b.disabled = true;
+  const errores = [];
+  try {
+    for (const pais of Object.keys(PAISES)) {
+      est.textContent = PAISES[pais] + ': liquidaciones…';
+      const l = await pedir({ accion: 'liquidaciones', pais });
+      if (!l.ok) { errores.push(PAISES[pais] + ': ' + (l.message || l.error)); continue; }
+      const faltan = l.liquidaciones.filter((x) => !x.hecha || x.estado !== 'PAID');
+      let i = 0;
+      for (const liq of faltan) {
+        i++;
+        let t = '';
+        do {
+          est.textContent = `${PAISES[pais]}: liquidación ${i} de ${faltan.length}…`;
+          const r = await pedir({ accion: 'liquidacion', pais, id: liq.id, en: liq.en || '', t });
+          if (!r.ok) { errores.push(PAISES[pais] + ': ' + (r.message || r.error)); break; }
+          t = r.sigue ? r.token : '';
+        } while (t);
+      }
+      let t = '', inicio = '', vuelta = 0;
+      do {
+        vuelta++;
+        est.textContent = `${PAISES[pais]}: pendientes de liquidar (${vuelta})…`;
+        const r = await pedir({ accion: 'pendientes', pais, t, inicio });
+        if (!r.ok) { errores.push(PAISES[pais] + ': ' + (r.message || r.error)); break; }
+        inicio = r.inicio; t = r.sigue ? r.token : '';
+      } while (t && vuelta < 60);
+    }
+    est.textContent = errores.length ? 'Con fallos: ' + errores.join(' · ') : 'Listo';
+    await cargar();
+  } catch (e) {
+    est.textContent = 'Fallo: ' + e.message;
+  } finally { b.disabled = false; }
+}
+
+/* ================================================================= ajustes */
+function pintarAjustes() {
+  $('#ajustes-costes').innerHTML = Object.keys(COSTES_FABRICA).map((c) =>
+    `<label>${esc(c)} <input type="number" step="0.01" min="0" data-c="${esc(c)}" value="${COSTES[c]}"></label>`).join('');
+  $('#ajustes-sueldos').innerHTML =
+    `<label>Vendedora España €/h <input type="number" step="0.5" data-s="es" value="${SUELDOS.es}"></label>` +
+    `<label>Vendedora Alemania €/h <input type="number" step="0.5" data-s="de" value="${SUELDOS.de}"></label>` +
+    `<label>Vendedora Holanda €/h <input type="number" step="0.5" data-s="nl" value="${SUELDOS.nl}"></label>` +
+    `<label>Vendedoras por directo <input type="number" step="1" min="1" data-s="vendedoras" value="${SUELDOS.vendedoras}"></label>`;
+}
+
+/* ================================================================== inicio */
+function arrancar() {
+  $('#entrar').classList.add('oculto'); $('#app').classList.remove('oculto');
+  const hoy = hoyMadrid();
+  $('#f-desde').value = PRIMER_DIA; $('#f-desde').min = PRIMER_DIA; $('#f-hasta').value = hoy;
+  pintarAjustes();
+  cargar();
+}
+$('#btn-entrar').onclick = async () => {
+  CODIGO = $('#codigo').value.trim();
+  const r = await fetch(API + '?' + new URLSearchParams({ f: CODIGO, accion: 'datos', desde: hoyMadrid(), hasta: hoyMadrid() }));
+  if (r.status === 401) { $('#entrar-error').textContent = 'Ese código no vale.'; return; }
+  guardarLocal('fin_codigo', CODIGO); arrancar();
+};
+$('#codigo').onkeydown = (e) => { if (e.key === 'Enter') $('#btn-entrar').click(); };
+$('#btn-cargar').onclick = cargar;
+$('#btn-sync').onclick = sincronizar;
+$('#btn-ajustes').onclick = () => $('#ajustes').classList.toggle('oculto');
+$('#btn-guardar-ajustes').onclick = () => {
+  document.querySelectorAll('#ajustes-costes input').forEach((i) => COSTES[i.dataset.c] = Number(i.value) || 0);
+  document.querySelectorAll('#ajustes-sueldos input').forEach((i) => SUELDOS[i.dataset.s] = Number(i.value) || 0);
+  guardarLocal('fin_costes', COSTES); guardarLocal('fin_sueldos', SUELDOS);
+  $('#ajustes').classList.add('oculto');
+  if (CRUDO) { calcular.ses = calcular(); pintar(); }
+};
+$('#btn-reset-ajustes').onclick = () => { COSTES = { ...COSTES_FABRICA }; SUELDOS = { ...SUELDOS_FABRICA }; pintarAjustes(); };
+$('#btn-quitar-directo').onclick = () => { DIRECTO = ''; pintar(); };
+['#f-pais', '#f-canal', '#f-cat', '#f-comision'].forEach((s) => $(s).onchange = () => {
+  if (s === '#f-comision') calcular.ses = calcular();
+  pintar();
+});
+document.querySelectorAll('#pestanas button').forEach((b) => b.onclick = () => {
+  PESTANA = b.dataset.p;
+  document.querySelectorAll('#pestanas button').forEach((x) => x.classList.toggle('activa', x === b));
+  pintar();
+});
+if (CODIGO) arrancar(); else $('#entrar').classList.remove('oculto');
+</script>
+</body>
+</html>
