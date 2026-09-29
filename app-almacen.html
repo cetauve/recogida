@@ -428,7 +428,13 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     { id:'exterior', n:'Exterior',  color:'#7FB893' }
   ];
   const COLOR = { arriba:'#5C8FD6', abajo:'#D98A4A', exterior:'#7FB893' };
-  const deId = (id) => CATS.find((c) => c.id === id);
+  /* DIAS CON TABLET, 29 sep 2026: la prenda ya se sabe que es por el anuncio
+     con el que se vendio, asi que no se pregunta. Solo se confirma que se
+     tiene en la mano, con un boton, para que la bolsa llegue a la cola igual
+     que siempre. Esta categoria no sale en la rejilla de los dias normales. */
+  const COGIDA = { id:'cogida', n:'Cogida', fam:'arriba', ico:'nose', coste:null };
+  let SIN_MARCAR = false;
+  const deId = (id) => (id === 'cogida' ? COGIDA : CATS.find((c) => c.id === id));
 
   /* Cada prenda lleva su numero y su ROTULO (la cuenta). El indice de color se
      pone en prepararTandas, cuando ya se sabe cuantos percheros hay en total. */
@@ -1118,7 +1124,9 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
         }).join('')}</div>
       </div>`; }).join('');
 
-    const rejilla = FAM.map((f) => `
+    const rejilla = SIN_MARCAR ? `
+      <button class="cat" data-cat="cogida" style="width:100%;min-height:90px;font-size:22px">
+        <b style="font-size:22px">La tengo</b></button>` : FAM.map((f) => `
       <div class="familia"><i style="background:${f.color}"></i>${f.n}</div>
       <div class="rejilla">${CATS.filter((c) => c.fam === f.id).map((c) => `
         <button class="cat${marcaAhora === c.id ? ' puesta' : ''}" data-cat="${c.id}">
@@ -1138,8 +1146,8 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
         ${cuerpo}
       </div>
       <div class="marcar">
-        <p class="pregunta">Tienes la <b>${pieza.n}</b>${VARIOS ? ` de
-          <b style="color:var(--p${pieza.p}rot)">${esc(pieza.r)}</b>` : ''} en la mano. ¿Qué es?</p>
+        <p class="pregunta">${SIN_MARCAR ? 'Coge la' : 'Tienes la'} <b>${pieza.n}</b>${VARIOS ? ` de
+          <b style="color:var(--p${pieza.p}rot)">${esc(pieza.r)}</b>` : ''}${SIN_MARCAR ? ' y pulsa cuando la tengas.' : ' en la mano. ¿Qué es?'}</p>
         ${rejilla}
       </div>
       <div style="display:flex;gap:9px;margin-top:14px">
@@ -1659,6 +1667,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
       if (!j || !j.hay || !j.datos || !(j.datos.tandas || []).length) return null;
       j.datos.generado = j.datos.generado || j.generado || '';
       j.datos.juego = j.juego || l;
+      j.datos.sinMarcar = !!j.sinMarcar;
       return j.datos;
     } catch (e) { return null; }
   }
@@ -1690,6 +1699,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
       return;
     }
     DATOS = d; GENERADO = d.generado || '';
+    SIN_MARCAR = !!d.sinMarcar || P.get('marcar') === 'no';
     /* Si hubo dos directos en la misma cuenta, esto parte los percheros antes
        de montar las tarjetas. Tarda unos segundos y puede fallar sin romper
        nada: si falla, las prendas salen todas juntas como siempre. */
