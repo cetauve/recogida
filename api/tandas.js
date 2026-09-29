@@ -822,6 +822,8 @@ async function mapaDeFichas(s) {
      * preguntan a menudo. Asi solo viajan tres columnas por venta. */
     const filas = await s`
       select d.sesion        as sesion,
+             d.estado->>'canal' as canal,
+             v->>'pedido'   as pedido,
              v->>'producto' as producto,
              v->>'unidad'   as unidad,
              v->>'ficha'    as ficha,
@@ -832,12 +834,18 @@ async function mapaDeFichas(s) {
                     then d.estado->'ventas' else '[]'::jsonb end) v
        where d.cuando > now() - interval '14 days'`;
     const m = {}, dueno = {}, dudosas = new Set();
+    const porPedido = {};
+    const repartidas = new Set(REPARTOS.map((r) => r.sesion));
     for (const f of filas) {
       if (!f.producto || !f.unidad || !f.ficha) continue;
       if (esUnico(f.producto, f.nombre)) continue;
       const n = parseInt(String(f.unidad).replace(/[^0-9]/g, ''), 10);
       const ficha = parseInt(String(f.ficha), 10);
       if (!Number.isFinite(n) || !Number.isFinite(ficha)) continue;
+      if (f.pedido && !repartidas.has(f.sesion)) {
+        (porPedido[f.pedido] = porPedido[f.pedido] || []).push({
+          n, ficha, cuenta: CUENTA_DE_CANAL[f.canal] || '', nombre: f.nombre || '' });
+      }
       const llave = f.producto + '.' + n;
       /* SEPARAR POR TIENDA. Cada anuncio temporal es de una sola cuenta y su
        * identificador no se repite entre tiendas, asi que dos directos a la vez
@@ -851,12 +859,87 @@ async function mapaDeFichas(s) {
       m[llave] = ficha;
     }
     for (const k of dudosas) delete m[k];
+    Object.defineProperty(m, 'porPedido', { value: porPedido, enumerable: false });
     return m;
   } catch (e) {
     /* Sin traduccion se sirven las tandas como siempre. Que esto falle no puede
      * dejar al almacen sin tarjetas. */
     return {};
   }
+}
+
+/* TRADUCIR POR PEDIDO, 29 sep 2026. Es la forma buena y no depende de la
+ * version de la extension que haya subido las tarjetas.
+ *
+ * El 28 sep en España se vendio con tablet en dos cuentas a la vez y las
+ * tarjetas llegaron sin decir de que anuncio era cada numero (el ordenador del
+ * paso 2 tenia la extension vieja). Sin eso no se podia traducir, y el almacen
+ * vio "13, 13, 13": el numero 13 de tres anuncios distintos.
+ *
+ * Pero cada venta que apunta el ordenador del directo lleva su numero de
+ * PEDIDO, y cada tarjeta tambien. Asi que se cruza por pedido: este pedido es
+ * la venta X, que se llevo la ficha Y. El numero de TikTok solo sirve para
+ * saber cual de las prendas del pedido es cual, y la cuenta para no confundir
+ * el 13 de billystacos con el 13 de billystourvlc en la misma tarjeta.
+ *
+ * Si un grupo de la tarjeta no casa entero, se deja como estaba; y si la
+ * tarjeta queda a medias, sale en el perchero REVISAR. */
+const CUENTA_DE_CANAL = { bv: 'billysvlc', bto: 'billystourvlc', bta: 'billystacos', de: 'billys_de', nl: 'billys_nl' };
+const normaCuenta = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+function traducirPorPedido(datos, porPedido) {
+  let n = 0, total = 0;
+  if (!datos || !Array.isArray(datos.tandas) || !porPedido) return { n, total };
+  for (const t of datos.tandas) for (const c of (t.compradores || t.detalle || [])) {
+    const grupos = (c.porCuenta || []).filter((g) => Array.isArray(g.numeros) && g.numeros.length);
+    total += grupos.reduce((a, g) => a + g.numeros.length, 0);
+    const peds = Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []);
+    const vs = [];
+    for (const p of peds) for (const v of (porPedido[String(p)] || [])) vs.push({ ...v, usada: false });
+    if (!vs.length || !grupos.length) continue;
+    const nuevos = [], porValor = {};
+    let traducidos = 0, sinTocar = 0;
+    for (const g of (c.porCuenta || [])) {
+      if (!Array.isArray(g.numeros) || !g.numeros.length) { nuevos.push(g); continue; }
+      const lab = normaCuenta(g.cuenta);
+      const cogidas = [];
+      for (const num of g.numeros) {
+        const i = vs.findIndex((v) => !v.usada && v.n === Number(num) &&
+          (!v.cuenta || !lab || normaCuenta(v.cuenta) === lab));
+        if (i < 0) break;
+        vs[i].usada = true; cogidas.push(vs[i]);
+      }
+      if (cogidas.length === g.numeros.length) {
+        g.numeros.forEach((num, k) => {
+          const f = cogidas[k].ficha;
+          if (porValor[num] === undefined) porValor[num] = f; else if (porValor[num] !== f) porValor[num] = null;
+        });
+        const orden = cogidas.slice().sort((a, b) => a.ficha - b.ficha);
+        nuevos.push({ ...g, numeros: orden.map((v) => v.ficha),
+                      nombres: orden.reduce((o, v) => { o[v.ficha] = v.nombre; return o; }, {}) });
+        traducidos += cogidas.length;
+      } else {
+        for (const v of cogidas) v.usada = false;       /* no casa entero: se deja como estaba */
+        nuevos.push(g); sinTocar += g.numeros.length;
+      }
+    }
+    if (!traducidos) continue;
+    let bolsas = null, bolsaMal = false;
+    if (Array.isArray(c.bultos) && c.bultos.length) {
+      bolsas = c.bultos.map((b) => {
+        const nums = ((b && b.numeros) || []).map((x) => porValor[x]);
+        if (nums.some((x) => !x)) bolsaMal = true;
+        return { ...b, numeros: nums };
+      });
+    }
+    c.porCuenta = nuevos;
+    c.numeros = [].concat(...nuevos.map((g) => g.numeros || [])).sort((a, b) => a - b);
+    if (bolsas && !bolsaMal) c.bultos = bolsas;
+    c.porFicha = true;
+    if (sinTocar || bolsaMal) c._revisar = true;
+    n += traducidos;
+  }
+  return { n, total };
 }
 
 /* LA TARJETA SE QUEDA COMO ESTABA: cada cuenta con su rotulo y sus numeros.
@@ -891,6 +974,7 @@ function traducirTandas(datos, mapa) {
   };
   for (const t of datos.tandas) {
     for (const c of (t.compradores || t.detalle || [])) {
+      if (c.porFicha) continue;                 /* ya traducida por pedido */
       const grupos = (c.porCuenta || []).filter((g) => Array.isArray(g.numeros) && g.numeros.length);
       if (!grupos.length) continue;
 
@@ -1299,13 +1383,19 @@ async function atender(req, res, s, migas) {
     }
     const f = filas[0];
     const mapa = await mapaDeFichas(s);
-    const { datos, n } = traducirTandas(f.datos, mapa);
+    const pp = traducirPorPedido(f.datos, mapa.porPedido);
+    const { datos, n: n0 } = traducirTandas(f.datos, mapa);
+    const n = n0 + pp.n;
+    /* Si casi todo viene de ventas con tablet, el almacen no tiene que marcar
+     * que es cada prenda: ya se sabe por el anuncio con el que se vendio. */
+    const sinMarcar = pp.total > 0 && pp.n >= 0.8 * pp.total;
     const repartidas = await repartirSesiones(s, datos);
     const revisar = ponerRevisar(datos);
     const ajustadas = ajustarJuego(f.juego, datos);
     return res.status(200).json({
       ok: true, hay: true, dia: f.dia, juego: f.juego,
-      generado: f.generado, titulo: f.titulo, datos, traducidas: n, repartidas, revisar, ajustadas
+      generado: f.generado, titulo: f.titulo, datos, traducidas: n, porPedido: pp.n, sinMarcar,
+      repartidas, revisar, ajustadas
     });
   }
 
