@@ -895,7 +895,7 @@ function traducirPorPedido(datos, porPedido) {
     total += grupos.reduce((a, g) => a + g.numeros.length, 0);
     const peds = Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []);
     const vs = [];
-    for (const p of peds) for (const v of (porPedido[String(p)] || [])) vs.push({ ...v, usada: false });
+    for (const p of peds) for (const v of (porPedido[String(p)] || [])) vs.push({ ...v, pedido: String(p), usada: false });
     if (!vs.length || !grupos.length) continue;
     const nuevos = [], porValor = {};
     let traducidos = 0, sinTocar = 0;
@@ -916,7 +916,9 @@ function traducirPorPedido(datos, porPedido) {
         });
         const orden = cogidas.slice().sort((a, b) => a.ficha - b.ficha);
         nuevos.push({ ...g, _pp: true, numeros: orden.map((v) => v.ficha),
-                      nombres: orden.reduce((o, v) => { o[v.ficha] = v.nombre; return o; }, {}) });
+                      nombres: orden.reduce((o, v) => { o[v.ficha] = v.nombre; return o; }, {}),
+                      /* el pedido de cada ficha, para cotejar con la etiqueta */
+                      pedidosDe: orden.reduce((o, v) => { o[v.ficha] = v.pedido; return o; }, {}) });
         traducidos += cogidas.length;
       } else {
         for (const v of cogidas) v.usada = false;       /* no casa entero: se deja como estaba */
@@ -935,8 +937,8 @@ function traducirPorPedido(datos, porPedido) {
     for (const g of nuevos) {
       if (!g._pp) { juntos.push(g); continue; }
       const o = juntos.find((x) => x._pp && x.cuenta === g.cuenta && (x.dir || 1) === (g.dir || 1));
-      if (o) { o.numeros = o.numeros.concat(g.numeros); Object.assign(o.nombres, g.nombres); }
-      else juntos.push({ ...g, numeros: g.numeros.slice(), nombres: { ...g.nombres } });
+      if (o) { o.numeros = o.numeros.concat(g.numeros); Object.assign(o.nombres, g.nombres); Object.assign(o.pedidosDe, g.pedidosDe); }
+      else juntos.push({ ...g, numeros: g.numeros.slice(), nombres: { ...g.nombres }, pedidosDe: { ...g.pedidosDe } });
     }
     for (const g of juntos) if (g._pp) { g.numeros.sort((a, b) => a - b); delete g._pp; }
     nuevos.length = 0; nuevos.push(...juntos);
