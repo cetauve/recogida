@@ -48,6 +48,7 @@ html,body{height:100%}
 body{background:var(--fondo);color:var(--bone);
   font:16px/1.35 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   user-select:none;-webkit-user-select:none}
+.copiable{user-select:text;-webkit-user-select:text;cursor:copy;text-decoration:underline dotted;text-underline-offset:3px}
 .app{max-width:540px;margin:0 auto;min-height:100%;
   padding-inline:16px;padding-block:0 18px;display:flex;flex-direction:column}
 [hidden]{display:none!important}
@@ -339,6 +340,27 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   const cifraCoste = (valor) => ADMIN
     ? `<div class="cifra verde"><u>${valor}</u><span>coste</span></div>`
     : `<button class="cifra" data-vercoste style="cursor:pointer;font:inherit;color:inherit"><u>🔒</u><span>coste · admin</span></button>`;
+  /* COPIAR EL NUMERO DE PEDIDO CON UN TOQUE, 30 sep 2026. La pantalla no deja
+   * seleccionar texto (para que no se marque sin querer al pulsar botones), y
+   * Aaron tenia que teclear el pedido numero a numero para buscarlo en TikTok.
+   * Tocarlo lo copia; y ademas ese texto si se deja seleccionar. */
+  document.addEventListener('click', async (e) => {
+    const c = e.target.closest && e.target.closest('[data-copiar]');
+    if (!c) return;
+    e.stopPropagation();
+    const t = c.dataset.copiar || '';
+    let ok = false;
+    try { await navigator.clipboard.writeText(t); ok = true; } catch (err) {}
+    if (!ok) {
+      try {
+        const r = document.createRange(); r.selectNodeContents(c);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        ok = document.execCommand('copy');
+      } catch (err) {}
+    }
+    try { susurro(ok ? 'Copiado: ' + t : 'Mantén pulsado para copiarlo'); } catch (err) {}
+  }, true);
+
   document.addEventListener('click', async (e) => {
     if (!e.target.closest('[data-vercoste]')) return;
     const pin = (window.prompt('Pin de admin:') || '').trim();
@@ -1141,7 +1163,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     $('pantalla').innerHTML = `
       <div class="tarjeta">
         <div class="quien">
-          <div class="nombre">${esc(b.q)}${b.raiz ? `<div style="font-size:13px;font-weight:600;opacity:.75;margin-top:3px;letter-spacing:.02em">Pedido ${esc(b.raiz)}</div>` : ''}</div>
+          <div class="nombre">${esc(b.q)}${b.raiz ? `<div style="font-size:13px;font-weight:600;opacity:.75;margin-top:3px;letter-spacing:.02em">Pedido <span class="copiable" data-copiar="${esc(b.raiz)}">${esc(b.raiz)}</span></div>` : ''}</div>
           <div class="bolsa"><b>${B + 1} de ${ta.b.length}</b>
             <span>hoja ${B + 1} del taco</span></div>
         </div>
@@ -1153,7 +1175,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
         <p class="pregunta">${SIN_MARCAR ? 'Coge la' : 'Tienes la'} <b>${pieza.n}</b>${VARIOS ? ` de
           <b style="color:var(--p${pieza.p}rot)">${esc(pieza.r)}</b>` : ''}${SIN_MARCAR ? ' y pulsa cuando la tengas.' : ' en la mano. ¿Qué es?'}
           ${NOMBRES[pieza.r + '|' + pieza.n] ? `<br><span style="display:inline-block;margin-top:6px;font-size:.95em;opacity:.85">Tiene que ser: <b>${esc(NOMBRES[pieza.r + '|' + pieza.n])}</b></span>` : ''}
-          ${PEDIDO_DE[pieza.r + '|' + pieza.n] ? `<br><span style="font-size:.9em;opacity:.75">Pedido de esta prenda: <b>${esc(PEDIDO_DE[pieza.r + '|' + pieza.n])}</b></span>` : ''}</p>
+          ${PEDIDO_DE[pieza.r + '|' + pieza.n] ? `<br><span style="font-size:.9em;opacity:.75">Pedido de esta prenda: <b class="copiable" data-copiar="${esc(PEDIDO_DE[pieza.r + '|' + pieza.n])}">${esc(PEDIDO_DE[pieza.r + '|' + pieza.n])}</b></span>` : ''}</p>
         ${rejilla}
       </div>
       <div style="display:flex;gap:9px;margin-top:14px">
