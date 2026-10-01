@@ -256,6 +256,36 @@ async function pendientes(s, res, pais, tokenDado, inicioDado, t0) {
   return res.status(200).json({ ok: true, pais, guardadas, sigue: !fin, token: fin ? '' : token, inicio });
 }
 
+/* -------------------------------------------------------------- cancelados */
+
+/* EL 1 OCT 2026: se aprobaron 14 cancelaciones del directo de Alemania del
+ * 30 sep y la pantalla seguia contandolas como cobradas. TikTok las deja en
+ * su lista de "pendiente de liquidar" con el importe estimado aunque el pedido
+ * este cancelado, asi que no basta con mirar el dinero: hay que preguntar que
+ * pedidos estan cancelados y apartarlos. Se guardan los numeros de pedido
+ * cancelados desde el 28 sep, por pais. */
+async function cancelados(s, res, pais, tokenDado, t0) {
+  const cuenta = TIENDAS[pais];
+  const tope = epoch(DESDE_MIN) - 2 * 86400;
+  const est = await leerEstado(s, 'canc:' + pais);
+  const ids = new Set(est.ids || []);
+  let token = tokenDado, fin = false, nuevos = 0;
+  while (Date.now() - t0 < LIMITE_MS) {
+    const params = { page_size: 50, sort_field: 'create_time', sort_order: 'DESC' };
+    if (token) params.page_token = token;
+    const r = await T.comoCuenta(cuenta, { camino: '/order/202309/orders/search', metodo: 'POST', params,
+      cuerpo: { order_status: 'CANCELLED', create_time_ge: tope } });
+    if (!r || r.code !== 0) return falloTikTok(res, r);
+    const ords = (r.data && r.data.orders) || [];
+    for (const o of ords) { const id = aTexto(o.id); if (id && !ids.has(id)) { ids.add(id); nuevos++; } }
+    token = aTexto(r.data && r.data.next_page_token);
+    const masViejo = Math.min(...ords.map((o) => Number(o.create_time) || Infinity));
+    if (!token || !ords.length || masViejo < tope) { fin = true; break; }
+  }
+  await ponerEstado(s, 'canc:' + pais, { ids: [...ids] });
+  return res.status(200).json({ ok: true, pais, total: ids.size, nuevos, sigue: !fin, token: fin ? '' : token });
+}
+
 /* ------------------------------------------------------------------ cruce */
 
 const aEuros = (x) => {
@@ -304,6 +334,8 @@ async function datos(s, res, desde, hasta) {
   /* Costes puestos a mano a una prenda concreta (las chaquetas de 80 € no
    * cuestan lo que una chaqueta normal). Mandan sobre el coste de la categoria. */
   const aMano = await leerEstado(s, 'costes_a_mano');
+  const canc = {};
+  for (const p of Object.keys(TIENDAS)) canc[p] = new Set((await leerEstado(s, 'canc:' + p)).ids || []);
 
   const completo = {};
   for (const p of Object.keys(TIENDAS)) {
@@ -320,6 +352,11 @@ async function datos(s, res, desde, hasta) {
   for (const [pedido, ms] of Object.entries(porPedido)) {
     const liq = ms.filter((m) => m.liquidado);
     const pend = ms.filter((m) => !m.liquidado && new Date(m.visto).getTime() >= (completo[m.pais] || 0));
+    /* Cancelado y sin nada liquidado: no hay dinero, diga lo que diga la
+     * estimacion. Si TikTok ya liquido algo (un reembolso), eso si cuenta. */
+    const [paisDe, numero] = pedido.split('|');
+    const cancelado = canc[paisDe] && canc[paisDe].has(numero);
+    if (cancelado && !liq.length) { dinero[pedido] = { estado: 'C' }; continue; }
     const usa = liq.length ? liq : pend;
     if (!usa.length) continue;
     const sum = (k) => usa.reduce((a, m) => a + num(m[k]), 0);
@@ -335,7 +372,7 @@ async function datos(s, res, desde, hasta) {
   for (const v of ventas) if (v.pedido) (prendasDe[v.pedido] = prendasDe[v.pedido] || []).push(v);
 
   const filas = ventas.map((v) => {
-    const d = v.pedido && dinero[v.pais + '|' + v.pedido];
+    const d = (v.pedido && dinero[v.pais + '|' + v.pedido]) || (v.pedido && canc[v.pais] && canc[v.pais].has(v.pedido) ? { estado: 'C' } : null);
     const grupo = v.pedido ? prendasDe[v.pedido] : [v];
     const total = grupo.reduce((a, x) => a + x.remate, 0);
     const parte = total > 0 ? v.remate / total : 1 / grupo.length;
@@ -343,7 +380,8 @@ async function datos(s, res, desde, hasta) {
       anuncio: v.nombre, remate: v.remate, estado: d ? d.estado : '-', prendasPedido: grupo.length };
     const cm = aMano[v.sesion + '|' + v.ficha];
     if (cm && Number.isFinite(Number(cm.coste))) { fila.costeAMano = Number(cm.coste); if (cm.nota) fila.nota = cm.nota; }
-    if (d) {
+    if (d && d.estado === 'C') { /* cancelada: sin dinero */ }
+    else if (d) {
       fila.ingreso = r2(d.ingreso * parte); fila.comision = r2(d.comision * parte);
       fila.envio = r2(d.envio * parte); fila.ajuste = r2(d.ajuste * parte); fila.neto = r2(d.neto * parte);
       const det = {};
@@ -435,6 +473,7 @@ module.exports = puerta(async (req, res) => {
   if (accion === 'pendientes') return pendientes(s, res, pais, aTexto(q.t), aTexto(q.inicio), t0);
   if (accion === 'muestra') return muestra(s, res, pais);
   if (accion === 'coste') return costeAMano(s, res, q);
+  if (accion === 'cancelados') return cancelados(s, res, pais, aTexto(q.t), t0);
   if (accion === 'datos') {
     const hoy = diaMadrid(Date.now());
     return datos(s, res, aTexto(q.desde) || DESDE_MIN, aTexto(q.hasta) || hoy);
