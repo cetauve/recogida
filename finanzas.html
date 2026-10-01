@@ -188,7 +188,7 @@ tr.elegida { background: var(--sel); }
   </section>
 
   <section data-s="prendas" class="oculto">
-    <div class="caja"><h2>Cada prenda</h2><div class="nota">Sin datos del comprador ni números de pedido. "Sin cobrar" = TikTok no tiene dinero de ese pedido: sin pagar, cancelado o todavía no traído.</div><div class="tabla-alta"><table id="t-prendas"></table></div></div>
+    <div class="caja"><h2>Cada prenda</h2><div class="nota">Sin datos del comprador ni números de pedido. "Cancelada" = el pedido está cancelado en TikTok. "Sin cobrar" = TikTok no tiene dinero de ese pedido: sin pagar o todavía no traído.</div><div class="tabla-alta"><table id="t-prendas"></table></div></div>
   </section>
 
   <section data-s="tiktok" class="oculto">
@@ -325,12 +325,12 @@ function filtradas() {
 /* Suma de un grupo de prendas: lo que se enseña en todas las tablas. */
 function sumar(ps) {
   const a = { n: ps.length, cobradas: 0, remate: 0, remateCobrado: 0, ingreso: 0, comision: 0, envio: 0, ajuste: 0, neto: 0,
-    netoEstimado: 0, coste: 0, vendedora: 0, beneficio: 0, liquidadas: 0, sinCoste: 0, reembolsadas: 0, sinPagar: 0 };
+    netoEstimado: 0, coste: 0, vendedora: 0, beneficio: 0, liquidadas: 0, sinCoste: 0, reembolsadas: 0, sinPagar: 0, canceladas: 0 };
   for (const p of ps) {
     a.remate += p.remate; a.vendedora += p.vendedora; a.beneficio += p.beneficio;
     if (p.sinCoste) a.sinCoste++;
     if (p.reembolsada) { a.reembolsadas++; a.neto += p.neto; a.comision += p.comision; a.envio += p.envio; a.ajuste += p.ajuste; continue; }
-    if (!p.cobrada) { a.sinPagar++; continue; }
+    if (!p.cobrada) { if (p.estado === 'C') a.canceladas++; else a.sinPagar++; continue; }
     a.cobradas++; a.remateCobrado += p.remate; a.ingreso += p.ingreso; a.comision += p.comision; a.envio += p.envio;
     a.ajuste += p.ajuste; a.neto += p.neto; a.coste += p.coste;
     if (p.estado === 'L') a.liquidadas++; else a.netoEstimado += p.neto;
@@ -398,7 +398,7 @@ function pintar() {
   /* ---- cifras de arriba */
   const horasTot = Object.entries(ses).filter(([k]) => ps.some((p) => p.sesion === k)).reduce((a, [, s]) => a + s.horas, 0);
   const kpis = [
-    ['Prendas vendidas', ent(t.n), `${ent(t.cobradas)} cobradas · ${ent(t.reembolsadas)} reembolsadas · ${ent(t.sinPagar)} sin pagar`],
+    ['Prendas vendidas', ent(t.n), `${ent(t.cobradas)} cobradas · ${ent(t.canceladas)} canceladas · ${ent(t.reembolsadas)} reembolsadas · ${ent(t.sinPagar)} sin pagar`],
     ['Precio medio', eur(t.precioMedio), `remate de las cobradas`],
     ['Liquidado', eur0(t.neto), t.netoEstimado ? `${eur0(t.netoEstimado)} aún estimado` : 'todo real'],
     ['Comisión real', pct(t.comisionPct), `${eur0(-t.comision)} en total`],
@@ -507,7 +507,7 @@ function pEvolucion(ps) {
 
 function pPrendas(ps) {
   const filas = ps.map((p, i) => ({ _id: String(i), ...p, cuenta: CUENTAS[p.canal] || p.canal,
-    estadoTxt: p.reembolsada ? 'Reembolsada' : (p.estado === 'L' ? 'Liquidada' : (p.estado === 'P' ? 'Estimada' : 'Sin cobrar')) }));
+    estadoTxt: p.reembolsada ? 'Reembolsada' : (p.estado === 'C' ? 'Cancelada' : (p.estado === 'L' ? 'Liquidada' : (p.estado === 'P' ? 'Estimada' : 'Sin cobrar'))) }));
   tabla('t-prendas', [
     { k: 'h', t: 'Cuándo', izq: true, f: (v, f) => diaCorto(f.dia) + ' ' + hora(v) },
     { k: 'cuenta', t: 'Cuenta', izq: true, f: (v, f) => `<span class="punto" style="background:var(--${f.pais})"></span>${esc(v)}` },
@@ -662,6 +662,14 @@ async function sincronizar() {
           t = r.sigue ? r.token : '';
         } while (t);
       }
+      let tc = '', vc = 0;
+      do {
+        vc++;
+        est.textContent = `${PAISES[pais]}: pedidos cancelados…`;
+        const r = await pedir({ accion: 'cancelados', pais, t: tc });
+        if (!r.ok) { errores.push(PAISES[pais] + ': ' + (r.message || r.error)); break; }
+        tc = r.sigue ? r.token : '';
+      } while (tc && vc < 40);
       let t = '', inicio = '', vuelta = 0;
       do {
         vuelta++;
