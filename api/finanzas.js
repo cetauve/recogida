@@ -41,7 +41,8 @@ function esAaron(req) {
 
 const TIENDAS = { es: 'billysvlc', de: 'billys_de', nl: 'billys_nl' };
 const PAIS_DE_CANAL = { bv: 'es', bto: 'es', bta: 'es', de: 'de', nl: 'nl' };
-const DESDE_MIN = '2026-09-28';                  /* primer dia con tablets */
+const DESDE_MIN = '2026-09-28';
+const VERSION = 2;               /* sube si cambia lo que se guarda: las liquidaciones se rehacen */
 const LIMITE_MS = 5000;   /* cada llamada termina bien antes de los 10 s */
 
 /* ------------------------------------------------------------------ tablas */
@@ -105,17 +106,24 @@ function laLista(data) {
 /* Solo lo que no es cero de los desgloses: con eso se explica cada euro sin
  * guardar cien campos vacios por pedido. */
 function desglose(tx) {
+  /* Lo que cuelga de "supplementary_component" es INFORMATIVO: repite otros
+   * importes (fbm_shipping_cost = actual_shipping_fee) o cuenta cosas que no
+   * suman (lo que pago el cliente, el descuento que puso TikTok). Se guarda
+   * con "x_" delante para que la pantalla no lo sume con lo demas. */
   const d = {};
   const mirar = (o, pre) => {
     if (!o || typeof o !== 'object') return;
     for (const [k, v] of Object.entries(o)) {
-      if (v && typeof v === 'object' && !Array.isArray(v)) { mirar(v, pre); continue; }
-      if (!/_amount$/.test(k)) continue;
+      if (v && typeof v === 'object' && !Array.isArray(v)) { mirar(v, k === 'supplementary_component' ? 'x_' : pre); continue; }
+      if (!pre && !/_amount$/.test(k)) continue;
       const n = num(v);
-      if (n) d[k.replace(/_amount$/, '')] = n;
+      if (n) { const c = pre + k.replace(/_amount$/, ''); d[c] = (d[c] || 0) + n; }
     }
   };
-  for (const k of Object.keys(tx || {})) if (/_breakdown$/.test(k)) mirar(tx[k]);
+  for (const k of Object.keys(tx || {})) {
+    if (/_breakdown$/.test(k)) mirar(tx[k], '');
+    if (k === 'supplementary_component') mirar(tx[k], 'x_');
+  }
   return d;
 }
 
@@ -183,7 +191,7 @@ async function liquidaciones(s, res, pais) {
     if (!token) break;
   }
   const est = await leerEstado(s, 'liq:' + pais);
-  const hechasYa = new Set(est.hechas || []);
+  const hechasYa = new Set(est.v === VERSION ? (est.hechas || []) : []);
   return res.status(200).json({ ok: true, pais, liquidaciones: lista.map((x) => ({
     id: aTexto(x.id),
     en: aFecha(x.statement_time),
@@ -214,9 +222,9 @@ async function liquidacion(s, res, pais, id, tokenDado, t0, q = {}) {
   }
   if (!token) {
     const est = await leerEstado(s, 'liq:' + pais);
-    const lista = new Set(est.hechas || []);
+    const lista = new Set(est.v === VERSION ? (est.hechas || []) : []);
     lista.add(id);
-    await ponerEstado(s, 'liq:' + pais, { ...est, hechas: [...lista] });
+    await ponerEstado(s, 'liq:' + pais, { v: VERSION, hechas: [...lista] });
   }
   return res.status(200).json({ ok: true, pais, id, guardadas, sigue: !!token, token });
 }
@@ -293,6 +301,10 @@ async function datos(s, res, desde, hasta) {
     : [];
 
   /* Cuando se completo la ultima pasada de pendientes de cada pais. */
+  /* Costes puestos a mano a una prenda concreta (las chaquetas de 80 € no
+   * cuestan lo que una chaqueta normal). Mandan sobre el coste de la categoria. */
+  const aMano = await leerEstado(s, 'costes_a_mano');
+
   const completo = {};
   for (const p of Object.keys(TIENDAS)) {
     const e = await leerEstado(s, 'pend:' + p);
@@ -329,6 +341,8 @@ async function datos(s, res, desde, hasta) {
     const parte = total > 0 ? v.remate / total : 1 / grupo.length;
     const fila = { h: v.ms, dia: v.dia, pais: v.pais, canal: v.canal, sesion: v.sesion, ficha: v.ficha,
       anuncio: v.nombre, remate: v.remate, estado: d ? d.estado : '-', prendasPedido: grupo.length };
+    const cm = aMano[v.sesion + '|' + v.ficha];
+    if (cm && Number.isFinite(Number(cm.coste))) { fila.costeAMano = Number(cm.coste); if (cm.nota) fila.nota = cm.nota; }
     if (d) {
       fila.ingreso = r2(d.ingreso * parte); fila.comision = r2(d.comision * parte);
       fila.envio = r2(d.envio * parte); fila.ajuste = r2(d.ajuste * parte); fila.neto = r2(d.neto * parte);
@@ -363,6 +377,27 @@ async function datos(s, res, desde, hasta) {
   return res.status(200).json({ ok: true, desde, hasta, actualizado, ventas: filas, otros: Object.values(otros) });
 }
 
+/* ------------------------------------------------------------ coste a mano */
+
+/* ?accion=coste&sesion=X&ficha=N&coste=28&nota=Ferrari fina   pone el coste
+ * ?accion=coste&sesion=X&ficha=N&coste=                        lo quita */
+async function costeAMano(s, res, q) {
+  const sesion = aTexto(q.sesion).slice(0, 120);
+  const ficha = parseInt(q.ficha, 10);
+  if (!sesion || !Number.isFinite(ficha)) return res.status(400).json({ ok: false, error: 'falta-sesion-o-ficha' });
+  const est = await leerEstado(s, 'costes_a_mano');
+  const k = sesion + '|' + ficha;
+  const texto = aTexto(q.coste).replace(',', '.').trim();
+  if (texto === '') delete est[k];
+  else {
+    const n = Number(texto);
+    if (!Number.isFinite(n) || n < 0) return res.status(400).json({ ok: false, error: 'coste-raro' });
+    est[k] = { coste: n, nota: aTexto(q.nota).slice(0, 80), en: new Date().toISOString() };
+  }
+  await ponerEstado(s, 'costes_a_mano', est);
+  return res.status(200).json({ ok: true, clave: k, valor: est[k] || null });
+}
+
 /* ----------------------------------------------------------------- muestra */
 
 async function muestra(s, res, pais) {
@@ -393,12 +428,13 @@ module.exports = puerta(async (req, res) => {
   await tablas(s);
   const accion = aTexto(q.accion);
   const pais = aTexto(q.pais).toLowerCase();
-  if (accion !== 'datos' && !TIENDAS[pais]) return res.status(400).json({ ok: false, error: 'pais-raro', paises: Object.keys(TIENDAS) });
+  if (accion !== 'datos' && accion !== 'coste' && !TIENDAS[pais]) return res.status(400).json({ ok: false, error: 'pais-raro', paises: Object.keys(TIENDAS) });
 
   if (accion === 'liquidaciones') return liquidaciones(s, res, pais);
   if (accion === 'liquidacion') return liquidacion(s, res, pais, aTexto(q.id), aTexto(q.t), t0, q);
   if (accion === 'pendientes') return pendientes(s, res, pais, aTexto(q.t), aTexto(q.inicio), t0);
   if (accion === 'muestra') return muestra(s, res, pais);
+  if (accion === 'coste') return costeAMano(s, res, q);
   if (accion === 'datos') {
     const hoy = diaMadrid(Date.now());
     return datos(s, res, aTexto(q.desde) || DESDE_MIN, aTexto(q.hasta) || hoy);
