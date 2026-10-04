@@ -732,7 +732,14 @@ async function accionDirecto(s, res, sesion, b) {
               select coalesce((estado->>'ficha')::int, 0) as ficha from directo_vivo
                where estado->>'canal' = ${canal} and sesion <> ${sesion}
                  and cuando > now() - interval '20 hours'
-                 and (cuando at time zone 'Europe/Madrid')::date = (now() at time zone 'Europe/Madrid')::date
+                 /* 1 oct 2026: se mira la hora de su ULTIMA VENTA, no la de su
+                  * ultima escritura. La pestaña del Live Manager de ayer seguia
+                  * abierta y escribiendo, asi que el directo de ayer parecia
+                  * "de hoy" y el nuevo empezo en la ficha 107 en vez de en la 1. */
+                 and jsonb_typeof(estado->'ventas') = 'array'
+                 and jsonb_array_length(estado->'ventas') > 0
+                 and (to_timestamp(((estado->'ventas'->-1->>'hora')::numeric) / 1000)
+                        at time zone 'Europe/Madrid')::date = (now() at time zone 'Europe/Madrid')::date
                order by cuando desc limit 1`;
             if (prev.length && prev[0].ficha > 0) estado.ficha = prev[0].ficha;
           } catch (e) { /* si no se puede mirar, empieza en el 1 como antes */ }
@@ -827,7 +834,8 @@ async function mapaDeFichas(s) {
              v->>'producto' as producto,
              v->>'unidad'   as unidad,
              v->>'ficha'    as ficha,
-             v->>'nombre'   as nombre
+             v->>'nombre'   as nombre,
+             v->>'hora'     as hora
         from directo_vivo d,
              lateral jsonb_array_elements(
                case when jsonb_typeof(d.estado->'ventas') = 'array'
@@ -836,6 +844,13 @@ async function mapaDeFichas(s) {
     const m = {}, dueno = {}, dudosas = new Set();
     const porPedido = {};
     const repartidas = new Set(REPARTOS.map((r) => r.sesion));
+    /* Cuando empezo cada directo (su primera venta): sirve para llamarlos
+     * "live 1" y "live 2" si una recogida junta dos directos de la misma cuenta. */
+    const inicio = {};
+    for (const f of filas) {
+      const h = Number(f.hora);
+      if (Number.isFinite(h) && h > 0 && (!inicio[f.sesion] || h < inicio[f.sesion])) inicio[f.sesion] = h;
+    }
     for (const f of filas) {
       if (!f.producto || !f.unidad || !f.ficha) continue;
       if (esUnico(f.producto, f.nombre)) continue;
@@ -844,7 +859,8 @@ async function mapaDeFichas(s) {
       if (!Number.isFinite(n) || !Number.isFinite(ficha)) continue;
       if (f.pedido && !repartidas.has(f.sesion)) {
         (porPedido[f.pedido] = porPedido[f.pedido] || []).push({
-          n, ficha, cuenta: CUENTA_DE_CANAL[f.canal] || '', nombre: f.nombre || '' });
+          n, ficha, cuenta: CUENTA_DE_CANAL[f.canal] || '', nombre: f.nombre || '',
+          ses: f.sesion, ini: inicio[f.sesion] || 0 });
       }
       const llave = f.producto + '.' + n;
       /* SEPARAR POR TIENDA. Cada anuncio temporal es de una sola cuenta y su
@@ -950,6 +966,7 @@ const normaCuenta = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9_]/g, 
 function traducirPorPedido(datos, porPedido) {
   let n = 0, total = 0;
   if (!datos || !Array.isArray(datos.tandas) || !porPedido) return { n, total };
+  const marcados = [];
   for (const t of datos.tandas) for (const c of (t.compradores || t.detalle || [])) {
     const grupos = (c.porCuenta || []).filter((g) => Array.isArray(g.numeros) && g.numeros.length);
     total += grupos.reduce((a, g) => a + g.numeros.length, 0);
@@ -974,11 +991,19 @@ function traducirPorPedido(datos, porPedido) {
           const f = cogidas[k].ficha;
           if (porValor[num] === undefined) porValor[num] = f; else if (porValor[num] !== f) porValor[num] = null;
         });
-        const orden = cogidas.slice().sort((a, b) => a.ficha - b.ficha);
-        nuevos.push({ ...g, _pp: true, numeros: orden.map((v) => v.ficha),
-                      nombres: orden.reduce((o, v) => { o[v.ficha] = v.nombre; return o; }, {}),
-                      /* el pedido de cada ficha, para cotejar con la etiqueta */
-                      pedidosDe: orden.reduce((o, v) => { o[v.ficha] = v.pedido; return o; }, {}) });
+        /* Un grupo por DIRECTO: si la recogida junta dos directos de la misma
+         * cuenta, cada uno tiene su taco desde el 1 y la ficha 5 del viernes no
+         * es la ficha 5 del sabado. */
+        const porSes = {};
+        for (const v of cogidas) (porSes[v.ses || ''] = porSes[v.ses || ''] || []).push(v);
+        for (const [ses, lista] of Object.entries(porSes)) {
+          const orden = lista.slice().sort((a, b) => a.ficha - b.ficha);
+          nuevos.push({ ...g, _pp: true, _ses: ses, _ini: Math.min(...orden.map((v) => v.ini || Infinity)),
+                        numeros: orden.map((v) => v.ficha),
+                        nombres: orden.reduce((o, v) => { o[v.ficha] = v.nombre; return o; }, {}),
+                        /* el pedido de cada ficha, para cotejar con la etiqueta */
+                        pedidosDe: orden.reduce((o, v) => { o[v.ficha] = v.pedido; return o; }, {}) });
+        }
         traducidos += cogidas.length;
       } else {
         for (const v of cogidas) v.usada = false;       /* no casa entero: se deja como estaba */
@@ -996,11 +1021,11 @@ function traducirPorPedido(datos, porPedido) {
     const juntos = [];
     for (const g of nuevos) {
       if (!g._pp) { juntos.push(g); continue; }
-      const o = juntos.find((x) => x._pp && x.cuenta === g.cuenta && (x.dir || 1) === (g.dir || 1));
+      const o = juntos.find((x) => x._pp && x.cuenta === g.cuenta && (x.dir || 1) === (g.dir || 1) && x._ses === g._ses);
       if (o) { o.numeros = o.numeros.concat(g.numeros); Object.assign(o.nombres, g.nombres); Object.assign(o.pedidosDe, g.pedidosDe); }
       else juntos.push({ ...g, numeros: g.numeros.slice(), nombres: { ...g.nombres }, pedidosDe: { ...g.pedidosDe } });
     }
-    for (const g of juntos) if (g._pp) { g.numeros.sort((a, b) => a - b); delete g._pp; }
+    for (const g of juntos) if (g._pp) { g.numeros.sort((a, b) => a - b); delete g._pp; marcados.push(g); }
     nuevos.length = 0; nuevos.push(...juntos);
     let bolsas = null, bolsaMal = false;
     if (Array.isArray(c.bultos) && c.bultos.length) {
@@ -1017,6 +1042,29 @@ function traducirPorPedido(datos, porPedido) {
     if (sinTocar || bolsaMal) c._revisar = true;
     n += traducidos;
   }
+  /* DOS DIRECTOS EN UNA RECOGIDA, 4 oct 2026. Alemania junto el viernes y el
+   * sabado en la misma recogida y los dos tacos empiezan en el 1: salian 86
+   * numeros repetidos bajo "billys_de". Si una cuenta tiene fichas de mas de un
+   * directo, cada grupo pasa a llamarse "billys_de · live 1 · fri", "billys_de ·
+   * live 2 · sat", por orden de la primera venta. La app los pinta como
+   * percheros distintos, igual que dos cuentas. */
+  const sesDe = {};
+  for (const g of marcados) {
+    if (!g._ses) continue;
+    const m = sesDe[g.cuenta] = sesDe[g.cuenta] || {};
+    if (!(g._ses in m) || g._ini < m[g._ses]) m[g._ses] = g._ini;
+  }
+  for (const g of marcados) {
+    const m = sesDe[g.cuenta];
+    if (m && Object.keys(m).length > 1 && g._ses) {
+      const orden = Object.keys(m).sort((a, b) => m[a] - m[b]);
+      const k = orden.indexOf(g._ses) + 1;
+      const dia = Number.isFinite(m[g._ses])
+        ? new Date(m[g._ses]).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Europe/Madrid' }).toLowerCase() : '';
+      g.cuenta = g.cuenta + ' · live ' + k + (dia ? ' · ' + dia : '');
+    }
+  }
+  for (const g of marcados) { delete g._ses; delete g._ini; }
   return { n, total };
 }
 
