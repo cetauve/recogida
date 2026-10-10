@@ -304,6 +304,30 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   font-size:13.5px;line-height:1.4;color:var(--bone);box-shadow:0 8px 30px rgba(0,0,0,.5);
   opacity:0;transform:translateY(8px);transition:.18s;pointer-events:none}
 #susurro.on{opacity:1;transform:none}
+
+/* ------------------------------------------------- la lupa, 10 oct 2026 */
+.app{padding-bottom:84px}
+.lupa{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:40;
+  width:56px;height:56px;border-radius:50%;background:var(--navy);border:1px solid var(--linea);
+  display:flex;align-items:center;justify-content:center;box-shadow:0 6px 22px rgba(0,0,0,.45)}
+.lupa svg{width:26px;height:26px}
+.buscador{position:fixed;inset:0;z-index:45;background:rgba(14,23,35,.97);overflow-y:auto;
+  padding:calc(16px + env(safe-area-inset-top,0px)) 16px 40px}
+.buscador .caja{max-width:540px;margin:0 auto}
+.buscador .linea{display:flex;gap:9px;align-items:center}
+.buscador input{flex:1;min-width:0;font-family:inherit;font-size:30px;font-weight:700;padding:14px 16px;
+  border-radius:13px;border:1px solid var(--linea);background:var(--navy2);color:var(--bone);
+  user-select:text;-webkit-user-select:text}
+.buscador .cerrar{padding:14px 16px;border-radius:13px;border:1px solid var(--linea);font-weight:700}
+.buscador .ayuda{color:var(--tenue);font-size:13.5px;margin:10px 2px 14px}
+.hallazgo{border:1px solid var(--linea);border-left-width:6px;border-radius:13px;
+  padding:13px 14px;margin-bottom:10px;background:var(--navy2)}
+.hallazgo .rot{font-weight:800;font-size:15px;margin-bottom:4px}
+.hallazgo .gran{font-size:28px;font-weight:800;line-height:1}
+.hallazgo .dato{font-size:14px;color:var(--tenue);margin-top:4px}
+.hallazgo .dato b{color:var(--bone)}
+.hallazgo .ir{margin-top:10px;width:100%;padding:11px;border-radius:11px;
+  border:1px solid var(--linea);font-weight:700}
 </style>
 </head>
 <body>
@@ -317,6 +341,21 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     <div class="progreso"><i id="tripa" style="width:0%"></i></div>
   </div>
   <section id="pantalla"></section>
+</div>
+<button class="lupa" id="lupa" hidden aria-label="Buscar una ficha">
+  <svg viewBox="0 0 24 24" fill="none" stroke="#F4F0E8" stroke-width="2.4" stroke-linecap="round">
+    <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 L21 21"/></svg>
+</button>
+<div class="buscador" id="buscador" hidden>
+  <div class="caja">
+    <div class="linea">
+      <input id="buscaNum" type="text" inputmode="numeric" autocomplete="off" placeholder="Nº de ficha">
+      <button class="cerrar" id="buscaCerrar">Cerrar</button>
+    </div>
+    <p class="ayuda">Pon el número de la ficha (o el número de pedido entero) y te digo en qué
+      bolsa está. Si hay varios directos o cuentas, sale una vez por cada uno.</p>
+    <div id="buscaRes"></div>
+  </div>
 </div>
 
 <script>
@@ -1081,6 +1120,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   function menu() {
     DONDE = 'menu';
     $('barra').hidden = true;
+    $('lupa').hidden = !TANDAS.length;
     const total = hechasTodo();
     const BOLSAS = TANDAS.reduce((a, ta) => a + ta.b.length, 0);
     $('pantalla').innerHTML = `
@@ -1136,6 +1176,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 
   function pintar() {
     DONDE = 'bolsa';
+    $('lupa').hidden = !TANDAS.length;
     const ta = TANDAS[T], b = ta.b[B];
     const marcaAhora = puesto(T, B, foco);
     const pieza = b.piezas[foco];
@@ -1677,6 +1718,72 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     MARCA[k] = cat.dataset.cat;
     guardar(k);
     siguiente();
+  });
+
+  /* LA LUPA, 10 oct 2026. Aaron, con los paquetes delante, necesitaba saber
+     de quien es una ficha sin ir tarjeta por tarjeta. Se escribe el numero y
+     sale cada sitio donde esta: perchero (con su "live 1 · fri" si la recogida
+     junta varios directos de la misma cuenta), comprador, tanda, bolsa, pedido
+     y si ya se cogio. Tambien acepta un numero de pedido entero. Solo lee: no
+     marca nada. */
+  function buscarFicha(texto) {
+    const q = String(texto || '').replace(/\D/g, '');
+    const caja = $('buscaRes');
+    if (!q) { caja.innerHTML = ''; return; }
+    const porPedido = q.length >= 10;
+    const hay = [];
+    TANDAS.forEach((ta, t) => ta.b.forEach((b, bi) => b.piezas.forEach((z, k) => {
+      const ped = PEDIDO_DE[z.r + '|' + z.n] || '';
+      const vale = porPedido
+        ? (ped === q || (!ped && (String(b.raiz || '') === q ||
+            ((b.ficha && b.ficha.pedidos) || []).map(String).includes(q))))
+        : z.n === Number(q);
+      if (vale) hay.push({ t, bi, k, z, ta, b, ped });
+    })));
+    if (!hay.length) {
+      caja.innerHTML = `<div class="hallazgo" style="border-left-color:var(--ambar)">
+        <div class="rot">${porPedido ? 'Ese pedido' : 'La ' + esc(q)} no está en ninguna bolsa de esta recogida.</div>
+        <div class="dato">Puede ser un pedido cancelado o sin pagar, o de otra recogida.</div></div>`;
+      return;
+    }
+    const cab = !porPedido && hay.length > 1
+      ? `<p class="ayuda" style="color:var(--ambar)"><b>La ${esc(q)} sale ${hay.length} veces</b>: son prendas
+         distintas. Mira el perchero de cada una.</p>` : '';
+    caja.innerHTML = cab + hay.map((h) => {
+      const id = puesto(h.t, h.bi, h.k);
+      const cat = id && deId(id);
+      const color = VARIOS ? `var(--p${h.z.p}rot)` : 'var(--cian)';
+      const nom = NOMBRES[h.z.r + '|' + h.z.n];
+      const ped = h.ped || h.b.raiz || '';
+      return `<div class="hallazgo" style="border-left-color:${color}">
+        <div class="rot" style="color:${color}">${esc(h.z.r || 'Perchero único')}</div>
+        <div class="gran">${h.z.n}</div>
+        <div class="dato">Comprador: <b>${esc(h.b.q || '?')}</b></div>
+        <div class="dato">${esc(h.ta.e)} · bolsa <b>${h.bi + 1} de ${h.ta.b.length}</b> (hoja ${h.bi + 1} del taco)</div>
+        ${ped ? `<div class="dato">Pedido: <b class="copiable" data-copiar="${esc(ped)}">${esc(ped)}</b></div>` : ''}
+        ${nom ? `<div class="dato">Anuncio: <b>${esc(nom)}</b></div>` : ''}
+        <div class="dato">${id ? `<b style="color:var(--verde)">Ya cogida${cat && cat.id !== 'cogida' ? ' · ' + esc(cat.n) : ''}</b>`
+                              : '<b style="color:var(--ambar)">Sin coger</b>'}</div>
+        <button class="ir" data-buscair="${h.t}.${h.bi}.${h.k}">Ir a esta bolsa</button>
+      </div>`;
+    }).join('');
+  }
+  function abrirLupa() {
+    if (!TANDAS.length) { susurro('Todavía no hay ninguna recogida cargada.'); return; }
+    $('buscador').hidden = false;
+    const c = $('buscaNum'); c.value = ''; $('buscaRes').innerHTML = '';
+    setTimeout(() => c.focus(), 50);
+  }
+  const cerrarLupa = () => { $('buscador').hidden = true; };
+  $('lupa').addEventListener('click', abrirLupa);
+  $('buscaCerrar').addEventListener('click', cerrarLupa);
+  $('buscaNum').addEventListener('input', (e) => buscarFicha(e.target.value));
+  $('buscaRes').addEventListener('click', (e) => {
+    const ir = e.target.closest('[data-buscair]');
+    if (!ir) return;
+    const [t, b, k] = ir.dataset.buscair.split('.').map(Number);
+    cerrarLupa();
+    T = t; B = b; foco = k; $('barra').hidden = false; pintar(); window.scrollTo(0, 0);
   });
 
   /* ------------------------------------------------------------ arranque */
