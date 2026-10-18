@@ -87,6 +87,12 @@ tr.elegida { background: var(--sel); }
 .ajustes-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; }
 .ajustes-grid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
 .ajustes-grid input { width: 80px; text-align: right; }
+.sub-ajustes { font-size: 13px; margin: 16px 0 4px; }
+.tabla-coste { border: 1px solid var(--linea); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.tabla-coste .cab { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
+.tabla-coste .ajustes-grid input::placeholder { color: var(--t3); }
+.nueva-tabla { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; font-size: 13px; padding: 10px 12px; border: 1px dashed var(--linea-2); border-radius: 8px; }
+.nueva-tabla label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--t2); }
 @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } .dos { grid-template-columns: 1fr; } .ajustes-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
@@ -122,6 +128,9 @@ tr.elegida { background: var(--sel); }
     <label>Comisión
       <select id="f-comision"><option value="real">La real de TikTok</option><option value="9">Simular al 9 %</option></select>
     </label>
+    <label>IVA de la venta
+      <select id="f-iva"><option value="no">Sin restar</option><option value="si">Restar IVA</option></select>
+    </label>
     <button id="btn-cargar">Ver</button>
     <div class="hueco"></div>
     <span class="estado-sync" id="estado-sync"></span>
@@ -131,9 +140,21 @@ tr.elegida { background: var(--sel); }
 
   <div class="caja oculto" id="ajustes">
     <h2>Costes y sueldos</h2>
-    <div class="nota">Coste por prenda con IVA y porte (precios de factura). Camisa, track pant y vaquero están estimados, no pesados. Se guardan en este ordenador.</div>
-    <div class="ajustes-grid" id="ajustes-costes"></div>
-    <div style="height:12px"></div>
+    <div class="nota">Costes por prenda SIN IVA (las compras son intracomunitarias: ese IVA se deduce, no es coste). Cada venta usa la tabla de su país con la fecha de inicio más reciente que no sea posterior al día de la venta. Una casilla vacía hereda el coste de la tabla anterior del mismo país. Se guardan en este ordenador.</div>
+    <h3 class="sub-ajustes">IVA de la venta por país</h3>
+    <div class="nota">Solo se usa si arriba eliges «IVA de la venta: Restar IVA». Entonces se quita de todo lo que paga el comprador (la prenda y el envío): importe / (1 + IVA). Hoy todo tributa en España (21 %).</div>
+    <div class="ajustes-grid" id="ajustes-iva"></div>
+    <h3 class="sub-ajustes">Tablas de coste</h3>
+    <div id="ajustes-tablas"></div>
+    <div class="nueva-tabla">
+      <b>Nueva tabla</b> (para la próxima compra)
+      <label>País <select id="nt-pais"><option value="es">España</option><option value="de">Alemania</option><option value="nl">Holanda</option></select></label>
+      <label>Desde <input type="date" id="nt-desde"></label>
+      <label>Nombre <input type="text" id="nt-nombre" placeholder="p. ej. ReRags 123 (nov 2026)" style="width:240px"></label>
+      <button id="btn-nueva-tabla">Añadir</button>
+      <span class="neg" id="nt-error"></span>
+    </div>
+    <h3 class="sub-ajustes">Sueldos</h3>
     <div class="ajustes-grid" id="ajustes-sueldos"></div>
     <div style="margin-top:12px; display:flex; gap:8px">
       <button id="btn-guardar-ajustes" class="principal">Guardar</button>
@@ -204,9 +225,40 @@ const API = '/api/finanzas';
 const PRIMER_DIA = '2026-09-28';
 const PAISES = { es: 'España', de: 'Alemania', nl: 'Holanda' };
 const CUENTAS = { bv: 'BV', bto: 'BTo', bta: 'BTa', de: 'DE', nl: 'NL' };
-const COSTES_FABRICA = { 'Sudadera': 1.87, 'Camiseta': 0.33, 'Polo': 0.67, 'Punto': 5.65, 'NBA': 4.08, 'Fútbol': 6.10,
-  'Camisa': 2.95, 'Shorts': 1.05, 'Track pant': 3.73, 'Vaquero': 1.34, 'Chaqueta': 6.07, 'Chaleco': 3.73,
-  'Track jacket': 2.52, 'Anorak': 11.14, 'Producto 1 €': 0, 'Otra': 0 };
+/* COSTES E IVA · criterio del 18 oct 2026 (decidido con Aaron).
+ *
+ * Los costes van SIN IVA: las compras son intracomunitarias, el IVA se
+ * autoliquida y se deduce, no es coste. Y a la venta se le quita el IVA
+ * (venta / 1,21): hasta el 18 oct los costes llevaban el 21 % y la venta no se
+ * tocaba, y eso inflaba el beneficio. De momento todo tributa en España, asi
+ * que el IVA de la venta es el 21 % tambien en Alemania; esta por pais para
+ * poder cambiarlo (p. ej. a 19 % si Alemania pasa a tributar alli).
+ *
+ * Hay una tabla de costes por pais y fecha de inicio. Cada venta usa la tabla
+ * de su pais con la fecha de inicio mas reciente que no sea posterior al dia de
+ * la venta (hora de Madrid). Si a esa tabla le falta una categoria, se usa la
+ * de la tabla anterior del mismo pais: asi una compra nueva solo lleva lo que
+ * trae, y el resto sigue con el coste del stock anterior. */
+const CATEGORIAS = ['Sudadera', 'Camiseta', 'Polo', 'Punto', 'NBA', 'Fútbol', 'Camisa', 'Shorts', 'Track pant',
+  'Vaquero', 'Chaqueta', 'Chaleco', 'Track jacket', 'Anorak', 'Producto 1 €', 'Otra'];
+/* Lista de España sin IVA: la anterior (con IVA y porte) dividida entre 1,21. */
+const LISTA_ESPANA = { 'Sudadera': 1.55, 'Camiseta': 0.27, 'Polo': 0.55, 'Punto': 4.67, 'NBA': 3.37, 'Fútbol': 5.04,
+  'Camisa': 2.44, 'Shorts': 0.87, 'Track pant': 3.08, 'Vaquero': 1.11, 'Chaqueta': 5.02, 'Chaleco': 3.08,
+  'Track jacket': 2.08, 'Anorak': 9.21, 'Producto 1 €': 0, 'Otra': 0 };
+const TABLAS_FABRICA = [
+  { id: 'es-base', pais: 'es', desde: '2026-01-01', nombre: 'Lista España (sin IVA)', costes: { ...LISTA_ESPANA } },
+  { id: 'de-base', pais: 'de', desde: '2026-01-01', nombre: 'Lista España (sin IVA)', costes: { ...LISTA_ESPANA } },
+  { id: 'nl-base', pais: 'nl', desde: '2026-01-01', nombre: 'Lista España (sin IVA)', costes: { ...LISTA_ESPANA } },
+  /* ReRags, oferta 1610411518 (7 oct 2026): 1.820 kg, 14.160 € de ropa + 850 €
+   * de envio. Envio repartido por peso (0,467 €/kg). Coste de una categoria =
+   * (€ de sus lineas + kg x 0,467) / (kg x prendas por kilo). Sin IVA. Las
+   * sudaderas a 2,25 por kilo son dato de Aaron; Levi's y Gore-Tex a 1,5 son
+   * estimacion sin pesar. Lo que no viene en esta compra hereda la lista de
+   * España (stock anterior). Se vende en Alemania desde el jueves 15 oct. */
+  { id: 'de-rerags-1610411518', pais: 'de', desde: '2026-10-15', nombre: 'ReRags 1610411518 (7 oct 2026)',
+    costes: { 'Sudadera': 3.12, 'Camiseta': 1.41, 'Punto': 4.36, 'Fútbol': 3.29, 'Track pant': 3.59, 'Vaquero': 4.31, 'Chaqueta': 5.49 } },
+];
+const IVA_FABRICA = { es: 21, de: 21, nl: 21 };
 const SUELDOS_FABRICA = { es: 9, de: 15, nl: 0, vendedoras: 1 };
 
 /* Lo que dice el nombre del anuncio. El orden importa: "track jacket" antes
@@ -263,7 +315,33 @@ const leerLocal = (k, def) => { try { const v = localStorage.getItem(k); return 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let CODIGO = leerLocal('fin_codigo', '');
-let COSTES = { ...COSTES_FABRICA, ...leerLocal('fin_costes', {}) };
+/* Lo guardado en el navegador va con una llave nueva. Lo de la llave vieja
+ * (fin_costes) llevaba IVA y NO se lee: no puede pisar las tablas nuevas. */
+try { localStorage.removeItem('fin_costes'); } catch (e) {}
+const copiaTablas = (ts) => ts.map((t) => ({ ...t, costes: { ...t.costes } }));
+function leerTablas() {
+  const g = leerLocal('fin_costes_v2', null);
+  const propias = (g && Array.isArray(g.tablas)) ? g.tablas : [];
+  const porId = new Map(copiaTablas(TABLAS_FABRICA).map((t) => [t.id, t]));
+  for (const t of propias) if (t && t.id && t.pais && /^\d{4}-\d{2}-\d{2}$/.test(t.desde)) porId.set(t.id, { ...t, costes: { ...(t.costes || {}) } });
+  for (const id of ((g && g.borradas) || [])) porId.delete(id);
+  return [...porId.values()];
+}
+let TABLAS = leerTablas();
+let IVA = { ...IVA_FABRICA, ...((leerLocal('fin_costes_v2', null) || {}).iva || {}) };
+/* Tablas de un pais, de la mas nueva a la mas vieja. */
+const tablasDe = (pais) => TABLAS.filter((t) => t.pais === pais).sort((a, b) => b.desde.localeCompare(a.desde));
+/* La tabla que manda un dia, y el coste de una categoria ese dia (con herencia). */
+const tablaDelDia = (pais, dia) => tablasDe(pais).find((t) => t.desde <= dia) || null;
+function costeDe(pais, dia, cat) {
+  for (const t of tablasDe(pais)) {
+    if (t.desde > dia) continue;
+    const v = t.costes[cat];
+    if (v !== undefined && v !== null && v !== '' && Number.isFinite(Number(v))) return { coste: Number(v), tabla: t };
+  }
+  return { coste: null, tabla: null };
+}
+const ivaDe = (pais) => (Number(IVA[pais]) || 0) / 100;
 let SUELDOS = { ...SUELDOS_FABRICA, ...leerLocal('fin_sueldos', {}) };
 let CRUDO = null;         /* respuesta del servidor */
 let PRENDAS = [];         /* prendas ya calculadas */
@@ -306,12 +384,24 @@ function calcular() {
     /* El coste puesto a mano a esta prenda (una chaqueta de 80 €) manda sobre
      * el de su categoria. */
     const aMano = v.costeAMano != null;
-    const costeUd = aMano ? v.costeAMano : (Number(COSTES[cat]) || 0);
+    const deTabla = costeDe(v.pais, v.dia, cat);
+    const costeUd = aMano ? v.costeAMano : (deTabla.coste || 0);
     const coste = cobrada ? costeUd : 0;
+    /* IVA de lo que paga el comprador: la prenda y tambien el envio que paga
+     * (los dos van con IVA dentro y ese IVA no es nuestro). Si TikTok aun no
+     * da lo que pago el comprador de envio, ahi solo sale el IVA de la prenda. */
+    /* Por defecto NO se resta (decision de Aaron, 18 oct): solo si se elige
+     * "Restar IVA" arriba. */
+    const t = $('#f-iva').value === 'si' ? ivaDe(v.pais) : 0;
+    const envioPagado = cobrada ? Math.max(0, Number((v.det || {}).customer_paid_shipping_fee) || 0) : 0;
+    const ivaPrenda = cobrada ? v.ingreso - v.ingreso / (1 + t) : 0;
+    const ivaEnvio = envioPagado - envioPagado / (1 + t);
+    const ivaVenta = ivaPrenda + ivaEnvio;
     const s = ses[v.sesion];
     const vendedora = s.sueldo / s.n;           /* se reparte entre TODAS las vendidas, cobradas o no */
-    return { ...v, cat, marca, cobrada, reembolsada, conDinero, comision, neto, coste, vendedora,
-      beneficio: (conDinero ? neto : 0) - coste - vendedora, sinCoste: cobrada && !aMano && !(Number(COSTES[cat]) > 0), aMano };
+    return { ...v, cat, marca, cobrada, reembolsada, conDinero, comision, neto, coste, vendedora, ivaVenta, costeUd,
+      tablaCoste: aMano ? 'a mano' : (deTabla.tabla ? deTabla.tabla.nombre : ''),
+      beneficio: (conDinero ? neto : 0) - ivaVenta - coste - vendedora, sinCoste: cobrada && !aMano && !(deTabla.coste > 0), aMano };
   });
   return ses;
 }
@@ -325,14 +415,14 @@ function filtradas() {
 /* Suma de un grupo de prendas: lo que se enseña en todas las tablas. */
 function sumar(ps) {
   const a = { n: ps.length, cobradas: 0, remate: 0, remateCobrado: 0, ingreso: 0, comision: 0, envio: 0, ajuste: 0, neto: 0,
-    netoEstimado: 0, coste: 0, vendedora: 0, beneficio: 0, liquidadas: 0, sinCoste: 0, reembolsadas: 0, sinPagar: 0, canceladas: 0 };
+    netoEstimado: 0, coste: 0, ivaVenta: 0, vendedora: 0, beneficio: 0, liquidadas: 0, sinCoste: 0, reembolsadas: 0, sinPagar: 0, canceladas: 0 };
   for (const p of ps) {
     a.remate += p.remate; a.vendedora += p.vendedora; a.beneficio += p.beneficio;
     if (p.sinCoste) a.sinCoste++;
     if (p.reembolsada) { a.reembolsadas++; a.neto += p.neto; a.comision += p.comision; a.envio += p.envio; a.ajuste += p.ajuste; continue; }
     if (!p.cobrada) { if (p.estado === 'C') a.canceladas++; else a.sinPagar++; continue; }
     a.cobradas++; a.remateCobrado += p.remate; a.ingreso += p.ingreso; a.comision += p.comision; a.envio += p.envio;
-    a.ajuste += p.ajuste; a.neto += p.neto; a.coste += p.coste;
+    a.ajuste += p.ajuste; a.neto += p.neto; a.coste += p.coste; a.ivaVenta += p.ivaVenta;
     if (p.estado === 'L') a.liquidadas++; else a.netoEstimado += p.neto;
   }
   a.tasaCobro = a.n ? a.cobradas / a.n : null;
@@ -341,6 +431,7 @@ function sumar(ps) {
   a.precioMedio = a.cobradas ? a.remateCobrado / a.cobradas : null;
   a.netoMedio = a.cobradas ? a.neto / a.cobradas : null;
   a.margen = a.neto ? a.beneficio / a.neto : null;
+  a.costeMedio = a.cobradas ? a.coste / a.cobradas : null;
   return a;
 }
 const agrupar = (ps, clave) => { const g = {}; for (const p of ps) (g[clave(p)] = g[clave(p)] || []).push(p); return g; };
@@ -348,6 +439,7 @@ const agrupar = (ps, clave) => { const g = {}; for (const p of ps) (g[clave(p)] 
 /* ================================================================== tablas */
 const orden = {};
 function tabla(id, columnas, filas, opciones = {}) {
+  if ($('#f-iva').value !== 'si') columnas = columnas.filter((c) => c.k !== 'ivaVenta');
   const el = document.getElementById(id);
   const o = orden[id] || opciones.orden || null;
   if (o) filas = filas.slice().sort((a, b) => { const x = a[o.k], y = b[o.k];
@@ -373,7 +465,8 @@ const colsDinero = [
   { k: 'neto', t: 'Liquidado', f: (v, f) => eur0(v) + (f.netoEstimado ? ` <span class="etiqueta" title="De esto, ${eur0(f.netoEstimado)} es estimación de TikTok">${pct(f.neto ? f.netoEstimado / f.neto : 0, 0)} est.</span>` : ''), ayuda: 'Lo que TikTok paga. Real si ya liquidó; estimado si no.' },
   { k: 'comision', t: 'Comisión', f: (v, f) => eur0(v) + ` <span class="muted">${pct(f.comisionPct)}</span>`, color: true },
   { k: 'envio', t: 'Envío neto', f: eur0, color: true, ayuda: 'Lo que TikTok abona (+) o cobra (−) por envío, neto' },
-  { k: 'coste', t: 'Coste prendas', f: (v) => eur0(-v), color: false },
+  { k: 'ivaVenta', t: 'IVA venta', f: (v) => eur0(-v), ayuda: 'IVA que va dentro de lo que paga el comprador, prenda y envío: importe − importe / (1 + IVA del país). No es nuestro. El del envío solo sale en los pedidos en los que TikTok ya da lo que pagó el comprador de envío.' },
+  { k: 'coste', t: 'Coste prendas', f: (v) => eur0(-v), color: false, ayuda: 'Sin IVA, con la tabla de coste de su país y fecha' },
   { k: 'vendedora', t: 'Vendedora', f: (v) => eur0(-v) },
   { k: 'beneficio', t: 'Beneficio', f: (v) => '<b>' + eur0(v) + '</b>', color: true },
   { k: 'porPrenda', t: '€/prenda', f: (v) => eur(v), color: true, ayuda: 'Beneficio por prenda cobrada' },
@@ -392,6 +485,7 @@ function pintar() {
   if (sinSync.length) av.push('Aún no se han traído los datos de TikTok de ' + sinSync.join(' y ') + '. Pulsa «Traer datos nuevos de TikTok».');
   if (t.sinCoste) av.push(`${t.sinCoste} prendas cobradas son de una categoría sin coste puesto (${[...new Set(ps.filter((p) => p.sinCoste).map((p) => p.cat))].join(', ')}). Su beneficio sale inflado: ponle coste en «Costes y sueldos».`);
   if ($('#f-comision').value === '9') av.push('Estás viendo la comisión simulada al 9 %, no la real.');
+  if ($('#f-iva').value === 'si') av.push('Estás viendo el beneficio con el IVA de lo que paga el comprador (prenda y envío) ya restado.');
   if (t.netoEstimado && t.neto && t.netoEstimado / t.neto > 0.2) av.push('Buena parte de lo liquidado es aún estimación de TikTok, y sus estimaciones no incluyen el envío hasta que el paquete se entrega. En las liquidaciones reales del 29 sep el envío neto fue de unos +0,25 € por pedido en Alemania y −0,07 € en España: Alemania saldrá algo mejor cuando se liquide.');
   $('#avisos').innerHTML = av.map((x) => `<div class="aviso">${esc(x)}</div>`).join('');
 
@@ -446,7 +540,7 @@ function porCategoria(ps) {
     const a = sumar(gp);
     const porPais = {};
     for (const [p, x] of Object.entries(agrupar(gp, (y) => y.pais))) porPais[p] = sumar(x);
-    return { _id: cat, cat, ...a, costeUd: COSTES[cat], porPais };
+    return { _id: cat, cat, ...a, costeUd: a.costeMedio, porPais };
   });
 }
 
@@ -459,10 +553,10 @@ function pCategorias(ps) {
     borderRadius: 4, borderSkipped: 'start', barPercentage: 0.8, categoryPercentage: 0.7 }));
   barras('g-cat-benef', cats, serie((a) => a.porPrenda), true);
   barras('g-cat-precio', cats, serie((a) => a.precioMedio), true);
-  $('#nota-cat').textContent = 'Solo salen en los gráficos las categorías con 3 o más prendas cobradas en ese país. Coste unitario editable en «Costes y sueldos».';
+  $('#nota-cat').textContent = 'Solo salen en los gráficos las categorías con 3 o más prendas cobradas en ese país. Coste por prenda sin IVA, según la tabla de su país y fecha («Costes y sueldos»).';
   tabla('t-cat', [
     { k: 'cat', t: 'Categoría', izq: true },
-    { k: 'costeUd', t: 'Coste/ud', f: (v) => eur(v), muted: true },
+    { k: 'costeUd', t: 'Coste/ud', f: (v) => eur(v), muted: true, ayuda: 'Coste medio sin IVA de las cobradas: si hay ventas de dos tablas (antes y después de una compra nueva), es la media de las dos' },
     { k: 'n', t: 'Vendidas', f: ent },
     { k: 'netoMedio', t: 'Liquidado/prenda', f: (v) => eur(v) },
     ...colsDinero,
@@ -519,7 +613,8 @@ function pPrendas(ps) {
     { k: 'neto', t: 'Liquidado', f: (v, f) => f.conDinero ? eur(v) : '—' },
     { k: 'comision', t: 'Comisión', f: (v, f) => f.conDinero ? eur(v) : '—', color: true },
     { k: 'envio', t: 'Envío', f: (v, f) => f.conDinero ? eur(v) : '—', color: true },
-    { k: 'coste', t: 'Coste', f: (v, f) => `<span class="editar-coste" title="Pulsa para poner el coste real de esta prenda" data-s="${esc(f.sesion)}" data-f="${f.ficha ?? ''}" data-nota="${esc(f.nota || '')}" data-v="${f.aMano ? f.costeAMano : ''}">${f.cobrada ? eur(-v) : '—'}${f.aMano ? ' <span class="etiqueta">a mano</span>' : ' ✎'}</span>` },
+    { k: 'ivaVenta', t: 'IVA venta', f: (v, f) => f.cobrada ? eur(-v) : '—' },
+    { k: 'coste', t: 'Coste', f: (v, f) => `<span class="editar-coste" title="${esc(f.tablaCoste ? 'Coste sin IVA: ' + f.tablaCoste + '. ' : '')}Pulsa para poner el coste real de esta prenda" data-s="${esc(f.sesion)}" data-f="${f.ficha ?? ''}" data-nota="${esc(f.nota || '')}" data-v="${f.aMano ? f.costeAMano : ''}">${f.cobrada ? eur(-v) : '—'}${f.aMano ? ' <span class="etiqueta">a mano</span>' : ' ✎'}</span>` },
     { k: 'nota', t: 'Nota', izq: true, muted: true, f: (v) => esc(v || '') },
     { k: 'beneficio', t: 'Beneficio', f: (v) => eur(v), color: true },
   ], filas, { orden: { k: 'h', d: -1 } });
@@ -688,13 +783,40 @@ async function sincronizar() {
 
 /* ================================================================= ajustes */
 function pintarAjustes() {
-  $('#ajustes-costes').innerHTML = Object.keys(COSTES_FABRICA).map((c) =>
-    `<label>${esc(c)} <input type="number" step="0.01" min="0" data-c="${esc(c)}" value="${COSTES[c]}"></label>`).join('');
+  $('#ajustes-iva').innerHTML = Object.keys(PAISES).map((p) =>
+    `<label>${PAISES[p]} % <input type="number" step="0.1" min="0" data-iva="${p}" value="${IVA[p]}"></label>`).join('');
+  const hoy = hoyMadrid();
+  $('#ajustes-tablas').innerHTML = Object.keys(PAISES).map((pais) => tablasDe(pais).map((t) => {
+    const manda = tablaDelDia(pais, hoy) === t;
+    const anterior = (cat) => { const ts = tablasDe(pais).filter((x) => x.desde < t.desde); for (const x of ts) { const v = x.costes[cat]; if (v !== undefined && v !== '' && v !== null) return Number(v); } return null; };
+    const fabrica = TABLAS_FABRICA.some((x) => x.id === t.id);
+    return `<div class="tabla-coste" data-id="${esc(t.id)}">
+      <div class="cab"><span class="punto" style="background:var(--${pais})"></span><b>${PAISES[pais]}</b>
+        <span>desde el ${diaCorto(t.desde)}/${t.desde.slice(0, 4)}</span><span class="muted">${esc(t.nombre)}</span>
+        ${manda ? '<span class="etiqueta">es la que aplica hoy</span>' : ''}
+        ${fabrica ? '' : `<button class="btn-borrar-tabla" data-id="${esc(t.id)}">Borrar</button>`}</div>
+      <div class="ajustes-grid">${CATEGORIAS.map((c) => { const v = t.costes[c]; const a = anterior(c);
+        return `<label>${esc(c)} <input type="number" step="0.01" min="0" data-cat="${esc(c)}" value="${v === undefined || v === null ? '' : v}" placeholder="${a === null ? '' : String(a).replace('.', ',')}" title="${a === null ? '' : 'Vacío: hereda ' + String(a).replace('.', ',') + ' € de la tabla anterior'}"></label>`; }).join('')}</div>
+      ${tablasDe(pais).some((x) => x.desde < t.desde) ? `<div class="muted" style="font-size:12px;margin-top:6px">Casillas en gris: heredan el coste de la tabla anterior de ${PAISES[pais]}.</div>` : ''}
+    </div>`; }).join('')).join('');
+  document.querySelectorAll('.btn-borrar-tabla').forEach((b) => b.onclick = () => {
+    TABLAS = TABLAS.filter((t) => t.id !== b.dataset.id); pintarAjustes();
+  });
   $('#ajustes-sueldos').innerHTML =
     `<label>Vendedora España €/h <input type="number" step="0.5" data-s="es" value="${SUELDOS.es}"></label>` +
     `<label>Vendedora Alemania €/h <input type="number" step="0.5" data-s="de" value="${SUELDOS.de}"></label>` +
     `<label>Vendedora Holanda €/h <input type="number" step="0.5" data-s="nl" value="${SUELDOS.nl}"></label>` +
     `<label>Vendedoras por directo <input type="number" step="1" min="1" data-s="vendedoras" value="${SUELDOS.vendedoras}"></label>`;
+}
+/* Lo que hay escrito en la pantalla de ajustes, a las tablas (sin guardar aun). */
+function leerPantallaTablas() {
+  document.querySelectorAll('#ajustes-tablas .tabla-coste').forEach((div) => {
+    const t = TABLAS.find((x) => x.id === div.dataset.id); if (!t) return;
+    const costes = {};
+    div.querySelectorAll('input[data-cat]').forEach((i) => { const v = i.value.trim().replace(',', '.'); if (v !== '' && Number.isFinite(Number(v))) costes[i.dataset.cat] = Number(v); });
+    t.costes = costes;
+  });
+  document.querySelectorAll('#ajustes-iva input').forEach((i) => IVA[i.dataset.iva] = Number(i.value) || 0);
 }
 
 /* ================================================================== inicio */
@@ -715,17 +837,34 @@ $('#codigo').onkeydown = (e) => { if (e.key === 'Enter') $('#btn-entrar').click(
 $('#btn-cargar').onclick = cargar;
 $('#btn-sync').onclick = sincronizar;
 $('#btn-ajustes').onclick = () => $('#ajustes').classList.toggle('oculto');
+$('#btn-nueva-tabla').onclick = () => {
+  leerPantallaTablas();
+  const pais = $('#nt-pais').value, desde = $('#nt-desde').value, nombre = $('#nt-nombre').value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde)) { $('#nt-error').textContent = 'Pon la fecha desde la que se vende esa compra.'; return; }
+  if (TABLAS.some((t) => t.pais === pais && t.desde === desde)) { $('#nt-error').textContent = 'Ya hay una tabla de ese país con esa fecha.'; return; }
+  $('#nt-error').textContent = '';
+  TABLAS.push({ id: pais + '-' + desde + '-' + Date.now().toString(36), pais, desde, nombre: nombre || 'Compra del ' + diaCorto(desde), costes: {} });
+  $('#nt-nombre').value = '';
+  pintarAjustes();
+};
 $('#btn-guardar-ajustes').onclick = () => {
-  document.querySelectorAll('#ajustes-costes input').forEach((i) => COSTES[i.dataset.c] = Number(i.value) || 0);
+  leerPantallaTablas();
   document.querySelectorAll('#ajustes-sueldos input').forEach((i) => SUELDOS[i.dataset.s] = Number(i.value) || 0);
-  guardarLocal('fin_costes', COSTES); guardarLocal('fin_sueldos', SUELDOS);
+  const fabricaIds = new Set(TABLAS_FABRICA.map((t) => t.id));
+  /* Solo se guardan las tablas nuevas y las de fabrica que se hayan cambiado:
+   * si mañana se corrige una tabla de fabrica en el codigo, la correccion llega. */
+  const igual = (x, y) => JSON.stringify(Object.entries(x).sort()) === JSON.stringify(Object.entries(y).sort());
+  const propias = TABLAS.filter((t) => { const f = TABLAS_FABRICA.find((x) => x.id === t.id); return !f || f.desde !== t.desde || !igual(f.costes, t.costes); });
+  guardarLocal('fin_costes_v2', { v: 2, tablas: propias, iva: IVA,
+    borradas: [...fabricaIds].filter((id) => !TABLAS.some((t) => t.id === id)) });
+  guardarLocal('fin_sueldos', SUELDOS);
   $('#ajustes').classList.add('oculto');
   if (CRUDO) { calcular.ses = calcular(); pintar(); }
 };
-$('#btn-reset-ajustes').onclick = () => { COSTES = { ...COSTES_FABRICA }; SUELDOS = { ...SUELDOS_FABRICA }; pintarAjustes(); };
+$('#btn-reset-ajustes').onclick = () => { TABLAS = copiaTablas(TABLAS_FABRICA); IVA = { ...IVA_FABRICA }; SUELDOS = { ...SUELDOS_FABRICA }; pintarAjustes(); };
 $('#btn-quitar-directo').onclick = () => { DIRECTO = ''; pintar(); };
-['#f-pais', '#f-canal', '#f-cat', '#f-comision'].forEach((s) => $(s).onchange = () => {
-  if (s === '#f-comision') calcular.ses = calcular();
+['#f-pais', '#f-canal', '#f-cat', '#f-comision', '#f-iva'].forEach((s) => $(s).onchange = () => {
+  if (s === '#f-comision' || s === '#f-iva') calcular.ses = calcular();
   pintar();
 });
 document.querySelectorAll('#pestanas button').forEach((b) => b.onclick = () => {
