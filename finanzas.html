@@ -93,6 +93,12 @@ tr.elegida { background: var(--sel); }
 .tabla-coste .ajustes-grid input::placeholder { color: var(--t3); }
 .nueva-tabla { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; font-size: 13px; padding: 10px 12px; border: 1px dashed var(--linea-2); border-radius: 8px; }
 .nueva-tabla label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--t2); }
+.explica { font-size: 13px; color: var(--t2); }
+.explica summary { cursor: pointer; font-weight: 600; color: var(--t1); }
+.explica dl { display: grid; grid-template-columns: minmax(180px, 240px) 1fr; gap: 6px 16px; margin: 10px 0 0; }
+.explica dt { font-weight: 600; color: var(--t1); }
+.explica dd { margin: 0; }
+.fila-sel { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
 @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } .dos { grid-template-columns: 1fr; } .ajustes-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
@@ -172,6 +178,7 @@ tr.elegida { background: var(--sel); }
 
   <div class="pestanas" id="pestanas">
     <button data-p="directos" class="activa">Directos</button>
+    <button data-p="publico">Público</button>
     <button data-p="categorias">Categorías</button>
     <button data-p="marcas">Marcas</button>
     <button data-p="evolucion">Evolución</button>
@@ -185,6 +192,38 @@ tr.elegida { background: var(--sel); }
       <div class="nota">Pulsa un directo para ver solo ese en todas las pestañas. Liquidado = lo que TikTok paga (real si ya liquidó, estimado si no). Beneficio = liquidado − coste de las prendas − vendedora.</div>
       <div class="tabla-alta"><table id="t-directos"></table></div>
     </div>
+  </section>
+
+  <section data-s="publico" class="oculto">
+    <div class="kpis" id="pub-kpis"></div>
+    <div class="caja">
+      <details class="explica" id="pub-explica">
+        <summary>Cómo leer estas cifras</summary>
+        <dl>
+          <dt>Espectadores</dt><dd>Personas distintas que entraron al directo, según TikTok. Por hora: espectadores entre horas de directo; sirve para comparar directos de distinta duración.</dd>
+          <dt>Gente en sala</dt><dd>Media de personas dentro del directo en cada minuto. Es la clientela real que tiene la vendedora delante en cada momento.</dd>
+          <dt>Valor del espectador</dt><dd>Beneficio del directo por cada 1.000 espectadores. Dice cuánto dinero se saca de la gente que entra: si sube el público y esto baja, la gente está entrando y no comprando (falta stock, ritmo o prendas).</dd>
+          <dt>Compra por 1.000</dt><dd>Prendas vendidas por cada 1.000 espectadores. Es la conversión del directo.</dd>
+          <dt>Segundos medios</dt><dd>Tiempo medio que se queda cada visita. Con menos de un minuto, lo que se ve al entrar decide si alguien se queda.</dd>
+          <dt>Interés</dt><dd>Clics en prendas por cada 100 visitas: cuánta gente mira el producto.</dd>
+          <dt>Clic a compra</dt><dd>Prendas vendidas en TikTok por cada 100 clics en prendas: de los que miran, cuántos compran.</dd>
+          <dt>Empujón de TikTok</dt><dd>Al empezar un directo TikTok lo enseña a mucha gente: entre el minuto 10 y el 20 suele haber el doble o el triple de público que el resto del directo.</dd>
+          <dt>Aprovechamiento del empujón</dt><dd>Beneficio por cada persona-minuto en los minutos 5 a 30, comparado con el del resto del directo. 100 = se aprovecha igual que el resto; menos de 100 = llega mucha gente y se vende peor que luego (se está desperdiciando el empujón); más de 100 = bien aprovechado.</dd>
+          <dt>Seguidores por hora</dt><dd>Seguidores nuevos ganados por hora de directo: el público que vuelve mañana.</dd>
+        </dl>
+      </details>
+    </div>
+    <div class="caja">
+      <h2>La curva de un directo</h2>
+      <div class="nota">Gente en sala minuto a minuto (línea de color) y beneficio acumulado de lo vendido (línea discontinua, escala de la derecha): donde sube más rápido es donde se está ganando dinero. La franja gris es el empujón de TikTok, del minuto 10 al 20. Pulsa un directo en la tabla de abajo para verlo aquí.</div>
+      <div class="fila-sel"><label for="pub-sel">Directo</label><select id="pub-sel"></select><span class="muted" id="pub-curva-nota"></span></div>
+      <div class="grafico" style="height:360px"><canvas id="g-pub-curva"></canvas></div>
+    </div>
+    <div class="dos">
+      <div class="caja"><h2>El empujón de TikTok al empezar</h2><div class="nota">Gente en sala según los minutos que lleva el directo, en % de lo normal en ese mismo directo (100 % = su mediana).</div><div class="grafico"><canvas id="g-pub-arranque"></canvas></div></div>
+      <div class="caja"><h2>Gente en sala según la hora</h2><div class="nota">Media de personas en el directo en cada hora del reloj (hora de Madrid). Al pasar el ratón, el valor del espectador en esa hora.</div><div class="grafico"><canvas id="g-pub-horas"></canvas></div></div>
+    </div>
+    <div class="caja"><h2>Cada directo, visto desde el público</h2><div class="nota">Datos de TikTok con un día de retraso. Pulsa una fila para ver su curva arriba. Los directos sin tablet (p. ej. los de noche de billysvlc) solo tienen datos de TikTok, sin beneficio. El filtro de categoría no se aplica en esta pestaña.</div><div class="tabla-alta"><table id="t-pub"></table></div></div>
   </section>
 
   <section data-s="categorias" class="oculto">
@@ -510,7 +549,7 @@ function pintar() {
 
   /* ---- pestañas */
   document.querySelectorAll('section[data-s]').forEach((s) => s.classList.toggle('oculto', s.dataset.s !== PESTANA));
-  ({ directos: pDirectos, categorias: pCategorias, marcas: pMarcas, evolucion: pEvolucion, prendas: pPrendas, tiktok: pTiktok })[PESTANA](ps, t, ses);
+  ({ directos: pDirectos, publico: pPublico, categorias: pCategorias, marcas: pMarcas, evolucion: pEvolucion, prendas: pPrendas, tiktok: pTiktok })[PESTANA](ps, t, ses);
 }
 
 function pDirectos(ps, t, ses) {
@@ -686,6 +725,182 @@ function pTiktok(ps) {
   ], otros, { orden: { k: 'dia', d: -1 }, total: tot });
 }
 
+/* ================================================================= publico */
+/* 23 oct 2026. Lo que TikTok sabe del publico de cada directo (permiso "TikTok
+ * Shop Analytics"), cruzado minuto a minuto con lo vendido en la tablet. Los
+ * datos de TikTok llegan con un dia de retraso. Se traen con el boton de
+ * sincronizar y se leen ya guardados con ?accion=publico. */
+const CUENTA_CANAL = { billystourvlc: 'bto', billystacos: 'bta', billysvlc: 'bv', 'billys.de': 'de', billys_nl: 'nl' };
+let PUBLICO = null;   /* respuesta de ?accion=publico */
+let PUB_SEL = '';     /* directo de TikTok elegido para la curva */
+const dec1 = (n) => (n == null || !isFinite(n)) ? '—' : n.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const mediana = (a) => { if (!a.length) return 0; const b = a.slice().sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+const TRAMOS_PUB = [[0, 5, '0-5 min'], [5, 10, '5-10 min'], [10, 20, '10-20 min'], [20, 30, '20-30 min'], [30, 60, '30-60 min'], [60, 120, '1-2 h'], [120, 1e9, '2 h o más']];
+
+/* Cada directo de TikTok con su sesion de tablet (misma cuenta, la que mas se
+ * solapa en el tiempo) y sus cifras. */
+function directosPublico() {
+  if (!PUBLICO || !Array.isArray(PUBLICO.directos)) return [];
+  const sesT = {};
+  for (const p of PRENDAS) {
+    const s = sesT[p.sesion] = sesT[p.sesion] || { id: p.sesion, canal: p.canal, desde: p.h, hasta: p.h, ps: [] };
+    s.desde = Math.min(s.desde, p.h); s.hasta = Math.max(s.hasta, p.h); s.ps.push(p);
+  }
+  const pais = $('#f-pais').value, canalF = $('#f-canal').value;
+  return PUBLICO.directos.filter((L) => L.publico).map((L) => {
+    const canal = CUENTA_CANAL[L.cuenta] || '';
+    let ses = null, mejor = 0;
+    for (const s of Object.values(sesT)) {
+      if (s.canal !== canal) continue;
+      const ov = Math.min(s.hasta, L.fin) - Math.max(s.desde, L.inicio);
+      if (ov > mejor) { mejor = ov; ses = s; }
+    }
+    return { L, canal, ses };
+  }).filter((x) => (!pais || x.L.pais === pais) && (!canalF || x.canal === canalF))
+    .map(({ L, canal, ses }) => medirDirecto(L, canal, ses));
+}
+
+function medirDirecto(L, canal, ses) {
+  const p = L.publico, horas = Math.max((L.fin - L.inicio) / 3600000, 0.05);
+  const mins = (L.minutos || []).map(([t, esp, vis, cl]) => ({ t: t * 1000, esp, vis, cl, d: (t * 1000 - L.inicio) / 60000, benef: 0, n: 0 }));
+  /* Los minutos de TikTok no empiezan en el segundo 0: se casan las ventas con
+   * el minuto de TikTok en el que caen. */
+  const desfase = mins.length ? mins[0].t % 60000 : 0;
+  const med = mediana(mins.map((m) => m.esp));
+  let pico = null;
+  for (const m of mins) if (!pico || m.esp > pico.esp) pico = m;
+  const r = { _id: L.id, L, canal, ses, pais: L.pais, desde: L.inicio, horas,
+    dia: new Date(L.inicio).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }),
+    tienda: CUENTAS[canal] || L.cuenta, espectadores: p.espectadores, porHora: p.espectadores / horas,
+    enSala: mins.length ? mins.reduce((a, m) => a + m.esp, 0) / mins.length : null,
+    pico: pico ? pico.esp : null, picoMin: pico ? Math.round(pico.d) : null,
+    segundos: p.segundosMedios, interes: p.vistas ? p.clicsProducto / p.vistas : null,
+    clicCompra: p.clicsProducto ? L.ventas.prendas / p.clicsProducto : null,
+    segHora: p.seguidoresNuevos / horas, ventaTT: L.ventas.gmv, mins, med,
+    vendidas: null, beneficio: null, valorMil: null, compraMil: null, aprovecha: null };
+  const en = mins.filter((m) => m.d >= 10 && m.d < 20);
+  r.empujon = med && en.length ? en.reduce((a, m) => a + m.esp, 0) / en.length / med : null;
+  if (ses) {
+    const a = sumar(ses.ps);
+    r.vendidas = a.n; r.beneficio = a.beneficio;
+    r.valorMil = p.espectadores ? 1000 * a.beneficio / p.espectadores : null;
+    r.compraMil = p.espectadores ? 1000 * a.n / p.espectadores : null;
+    const porMin = {};
+    for (const x of ses.ps) { const k = Math.floor((x.h - desfase) / 60000); const o = porMin[k] = porMin[k] || { b: 0, n: 0 }; o.b += x.beneficio; o.n++; }
+    for (const m of mins) { const o = porMin[Math.floor((m.t - desfase) / 60000)]; if (o) { m.benef = o.b; m.n = o.n; } }
+    const rinde = (q) => { const e = q.reduce((x, m) => x + m.esp, 0); return e > 0 ? q.reduce((x, m) => x + m.benef, 0) / e : null; };
+    const r1 = rinde(mins.filter((m) => m.d >= 5 && m.d < 30)), r2 = rinde(mins.filter((m) => m.d >= 30));
+    r.aprovecha = r1 != null && r2 ? r1 / r2 : null;
+  }
+  return r;
+}
+
+function graficoSimple(id, tipo, etiquetas, series, fmt, extra) {
+  if (graficos[id]) graficos[id].destroy();
+  const op = baseGrafico(false);
+  op.scales.y.ticks.callback = (v) => fmt(v);
+  op.plugins.tooltip.callbacks.label = (c) => ` ${c.dataset.label}: ${fmt(c.parsed.y)}${extra ? extra(c) : ''}`;
+  if (series.length < 2) op.plugins.legend.display = false;
+  graficos[id] = new Chart(document.getElementById(id), { type: tipo, data: { labels: etiquetas, datasets: series }, options: op });
+}
+
+function pPublico() {
+  const rs = directosPublico();
+  if (!rs.length) {
+    $('#pub-kpis').innerHTML = '';
+    $('#t-pub').innerHTML = '<tbody><tr><td class="izq muted">No hay datos de público en este periodo. Pulsa «Traer datos nuevos de TikTok» (TikTok los da con un día de retraso).</td></tr></tbody>';
+    ['g-pub-curva', 'g-pub-arranque', 'g-pub-horas'].forEach((id) => { if (graficos[id]) { graficos[id].destroy(); delete graficos[id]; } });
+    $('#pub-sel').innerHTML = ''; $('#pub-curva-nota').textContent = '';
+    return;
+  }
+  /* ---- cifras de arriba */
+  const conT = rs.filter((r) => r.ses);
+  const suma = (q, f) => q.reduce((a, r) => a + (Number(f(r)) || 0), 0);
+  const horas = suma(rs, (r) => r.horas), esp = suma(rs, (r) => r.espectadores), vistas = suma(rs, (r) => r.L.publico.vistas);
+  const seg = vistas ? suma(rs, (r) => r.segundos * r.L.publico.vistas) / vistas : null;
+  const nMin = suma(rs, (r) => r.mins.length), sala = suma(rs, (r) => r.mins.reduce((a, m) => a + m.esp, 0));
+  const espT = suma(conT, (r) => r.espectadores), benT = suma(conT, (r) => r.beneficio), venT = suma(conT, (r) => r.vendidas);
+  let b1 = 0, e1 = 0, b2 = 0, e2 = 0;
+  for (const r of conT) for (const m of r.mins) { if (m.d >= 5 && m.d < 30) { b1 += m.benef; e1 += m.esp; } else if (m.d >= 30) { b2 += m.benef; e2 += m.esp; } }
+  const apro = e1 && e2 && b2 ? (b1 / e1) / (b2 / e2) : null;
+  const kp = [
+    ['Espectadores por hora', ent(horas ? esp / horas : null), `${ent(esp)} espectadores en ${dec1(horas)} h de directo`],
+    ['Gente en sala', ent(nMin ? sala / nMin : null), 'media de personas dentro en cada minuto'],
+    ['Valor del espectador', eur0(espT ? 1000 * benT / espT : null), 'beneficio por cada 1.000 espectadores'],
+    ['Compra por 1.000', dec1(espT ? 1000 * venT / espT : null), 'prendas vendidas por cada 1.000 espectadores'],
+    ['Segundos medios', seg == null ? '—' : ent(seg) + ' s', 'lo que se queda cada visita'],
+    ['Aprovechamiento del empujón', apro == null ? '—' : ent(100 * apro), '100 = igual que el resto del directo'],
+  ];
+  $('#pub-kpis').innerHTML = kp.map(([e, n, x]) => `<div class="kpi"><div class="e">${e}</div><div class="n">${n}</div><div class="x">${x}</div></div>`).join('');
+
+  /* ---- la curva de un directo */
+  const porFecha = rs.slice().sort((a, b) => b.desde - a.desde);
+  if (!rs.some((r) => r._id === PUB_SEL)) {
+    const delDirecto = DIRECTO ? rs.find((r) => r.ses && r.ses.id === DIRECTO) : null;
+    PUB_SEL = (delDirecto || porFecha.find((r) => r.ses) || porFecha[0])._id;
+  }
+  $('#pub-sel').innerHTML = porFecha.map((r) => `<option value="${esc(r._id)}" ${r._id === PUB_SEL ? 'selected' : ''}>${diaCorto(r.dia)} ${hora(r.desde)} · ${esc(r.tienda)} · ${ent(r.espectadores)} espectadores${r.ses ? '' : ' (sin tablet)'}</option>`).join('');
+  const sel = rs.find((r) => r._id === PUB_SEL);
+  const maxEsp = Math.max(0, ...sel.mins.map((m) => m.esp));
+  if (graficos['g-pub-curva']) graficos['g-pub-curva'].destroy();
+  const op = baseGrafico(false);
+  op.scales.y = { ...op.scales.y, position: 'left', ticks: { color: color('--t2'), callback: (v) => ent(v) } };
+  op.scales.y1 = { position: 'right', grid: { display: false }, border: { display: false }, ticks: { color: color('--t2'), callback: (v) => eur0(v) } };
+  op.scales.x.ticks = { color: color('--t2'), maxTicksLimit: 14, autoSkip: true, maxRotation: 0 };
+  op.plugins.tooltip.callbacks.label = (c) => c.dataset.yAxisID === 'y1' ? ` Beneficio acumulado: ${eur0(c.parsed.y)} (en este minuto ${eur(sel.mins[c.dataIndex].benef)}, ${sel.mins[c.dataIndex].n} prendas)` : (c.dataset.label === 'Gente en sala' ? ` Gente en sala: ${ent(c.parsed.y)} · minuto ${Math.round(sel.mins[c.dataIndex].d)} del directo` : null);
+  op.plugins.tooltip.filter = (c) => c.dataset.label !== 'Empujón (min 10-20)';
+  graficos['g-pub-curva'] = new Chart(document.getElementById('g-pub-curva'), { data: { labels: sel.mins.map((m) => hora(m.t)), datasets: [
+    { type: 'line', label: 'Gente en sala', data: sel.mins.map((m) => m.esp), yAxisID: 'y', borderColor: color('--' + sel.pais), backgroundColor: color('--' + sel.pais), borderWidth: 2, pointRadius: 0, tension: 0, order: 0 },
+    ...(sel.ses ? [{ type: 'line', label: 'Beneficio acumulado', data: (() => { let a = 0; return sel.mins.map((m) => (a += m.benef)); })(), yAxisID: 'y1', borderColor: color('--t2'), backgroundColor: color('--t2'), borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, tension: 0, order: 1 }] : []),
+    { type: 'bar', label: 'Empujón (min 10-20)', data: sel.mins.map((m) => (m.d >= 10 && m.d < 20) ? maxEsp : null), yAxisID: 'y', backgroundColor: color('--linea'), barPercentage: 1, categoryPercentage: 1, order: 2 },
+  ] }, options: op });
+  $('#pub-curva-nota').textContent = `Pico de ${ent(sel.pico)} personas en el minuto ${sel.picoMin}` +
+    (sel.empujon != null ? ` · en el empujón, ${pct(sel.empujon, 0)} de lo normal` : '') +
+    (sel.aprovecha != null ? ` · aprovechamiento ${ent(100 * sel.aprovecha)}` : '') +
+    (sel.ses ? ` · ${ent(sel.vendidas)} prendas en tablet` : ' · sin tablet');
+
+  /* ---- el empujon al empezar, por pais */
+  const paisesP = Object.keys(PAISES).filter((p) => rs.some((r) => r.pais === p));
+  graficoSimple('g-pub-arranque', 'bar', TRAMOS_PUB.map((x) => x[2]), paisesP.map((p) => ({ label: PAISES[p], backgroundColor: color('--' + p),
+    data: TRAMOS_PUB.map(([a, b]) => { let s = 0, n = 0; for (const r of rs) if (r.pais === p && r.med) for (const m of r.mins) if (m.d >= a && m.d < b) { s += m.esp / r.med; n++; } return n ? 100 * s / n : null; }) })),
+    (v) => ent(v) + ' %');
+
+  /* ---- gente en sala por hora del reloj */
+  const hx = (h) => (h < 6 ? h + 24 : h);
+  const hDe = (t) => Number(new Date(t).toLocaleString('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false }));
+  const horasR = [...new Set(rs.flatMap((r) => r.mins.map((m) => hx(hDe(m.t)))))].sort((a, b) => a - b);
+  const series = paisesP.map((p) => {
+    const g = {};
+    for (const r of rs) if (r.pais === p) for (const m of r.mins) { const k = hx(hDe(m.t)); const o = g[k] = g[k] || { e: 0, n: 0, eT: 0, b: 0 }; o.e += m.esp; o.n++; if (r.ses) { o.eT += m.esp; o.b += m.benef; } }
+    return { label: PAISES[p], borderColor: color('--' + p), backgroundColor: color('--' + p), tension: 0, pointRadius: 3,
+      data: horasR.map((h) => g[h] && g[h].n >= 30 ? g[h].e / g[h].n : null),
+      valores: horasR.map((h) => g[h] && g[h].eT ? 1000 * g[h].b / g[h].eT : null) };
+  });
+  graficoSimple('g-pub-horas', 'line', horasR.map((h) => String(h % 24).padStart(2, '0') + ':00'), series, (v) => ent(v),
+    (c) => { const v = c.dataset.valores[c.dataIndex]; return v == null ? '' : ` · ${eur(v)} por cada 1.000 personas-minuto`; });
+
+  /* ---- tabla */
+  tabla('t-pub', [
+    { k: 'desde', t: 'Día', izq: true, f: (v, f) => diaCorto(f.dia) + ' <span class="muted">' + hora(v) + '</span>' },
+    { k: 'tienda', t: 'Cuenta', izq: true, f: (v, f) => `<span class="punto" style="background:var(--${f.pais})"></span>${esc(v)}${f.ses ? '' : ' <span class="etiqueta">sin tablet</span>'}` },
+    { k: 'horas', t: 'Horas', f: dec1 },
+    { k: 'espectadores', t: 'Espectadores', f: ent, ayuda: 'Personas distintas que entraron' },
+    { k: 'porHora', t: 'Por hora', f: ent, ayuda: 'Espectadores por hora de directo' },
+    { k: 'enSala', t: 'En sala', f: ent, ayuda: 'Media de personas dentro en cada minuto' },
+    { k: 'pico', t: 'Pico', f: (v, f) => ent(v) + ` <span class="muted">min ${f.picoMin ?? '—'}</span>`, ayuda: 'Máximo de personas dentro y en qué minuto del directo' },
+    { k: 'segundos', t: 'Seg. medios', f: ent, ayuda: 'Tiempo medio que se queda cada visita' },
+    { k: 'interes', t: 'Interés', f: (v) => pct(v), ayuda: 'Clics en prendas por cada 100 visitas' },
+    { k: 'clicCompra', t: 'Clic a compra', f: (v) => pct(v), ayuda: 'Prendas vendidas en TikTok por cada 100 clics en prendas' },
+    { k: 'compraMil', t: 'Compra por 1.000', f: dec1, ayuda: 'Prendas vendidas (tablet) por cada 1.000 espectadores' },
+    { k: 'valorMil', t: 'Valor del espectador', f: (v) => eur(v), color: true, ayuda: 'Beneficio por cada 1.000 espectadores' },
+    { k: 'empujon', t: 'Empujón', f: (v) => pct(v, 0), ayuda: 'Gente en los minutos 10 a 20, en % de lo normal de ese directo' },
+    { k: 'aprovecha', t: 'Aprovechamiento', f: (v) => v == null ? '—' : ent(100 * v), ayuda: 'Beneficio por persona-minuto en los minutos 5-30 frente al resto del directo. 100 = igual' },
+    { k: 'segHora', t: 'Seguidores/h', f: dec1, ayuda: 'Seguidores nuevos por hora de directo' },
+    { k: 'beneficio', t: 'Beneficio', f: eur0, color: true },
+    { k: 'ventaTT', t: 'Venta TikTok', f: eur0, ayuda: 'Lo que TikTok cuenta como venta del directo' },
+  ], rs, { orden: { k: 'desde', d: -1 }, clic: (id) => { PUB_SEL = id; pintar(); document.getElementById('g-pub-curva').scrollIntoView({ behavior: 'smooth', block: 'center' }); }, elegida: (f) => f._id === PUB_SEL });
+}
+
 /* ================================================================ graficos */
 function baseGrafico(horizontal) {
   const t2 = color('--t2'), lin = color('--linea');
@@ -723,6 +938,8 @@ async function cargar() {
     if (!j.ok) throw new Error(j.detalle || j.error || 'fallo');
     CRUDO = j;
     calcular.ses = calcular();
+    /* El publico de TikTok, ya guardado. Si falla, el resto de la pantalla sigue. */
+    try { const pj = await pedir({ accion: 'publico', desde: $('#f-desde').value, hasta: $('#f-hasta').value }); PUBLICO = pj && pj.ok ? pj : null; } catch (e) { PUBLICO = null; }
     const cats = [...new Set(PRENDAS.map((p) => p.cat))].sort();
     const sel = $('#f-cat'), ya = sel.value;
     sel.innerHTML = '<option value="">Todas</option>' + cats.map((c) => `<option ${c === ya ? 'selected' : ''}>${esc(c)}</option>`).join('');
@@ -774,6 +991,27 @@ async function sincronizar() {
         inicio = r.inicio; t = r.sigue ? r.token : '';
       } while (t && vuelta < 60);
     }
+    /* Publico de los directos (TikTok lo da con un dia de retraso): el resumen
+     * de los ultimos 10 dias y el minuto a minuto de los que falten. */
+    const hace10 = new Date(Date.now() - 10 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+    for (const pais of ['es', 'de']) {
+      est.textContent = `${PAISES[pais]}: público de los directos…`;
+      const r = await pedir({ accion: 'visionado', pais, desde: hace10 < PRIMER_DIA ? PRIMER_DIA : hace10, hasta: hoyMadrid() });
+      if (!r.ok) errores.push(PAISES[pais] + ' (público): ' + (r.message || r.error));
+    }
+    const pub = await pedir({ accion: 'publico', desde: PRIMER_DIA, hasta: hoyMadrid() });
+    if (pub.ok) {
+      let i = 0;
+      for (const f of pub.faltan) {
+        i++; let t = '', v = 0;
+        do {
+          est.textContent = `Público minuto a minuto: directo ${i} de ${pub.faltan.length}…`;
+          const r = await pedir({ accion: 'visionado_minuto', pais: f.pais, live: f.id, t });
+          if (!r.ok) { errores.push('Público: ' + (r.message || r.error)); break; }
+          t = r.sigue ? r.token : ''; v++;
+        } while (t && v < 10);
+      }
+    } else errores.push('Público: ' + (pub.message || pub.error));
     est.textContent = errores.length ? 'Con fallos: ' + errores.join(' · ') : 'Listo';
     await cargar();
   } catch (e) {
@@ -863,6 +1101,7 @@ $('#btn-guardar-ajustes').onclick = () => {
 };
 $('#btn-reset-ajustes').onclick = () => { TABLAS = copiaTablas(TABLAS_FABRICA); IVA = { ...IVA_FABRICA }; SUELDOS = { ...SUELDOS_FABRICA }; pintarAjustes(); };
 $('#btn-quitar-directo').onclick = () => { DIRECTO = ''; pintar(); };
+$('#pub-sel').onchange = () => { PUB_SEL = $('#pub-sel').value; pintar(); };
 ['#f-pais', '#f-canal', '#f-cat', '#f-comision', '#f-iva'].forEach((s) => $(s).onchange = () => {
   if (s === '#f-comision' || s === '#f-iva') calcular.ses = calcular();
   pintar();
