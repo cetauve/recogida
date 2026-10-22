@@ -744,8 +744,25 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
           .map((x) => ({ cuenta: x.cuenta || '', dir: Number(x.dir || 1), quedan: x.numeros.slice() }));
         const base = grupos.length
           ? grupos : [{ cuenta: '', dir: 1, quedan: (c.numeros || []).slice() }];
-        const trozos = (c.bultos && c.bultos.length > 1)
+        let trozos = (c.bultos && c.bultos.length > 1)
           ? c.bultos.map((b) => (b.numeros || []).slice()) : [null];
+        /* BULTOS QUE NO CASAN, 18 oct 2026. Si la tarjeta se ha traducido a
+           fichas pero los bultos siguen con los numeros de TikTok (pasa cuando
+           el mismo numero de TikTok es de anuncios distintos, y la tarjeta sale
+           en REVISAR), repartir por bultos perdia prendas: a M***a S***dinger,
+           21 prendas, le salian 2. Si los bultos no cubren exactamente todas
+           las prendas, va todo en una bolsa y se avisa de las etiquetas. */
+        let sinReparto = 0;
+        if (trozos[0] !== null) {
+          const quedan = base.flatMap((r) => r.quedan.slice());
+          let cuadra = true;
+          for (const nums of trozos) for (const n of nums) {
+            const i = quedan.indexOf(n);
+            if (i < 0) { cuadra = false; break; }
+            quedan.splice(i, 1);
+          }
+          if (!cuadra || quedan.length) { sinReparto = trozos.length; trozos = [null]; }
+        }
 
         for (const nums of trozos) {
           const sacos = base.map((r) => ({ cuenta: r.cuenta, dir: r.dir, numeros: [] }));
@@ -779,14 +796,14 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
           const id = suyas ? c.pedido + '#' + (suyas + 1) : String(c.pedido || ('b' + k));
           const numeros = g.flatMap((x) => x[1]);
           bolsas.push({
-            q: c.apodo || '', d: trozos.length, g,
+            q: c.apodo || '', d: trozos.length, g, sinReparto,
             ped: id, raiz: c.pedido,
             /* La ficha que viaja a la cola, con la misma forma de siempre para
                que el panel y la app vieja sigan entendiéndola. */
             ficha: {
               apodo: c.apodo || '', usuario: '', pedido: id,
               pedidos: c.pedidos || (c.pedido ? [c.pedido] : []),
-              numeros, etiquetas: trozos.length, bultos: null,
+              numeros, etiquetas: sinReparto || trozos.length, bultos: null,
               regalos: c.regalos || [],
               porCuenta: sacos.filter((x) => x.numeros.length)
                 .map((x) => ({ cuenta: x.cuenta, dir: x.dir,
@@ -1209,6 +1226,9 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
         </div>
         ${b.d > 1 ? `<div class="aviso">A esta persona TikTok le ha hecho <b>${b.d} bultos</b>.
           Esta bolsa lleva <b>su propia etiqueta</b>: no metas en ella lo de la otra.</div>` : ''}
+        ${b.sinReparto ? `<div class="aviso">A esta persona TikTok le ha hecho <b>${b.sinReparto} etiquetas</b>,
+          pero no se sabe qué prenda va con cada una. Aquí salen <b>todas</b> sus prendas: cógelas todas
+          y al empaquetar haz una bolsa por etiqueta.</div>` : ''}
         ${cuerpo}
       </div>
       <div class="marcar">

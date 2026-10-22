@@ -210,10 +210,19 @@ function filaHTML(p, d, choque) {
     '</div>';
   }
 
-  var aviso = choque
+  /* 21 oct 2026: antes cualquier choque decia "dos ordenadores", y casi siempre
+   * era UN ordenador con dos pestañas del Live Manager: la del directo
+   * programado horas antes y la del que esta en marcha (o la de ayer). Ahora se
+   * mira quien habla: si es el mismo ordenador, se dice eso. */
+  var aviso = choque === 'pc'
     ? '<div class="orden error">Hay DOS ordenadores diciendo que son ' + esc(nombre) + '. ' +
       'La tablet sigue al ultimo que hable y el otro no sale. Mira el nombre en el panel de ' +
       'control de la extension de cada perfil de Chrome.</div>'
+    : choque === 'pestanas'
+    ? '<div class="orden error">El ordenador de ' + esc(nombre) + ' tiene abiertos DOS directos ' +
+      '(dos pestañas del Live Manager, por ejemplo la del directo programado y otra). ' +
+      'La tablet sigue al ultimo que hable y puede lanzar en el que no es. ' +
+      'Deja abierta solo la pestaña del directo de hoy y cierra la otra.</div>'
     : '';
 
   return '<div class="fila ' + clase + (d ? '' : ' apagado') + '">' +
@@ -239,16 +248,24 @@ function pintar(j) {
    * nunca. Antes esto quedaba ESCONDIDO, porque de cada canal solo se pintaba el
    * mas reciente. Ahora se avisa en la fila. */
   var FRESCO_CHOQUE = 5 * 60 * 1000;
-  var choques = {};
+  var choques = {}, puestos = {};
   vivos.forEach(function (d) {
     if (!d.canal) return;
     var visto = d.listados_cuando ? Date.now() - new Date(d.listados_cuando).getTime() : 1e12;
     if (visto > FRESCO_CHOQUE) return;
     choques[d.canal] = (choques[d.canal] || 0) + 1;
+    (puestos[d.canal] = puestos[d.canal] || {})[d.puesto || '?'] = 1;
   });
+  /* Dos directos frescos del mismo canal: si vienen de puestos distintos son dos
+   * ordenadores; si del mismo (o uno no lo dice), dos pestañas del mismo. */
+  var tipoChoque = function (canal) {
+    if (!(choques[canal] > 1)) return '';
+    var ps = Object.keys(puestos[canal] || {}).filter(function (x) { return x !== '?'; });
+    return ps.length > 1 ? 'pc' : 'pestanas';
+  };
 
   var html = PUESTOS.map(function (p) {
-    return filaHTML(p, porCanal[p.canal] || null, choques[p.canal] > 1);
+    return filaHTML(p, porCanal[p.canal] || null, tipoChoque(p.canal));
   });
 
   /* Y al final, lo que no encaja en ningun puesto: directos sin nombre, o con
