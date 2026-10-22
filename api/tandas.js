@@ -528,6 +528,7 @@ async function panelDirectos(s) {
            estado->>'listados_cuando' as listados_cuando,
            estado->'orden'   as orden,
            estado->>'tablet' as tablet,
+           coalesce(estado->>'puesto', '') as puesto,
            cuando
       from directo_vivo
      where cuando > now() - interval '12 hours'
@@ -552,6 +553,9 @@ async function panelDirectos(s) {
       return { estado: v.estado, nombre: v.nombre, pedida: v.pedida, error: v.error || '' };
     })(f.orden) : null,
     tablet: f.tablet || null,
+    /* Solo un trozo: basta para saber si dos directos vienen del mismo
+     * ordenador, que es lo que necesita el aviso del panel. */
+    puesto: f.puesto ? String(f.puesto).slice(0, 8) : '',
     cuando: f.cuando
   }));
 }
@@ -738,8 +742,13 @@ async function accionDirecto(s, res, sesion, b) {
                   * "de hoy" y el nuevo empezo en la ficha 107 en vez de en la 1. */
                  and jsonb_typeof(estado->'ventas') = 'array'
                  and jsonb_array_length(estado->'ventas') > 0
-                 and (to_timestamp(((estado->'ventas'->-1->>'hora')::numeric) / 1000)
-                        at time zone 'Europe/Madrid')::date = (now() at time zone 'Europe/Madrid')::date
+                 /* 10 oct 2026: y que esa ultima venta sea de hace MENOS DE TRES
+                  * HORAS, no "del mismo dia". El directo del jueves acabo a la
+                  * 1:09 de la madrugada del viernes, asi que para el reloj era
+                  * "de hoy", y el directo del viernes por la tarde empezo en la
+                  * ficha 292. Lo mismo paso el 6 oct (307). Parar y reanudar un
+                  * directo es cosa de minutos; tres horas sobran. */
+                 and to_timestamp(((estado->'ventas'->-1->>'hora')::numeric) / 1000) > now() - interval '3 hours'
                order by cuando desc limit 1`;
             if (prev.length && prev[0].ficha > 0) estado.ficha = prev[0].ficha;
           } catch (e) { /* si no se puede mirar, empieza en el 1 como antes */ }
