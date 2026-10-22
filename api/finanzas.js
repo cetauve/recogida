@@ -28,6 +28,9 @@
  *                                     visionado, clics y ventas (22 oct 2026)
  *   ?accion=visionado_minuto&pais=es&live=ID
  *                                     lo mismo minuto a minuto de un directo
+ *   ?accion=publico&desde=AAAA-MM-DD&hasta=AAAA-MM-DD
+ *                                     lo ya guardado de visionado, para la
+ *                                     pestana Publico, y que directos faltan
  *
  * VISIONADO. Permiso "TikTok Shop Analytics" (activo en la app). TikTok da
  * los datos con un dia de retraso. Se guarda una copia en fin_estado
@@ -556,10 +559,43 @@ async function visionadoMinuto(s, res, pais, live, tokenDado, t0, crudo) {
     token = aTexto(r.data && r.data.next_page_token);
     if (!token || !ints.length) { token = ''; break; }
   }
-  await ponerEstado(s, 'vism:' + live, { pais, general, minutos, completo: !token });
+  await ponerEstado(s, 'vism:' + live, { pais, general, minutos, completo: !token, guardado: new Date().toISOString() });
   const out = { ok: true, pais, live, general, minutos, sigue: !!token, token };
   if (crudo) out.crudo = primeroCrudo;
   return res.status(200).json(out);
+}
+
+/* Lo guardado de visionado en un periodo, para la pestana "Publico" de la
+ * pantalla: cada directo con su resumen y su minuto a minuto compacto
+ * ([segundo, espectadores, visitas, clics]). Dice tambien que directos no
+ * tienen aun el minuto a minuto, o lo tienen pedido demasiado pronto (TikTok
+ * puede completar los datos hasta un dia despues del directo). */
+async function publico(s, res, desde, hasta) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) {
+    return res.status(400).json({ ok: false, error: 'fechas-raras' });
+  }
+  const lives = [];
+  for (const pais of Object.keys(TIENDAS)) {
+    const est = await leerEstado(s, 'vis:' + pais);
+    for (const x of Object.values(est.directos || {})) {
+      const dia = diaMadrid(x.inicio);
+      if (dia >= desde && dia <= hasta) lives.push({ ...x, pais });
+    }
+  }
+  const claves = lives.map((x) => 'vism:' + x.id);
+  const filas = claves.length ? await s`select clave, valor from fin_estado where clave = any(${claves})` : [];
+  const porId = {};
+  for (const f of filas) porId[f.clave.slice(5)] = f.valor || {};
+  const faltan = [];
+  const salida = lives.map((x) => {
+    const m = porId[x.id];
+    const tarde = m && m.guardado ? new Date(m.guardado).getTime() >= x.fin + 30 * 3600000 : !!m;
+    if (!m || !m.completo || !tarde) faltan.push({ id: x.id, pais: x.pais });
+    const mins = m && Array.isArray(m.minutos) ? m.minutos.filter((y) => y.t >= x.inicio - 60000 && y.t <= x.fin)
+      .map((y) => [Math.round(y.t / 1000), num(y.espectadores), num(y.vistas), num(y.clicsProducto)]) : [];
+    return { ...x, minutos: mins, guardado: undefined };
+  });
+  return res.status(200).json({ ok: true, desde, hasta, directos: salida, faltan });
 }
 
 /* ------------------------------------------------------------------ puerta */
@@ -572,7 +608,7 @@ module.exports = puerta(async (req, res) => {
   await tablas(s);
   const accion = aTexto(q.accion);
   const pais = aTexto(q.pais).toLowerCase();
-  if (accion !== 'datos' && accion !== 'coste' && !TIENDAS[pais]) return res.status(400).json({ ok: false, error: 'pais-raro', paises: Object.keys(TIENDAS) });
+  if (accion !== 'datos' && accion !== 'coste' && accion !== 'publico' && !TIENDAS[pais]) return res.status(400).json({ ok: false, error: 'pais-raro', paises: Object.keys(TIENDAS) });
 
   if (accion === 'liquidaciones') return liquidaciones(s, res, pais);
   if (accion === 'liquidacion') return liquidacion(s, res, pais, aTexto(q.id), aTexto(q.t), t0, q);
@@ -583,6 +619,10 @@ module.exports = puerta(async (req, res) => {
   if (accion === 'visionado') {
     const ayer = diaMadrid(Date.now() - 86400000);
     return visionado(s, res, pais, aTexto(q.desde) || DESDE_MIN, aTexto(q.hasta) || ayer, aTexto(q.t), t0, q.crudo === '1');
+  }
+  if (accion === 'publico') {
+    const hoy = diaMadrid(Date.now());
+    return publico(s, res, aTexto(q.desde) || DESDE_MIN, aTexto(q.hasta) || hoy);
   }
   if (accion === 'visionado_minuto') return visionadoMinuto(s, res, pais, aTexto(q.live), aTexto(q.t), t0, q.crudo === '1');
   if (accion === 'datos') {
