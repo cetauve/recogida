@@ -23,6 +23,15 @@
  *   ?accion=datos&desde=AAAA-MM-DD&hasta=AAAA-MM-DD   el cruce, ya hecho
  *   ?accion=muestra&pais=es           un movimiento de cada tipo, crudo, para
  *                                     comprobar los nombres de los campos
+ *   ?accion=visionado&pais=es&desde=AAAA-MM-DD&hasta=AAAA-MM-DD
+ *                                     cada directo con espectadores, tiempo de
+ *                                     visionado, clics y ventas (22 oct 2026)
+ *   ?accion=visionado_minuto&pais=es&live=ID
+ *                                     lo mismo minuto a minuto de un directo
+ *
+ * VISIONADO. Permiso "TikTok Shop Analytics" (activo en la app). TikTok da
+ * los datos con un dia de retraso. Se guarda una copia en fin_estado
+ * ("vis:pais:dia" y "vism:id") para no volver a pedir lo ya pedido.
  *
  * NO SE DEVUELVEN NUMEROS DE PEDIDO ni nada del comprador. Solo importes.
  */
@@ -456,6 +465,103 @@ async function muestra(s, res, pais) {
   return res.status(200).json({ ok: true, pais, liquidacion: tapar(tx), pendientes: tapar(pend) });
 }
 
+/* --------------------------------------------------------------- visionado */
+
+/* 22 oct 2026. Lo que TikTok sabe del publico de cada directo: cuanta gente
+ * entro, cuanto tiempo se quedo, cuantos clics hizo en las prendas. Sirve para
+ * separar "habia mas gente" de "la gente pago mas". Solo lectura de TikTok;
+ * la copia se guarda en fin_estado. Con &crudo=1 devuelve tambien el primer
+ * directo tal cual llega, para comprobar los nombres de los campos. */
+const diaMas = (dia, n) => new Date(new Date(dia + 'T12:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10);
+const importe = (o) => num(o && o.amount);
+
+function aDirecto(x) {
+  const v = x.sales_performance || {};
+  const p = x.interaction_performance || null;
+  return {
+    id: aTexto(x.id), cuenta: aTexto(x.username), titulo: aTexto(x.title),
+    inicio: num(x.start_time) * 1000, fin: num(x.end_time) * 1000,
+    ventas: { gmv: importe(v.gmv), moneda: aTexto(v.gmv && v.gmv.currency), gmv24h: importe(v['24h_live_gmv']),
+      prendas: num(v.items_sold), pedidos: num(v.sku_orders), pedidosCreados: num(v.created_sku_orders),
+      clientes: num(v.customers), productos: num(v.products_added), productosVendidos: num(v.different_products_sold),
+      precioMedio: importe(v.avg_price), clicAPedido: aTexto(v.click_to_order_rate) },
+    publico: p ? { mediaALaVez: num(p.acu), picoALaVez: num(p.pcu), espectadores: num(p.viewers), vistas: num(p.views),
+      segundosMedios: num(p.avg_viewing_duration), comentarios: num(p.comments), compartidos: num(p.shares),
+      likes: num(p.likes), seguidoresNuevos: num(p.new_followers), impresionesProducto: num(p.product_impressions),
+      clicsProducto: num(p.product_clicks), clicsPorVista: aTexto(p.click_through_rate) } : null
+  };
+}
+
+async function visionado(s, res, pais, desde, hasta, tokenDado, t0, crudo) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) {
+    return res.status(400).json({ ok: false, error: 'fechas-raras' });
+  }
+  const cuenta = TIENDAS[pais];
+  let token = tokenDado, ultimoDia = '', total = null, primeroCrudo = null;
+  const lista = [];
+  while (Date.now() - t0 < LIMITE_MS) {
+    const params = { start_date_ge: desde, end_date_lt: diaMas(hasta, 1), page_size: 100,
+      sort_field: 'gmv', sort_order: 'DESC', currency: 'LOCAL', account_type: 'ALL' };
+    if (token) params.page_token = token;
+    const r = await T.comoCuenta(cuenta, { camino: '/analytics/202509/shop_lives/performance', params });
+    if (!r || r.code !== 0) return falloTikTok(res, r);
+    const d = r.data || {};
+    const ses = Array.isArray(d.live_stream_sessions) ? d.live_stream_sessions : [];
+    if (crudo && !primeroCrudo && ses.length) primeroCrudo = ses[0];
+    for (const x of ses) lista.push(aDirecto(x));
+    ultimoDia = aTexto(d.latest_available_date) || ultimoDia;
+    if (d.total_count !== undefined) total = num(d.total_count);
+    token = aTexto(d.next_page_token);
+    if (!token || !ses.length) { token = ''; break; }
+  }
+  if (lista.length) {
+    const est = await leerEstado(s, 'vis:' + pais);
+    const todos = est.directos || {};
+    for (const x of lista) todos[x.id] = { ...x, guardado: new Date().toISOString() };
+    await ponerEstado(s, 'vis:' + pais, { directos: todos, ultimoDia });
+  }
+  const out = { ok: true, pais, desde, hasta, ultimoDia, total, directos: lista, sigue: !!token, token };
+  if (crudo) out.crudo = primeroCrudo;
+  return res.status(200).json(out);
+}
+
+function aMinuto(x) {
+  const v = x.sales || {}, t = x.traffic || {}, i = x.interactions || {}, c = x.conversion || {};
+  return { t: num(x.start_time) * 1000, espectadores: num(t.viewers), vistas: num(t.views), impresiones: num(t.impressions),
+    entranDeLosQueLoVen: aTexto(t.enter_room_rate), clicsProducto: num(t.product_clicks), impresionesProducto: num(t.product_impressions),
+    prendas: num(v.items_sold), gmv: importe(v.gmv), pedidos: num(v.main_orders), clientes: num(v.customers),
+    comentarios: num(i.comments), likes: num(i.likes), seguidoresNuevos: num(i.new_followers), compartidos: num(i.shares),
+    gmvPorMilVistas: aTexto(c.gpm && c.gpm.watch_gpm) };
+}
+
+async function visionadoMinuto(s, res, pais, live, tokenDado, t0, crudo) {
+  if (!/^\d+$/.test(live)) return res.status(400).json({ ok: false, error: 'live-raro' });
+  const cuenta = TIENDAS[pais];
+  const est = tokenDado ? await leerEstado(s, 'vism:' + live) : {};
+  const minutos = tokenDado && Array.isArray(est.minutos) ? est.minutos : [];
+  let token = tokenDado, general = est.general || null, primeroCrudo = null;
+  while (Date.now() - t0 < LIMITE_MS) {
+    const params = { currency: 'LOCAL' };
+    if (token) params.page_token = token;
+    const r = await T.comoCuenta(cuenta, { camino: '/analytics/202510/shop_lives/' + live + '/performance_per_minutes', params });
+    if (!r || r.code !== 0) return falloTikTok(res, r);
+    const p = (r.data && r.data.performance) || {};
+    const o = p.overall;
+    if (o) general = { titulo: aTexto(o.live_title), inicio: num(o.start_time) * 1000, fin: num(o.end_time) * 1000,
+      segundos: num(o.duration), gmv: importe(o.gmv), moneda: aTexto(o.gmv && o.gmv.currency), prendas: num(o.items_sold),
+      espectadoresUnicos: num(o.unique_viewers), impresiones: num(o.impressions) };
+    const ints = Array.isArray(p.intervals) ? p.intervals : [];
+    if (crudo && !primeroCrudo && ints.length) primeroCrudo = ints[0];
+    for (const x of ints) minutos.push(aMinuto(x));
+    token = aTexto(r.data && r.data.next_page_token);
+    if (!token || !ints.length) { token = ''; break; }
+  }
+  await ponerEstado(s, 'vism:' + live, { pais, general, minutos, completo: !token });
+  const out = { ok: true, pais, live, general, minutos, sigue: !!token, token };
+  if (crudo) out.crudo = primeroCrudo;
+  return res.status(200).json(out);
+}
+
 /* ------------------------------------------------------------------ puerta */
 
 module.exports = puerta(async (req, res) => {
@@ -474,6 +580,11 @@ module.exports = puerta(async (req, res) => {
   if (accion === 'muestra') return muestra(s, res, pais);
   if (accion === 'coste') return costeAMano(s, res, q);
   if (accion === 'cancelados') return cancelados(s, res, pais, aTexto(q.t), t0);
+  if (accion === 'visionado') {
+    const ayer = diaMadrid(Date.now() - 86400000);
+    return visionado(s, res, pais, aTexto(q.desde) || DESDE_MIN, aTexto(q.hasta) || ayer, aTexto(q.t), t0, q.crudo === '1');
+  }
+  if (accion === 'visionado_minuto') return visionadoMinuto(s, res, pais, aTexto(q.live), aTexto(q.t), t0, q.crudo === '1');
   if (accion === 'datos') {
     const hoy = diaMadrid(Date.now());
     return datos(s, res, aTexto(q.desde) || DESDE_MIN, aTexto(q.hasta) || hoy);
