@@ -218,6 +218,20 @@ tr.elegida { background: var(--sel); }
       <div class="nota">Gente en sala minuto a minuto (línea de color) y beneficio acumulado de lo vendido (línea discontinua, escala de la derecha): donde sube más rápido es donde se está ganando dinero. La franja gris es el empujón de TikTok, del minuto 10 al 20. Pulsa un directo en la tabla de abajo para verlo aquí.</div>
       <div class="fila-sel"><label for="pub-sel">Directo</label><select id="pub-sel"></select><span class="muted" id="pub-curva-nota"></span></div>
       <div class="grafico" style="height:360px"><canvas id="g-pub-curva"></canvas></div>
+      <h2 style="margin-top:14px">Picos de este directo</h2>
+      <div class="nota">Los triángulos de la curva. En pantalla = la prenda que se estaba subastando mientras entraba la gente (la primera que se vende desde el minuto del pico). Anterior y siguiente = las vendidas justo antes y justo después.</div>
+      <div class="tabla-alta"><table id="t-pub-picos-uno"></table></div>
+    </div>
+    <div class="caja">
+      <h2>Todos los picos de público del periodo</h2>
+      <div class="nota">Cada momento en que entró mucha más gente de golpe, con la prenda que había en pantalla. Pulsa una fila para ver la curva de ese directo. Pico = un minuto con al menos un 35 % más de gente (y 25 personas más) que la mediana de los 15 minutos anteriores, y el más alto de los 6 minutos de alrededor.</div>
+      <div class="fila-sel"><label><input type="checkbox" id="pub-inicio"> Incluir el empujón de inicio (primeros 30 minutos, lo trae TikTok al empezar)</label></div>
+      <div class="sub" id="pub-picos-resumen" style="margin-bottom:10px"></div>
+      <div class="dos">
+        <div><div class="nota">Categoría de la prenda en pantalla en los picos, frente a lo que se vende normalmente en esos mismos directos.</div><table id="t-picos-cat"></table></div>
+        <div><div class="nota">Lo mismo por marca.</div><table id="t-picos-marca"></table></div>
+      </div>
+      <div class="tabla-alta" style="margin-top:14px"><table id="t-pub-picos"></table></div>
     </div>
     <div class="dos">
       <div class="caja"><h2>El empujón de TikTok al empezar</h2><div class="nota">Gente en sala según los minutos que lleva el directo, en % de lo normal en ese mismo directo (100 % = su mediana).</div><div class="grafico"><canvas id="g-pub-arranque"></canvas></div></div>
@@ -795,6 +809,43 @@ function medirDirecto(L, canal, ses) {
   return r;
 }
 
+/* Picos de publico de un directo: minutos con mucha mas gente que justo antes.
+ * Se suaviza la curva con la media de 3 minutos; un minuto es pico si supera en
+ * un 35 % (y en 25 personas) la mediana de los 15 minutos anteriores y es el mas
+ * alto de los 6 minutos de alrededor. A cada pico se le pone la prenda que habia
+ * en pantalla (la primera vendida desde ese minuto: se estaba subastando
+ * mientras entraba la gente), la anterior y la siguiente. */
+function picosDe(r) {
+  if (r._picos) return r._picos;
+  const m = r.mins, out = [];
+  if (m.length >= 20) {
+    const sm = m.map((_, i) => { const a = m.slice(Math.max(0, i - 1), i + 2); return a.reduce((x, y) => x + y.esp, 0) / a.length; });
+    const vs = r.ses ? r.ses.ps.slice().sort((a, b) => a.h - b.h) : [];
+    for (let i = 8; i < m.length - 2; i++) {
+      const base = mediana(sm.slice(Math.max(0, i - 18), i - 3));
+      if (!base || sm[i] < Math.max(...sm.slice(Math.max(0, i - 6), i + 7))) continue;
+      if (sm[i] < base * 1.35 || sm[i] - base < 25) continue;
+      const k = vs.findIndex((v) => v.h >= m[i].t);
+      const enP = k >= 0 ? vs[k] : null;
+      out.push({ _id: r._id + '|' + i, r, i, t: m[i].t, d: m[i].d, base, pico: m[i].esp, sube: sm[i] / base, inicio: m[i].d < 30,
+        antes: k > 0 ? vs[k - 1] : (k < 0 && vs.length ? vs[vs.length - 1] : null), enPantalla: enP, despues: k >= 0 && k + 1 < vs.length ? vs[k + 1] : null,
+        espera: enP ? (enP.h - m[i].t) / 1000 : null });
+    }
+  }
+  r._picos = out;
+  return out;
+}
+const prendaTxt = (v) => v ? `${esc(v.cat)} ${v.marca && v.marca !== 'Sin marca' && v.marca !== '—' ? esc(v.marca) : '<span class="muted">sin marca</span>'} · <b>${eur(v.remate, 0)}</b> <span class="muted">#${v.ficha ?? '?'} ${hora(v.h)}</span>${v.estado === 'C' ? ' <span class="etiqueta">cancelada</span>' : ''}` : '<span class="muted">—</span>';
+const prendaPlano = (v) => v ? `${v.cat} ${v.marca && v.marca !== 'Sin marca' && v.marca !== '—' ? v.marca : 'sin marca'} · ${eur(v.remate, 0)} (#${v.ficha ?? '?'}, ${hora(v.h)})` : '—';
+const colsPicos = (conDirecto) => [
+  ...(conDirecto ? [{ k: 'dia', t: 'Directo', izq: true, f: (v, f) => `<span class="punto" style="background:var(--${f.r.pais})"></span>${diaCorto(f.r.dia)} ${esc(f.r.tienda)}` }] : []),
+  { k: 't', t: 'Hora', izq: true, f: (v, f) => hora(v) + ` <span class="muted">min ${Math.round(f.d)}</span>` + (f.inicio ? ' <span class="etiqueta">inicio</span>' : '') },
+  { k: 'sube', t: 'Gente', f: (v, f) => `${ent(f.base)} → <b>${ent(f.pico)}</b> <span class="muted">×${dec1(v)}</span>`, ayuda: 'Personas en sala antes del pico y en el pico' },
+  { k: 'antes', t: 'Prenda anterior', izq: true, f: (v) => prendaTxt(v) },
+  { k: 'enPantallaPrecio', t: 'En pantalla en el pico', izq: true, f: (v, f) => prendaTxt(f.enPantalla), ayuda: 'La prenda que se subastaba mientras entraba la gente' },
+  { k: 'despues', t: 'Prenda siguiente', izq: true, f: (v) => prendaTxt(v) },
+];
+
 function graficoSimple(id, tipo, etiquetas, series, fmt, extra) {
   if (graficos[id]) graficos[id].destroy();
   const op = baseGrafico(false);
@@ -848,8 +899,17 @@ function pPublico() {
   op.scales.y1 = { position: 'right', grid: { display: false }, border: { display: false }, ticks: { color: color('--t2'), callback: (v) => eur0(v) } };
   op.scales.x.ticks = { color: color('--t2'), maxTicksLimit: 14, autoSkip: true, maxRotation: 0 };
   op.plugins.tooltip.callbacks.label = (c) => c.dataset.yAxisID === 'y1' ? ` Beneficio acumulado: ${eur0(c.parsed.y)} (en este minuto ${eur(sel.mins[c.dataIndex].benef)}, ${sel.mins[c.dataIndex].n} prendas)` : (c.dataset.label === 'Gente en sala' ? ` Gente en sala: ${ent(c.parsed.y)} · minuto ${Math.round(sel.mins[c.dataIndex].d)} del directo` : null);
-  op.plugins.tooltip.filter = (c) => c.dataset.label !== 'Empujón (min 10-20)';
+  op.plugins.tooltip.filter = (c) => c.dataset.label !== 'Empujón (min 10-20)' && (c.dataset.label !== 'Pico de público' || c.raw != null);
+  const picosSel = picosDe(sel);
+  const picoEn = {}; for (const p of picosSel) picoEn[p.i] = p;
+  const etiquetaPico = op.plugins.tooltip.callbacks.label;
+  op.plugins.tooltip.callbacks.label = (c) => {
+    if (c.dataset.label !== 'Pico de público') return etiquetaPico(c);
+    const p = picoEn[c.dataIndex]; if (!p) return null;
+    return [` Pico: de ${ent(p.base)} a ${ent(p.pico)} personas`, ` Anterior: ${prendaPlano(p.antes)}`, ` En pantalla: ${prendaPlano(p.enPantalla)}`, ` Siguiente: ${prendaPlano(p.despues)}`];
+  };
   graficos['g-pub-curva'] = new Chart(document.getElementById('g-pub-curva'), { data: { labels: sel.mins.map((m) => hora(m.t)), datasets: [
+    { type: 'line', label: 'Pico de público', data: sel.mins.map((m, i) => picoEn[i] ? m.esp : null), yAxisID: 'y', showLine: false, pointStyle: 'triangle', pointRadius: 7, pointHoverRadius: 9, borderColor: color('--t1'), backgroundColor: color('--t1'), order: -1 },
     { type: 'line', label: 'Gente en sala', data: sel.mins.map((m) => m.esp), yAxisID: 'y', borderColor: color('--' + sel.pais), backgroundColor: color('--' + sel.pais), borderWidth: 2, pointRadius: 0, tension: 0, order: 0 },
     ...(sel.ses ? [{ type: 'line', label: 'Beneficio acumulado', data: (() => { let a = 0; return sel.mins.map((m) => (a += m.benef)); })(), yAxisID: 'y1', borderColor: color('--t2'), backgroundColor: color('--t2'), borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, tension: 0, order: 1 }] : []),
     { type: 'bar', label: 'Empujón (min 10-20)', data: sel.mins.map((m) => (m.d >= 10 && m.d < 20) ? maxEsp : null), yAxisID: 'y', backgroundColor: color('--linea'), barPercentage: 1, categoryPercentage: 1, order: 2 },
@@ -858,6 +918,42 @@ function pPublico() {
     (sel.empujon != null ? ` · en el empujón, ${pct(sel.empujon, 0)} de lo normal` : '') +
     (sel.aprovecha != null ? ` · aprovechamiento ${ent(100 * sel.aprovecha)}` : '') +
     (sel.ses ? ` · ${ent(sel.vendidas)} prendas en tablet` : ' · sin tablet');
+
+  tabla('t-pub-picos-uno', colsPicos(false), picosSel.map((p) => ({ ...p, enPantallaPrecio: p.enPantalla ? p.enPantalla.remate : null })), { orden: { k: 't', d: 1 } });
+  if (!picosSel.length) $('#t-pub-picos-uno').innerHTML = '<tbody><tr><td class="izq muted">En este directo no hay picos de público claros.</td></tr></tbody>';
+  else if (!sel.ses) $('#t-pub-picos-uno').insertAdjacentHTML('beforeend', '<tbody><tr><td class="izq muted" colspan="6">Directo sin tablet: no se sabe qué prenda había en pantalla.</td></tr></tbody>');
+
+  /* ---- todos los picos del periodo */
+  const conInicio = $('#pub-inicio').checked;
+  const todos = rs.flatMap((r) => picosDe(r)).filter((p) => conInicio || !p.inicio);
+  const conPrenda = todos.filter((p) => p.r.ses && p.enPantalla);
+  const usados = [...new Set(conPrenda.map((p) => p.r))];
+  const normal = usados.flatMap((r) => r.ses.ps);
+  const precioPico = conPrenda.length ? conPrenda.reduce((a, p) => a + p.enPantalla.remate, 0) / conPrenda.length : null;
+  const precioDirecto = conPrenda.length ? conPrenda.reduce((a, p) => { const q = p.r.ses.ps; return a + q.reduce((x, v) => x + v.remate, 0) / q.length; }, 0) / conPrenda.length : null;
+  const caras = conPrenda.filter((p) => { const q = p.r.ses.ps; return p.enPantalla.remate >= 2 * q.reduce((x, v) => x + v.remate, 0) / q.length; }).length;
+  const esperaMed = mediana(conPrenda.map((p) => p.espera).filter((x) => x != null));
+  $('#pub-picos-resumen').innerHTML = conPrenda.length
+    ? `${ent(todos.length)} picos en ${ent(new Set(todos.map((p) => p.r._id)).size)} directos; ${ent(conPrenda.length)} con tablet. La prenda en pantalla en los picos se remató de media a <b>${eur(precioPico)}</b>, frente a ${eur(precioDirecto)} de media en esos directos. En ${ent(caras)} de ${ent(conPrenda.length)} picos (${pct(caras / conPrenda.length, 0)}) era una prenda de al menos el doble del precio medio. Ojo: con más gente las pujas suben, así que un precio alto puede ser efecto del pico y no su causa; las tablas de abajo dicen qué se estaba enseñando.`
+    : 'No hay picos con datos de tablet en este periodo y filtro.';
+  const reparto = (clave) => {
+    const g = {}, n = {};
+    for (const p of conPrenda) { const k = clave(p.enPantalla); g[k] = (g[k] || 0) + 1; }
+    for (const v of normal) { const k = clave(v); n[k] = (n[k] || 0) + 1; }
+    return Object.entries(g).map(([k, c]) => ({ _id: k, nombre: k, picos: c, enPicos: c / conPrenda.length, normal: (n[k] || 0) / normal.length,
+      veces: n[k] ? (c / conPrenda.length) / (n[k] / normal.length) : null }));
+  };
+  const colsReparto = (t) => [
+    { k: 'nombre', t, izq: true, f: (v) => esc(v) },
+    { k: 'picos', t: 'Picos', f: ent },
+    { k: 'enPicos', t: '% de los picos', f: (v) => pct(v, 0) },
+    { k: 'normal', t: '% de lo vendido', f: (v) => pct(v, 0), ayuda: 'Peso normal en lo vendido en esos mismos directos' },
+    { k: 'veces', t: 'Veces más', f: (v, f) => f.picos < 3 ? '<span class="muted">pocos datos</span>' : (v == null ? '—' : '×' + dec1(v)), ayuda: 'Cuántas veces más aparece en los picos que en lo normal. ×1 = igual; más de ×1,5 con 3 picos o más empieza a ser señal.' },
+  ];
+  tabla('t-picos-cat', colsReparto('Categoría'), reparto((v) => v.cat), { orden: { k: 'picos', d: -1 } });
+  tabla('t-picos-marca', colsReparto('Marca'), reparto((v) => v.marca || 'Sin marca'), { orden: { k: 'picos', d: -1 } });
+  tabla('t-pub-picos', colsPicos(true), todos.map((p) => ({ ...p, dia: p.r.desde, enPantallaPrecio: p.enPantalla ? p.enPantalla.remate : null })),
+    { orden: { k: 'sube', d: -1 }, clic: (id) => { PUB_SEL = id.split('|')[0]; pintar(); document.getElementById('g-pub-curva').scrollIntoView({ behavior: 'smooth', block: 'center' }); } });
 
   /* ---- el empujon al empezar, por pais */
   const paisesP = Object.keys(PAISES).filter((p) => rs.some((r) => r.pais === p));
@@ -1102,6 +1198,7 @@ $('#btn-guardar-ajustes').onclick = () => {
 $('#btn-reset-ajustes').onclick = () => { TABLAS = copiaTablas(TABLAS_FABRICA); IVA = { ...IVA_FABRICA }; SUELDOS = { ...SUELDOS_FABRICA }; pintarAjustes(); };
 $('#btn-quitar-directo').onclick = () => { DIRECTO = ''; pintar(); };
 $('#pub-sel').onchange = () => { PUB_SEL = $('#pub-sel').value; pintar(); };
+$('#pub-inicio').onchange = () => pintar();
 ['#f-pais', '#f-canal', '#f-cat', '#f-comision', '#f-iva'].forEach((s) => $(s).onchange = () => {
   if (s === '#f-comision' || s === '#f-iva') calcular.ses = calcular();
   pintar();
