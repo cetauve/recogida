@@ -865,7 +865,18 @@ async function mapaDeFichas(s) {
       if (esUnico(f.producto, f.nombre)) continue;
       const n = parseInt(String(f.unidad).replace(/[^0-9]/g, ''), 10);
       const ficha = parseInt(String(f.ficha), 10);
-      if (!Number.isFinite(n) || !Number.isFinite(ficha)) continue;
+      if (!Number.isFinite(ficha)) continue;
+      /* PRENDA SIN NUMERO, 26 oct 2026: se vendio con un anuncio normal
+       * ("Predeterminado") y no con uno de subasta numerada. No tiene numero
+       * de TikTok, pero si pedido: se guarda para traducir solo por pedido. */
+      if (!Number.isFinite(n)) {
+        if (f.pedido && !repartidas.has(f.sesion)) {
+          (porPedido[f.pedido] = porPedido[f.pedido] || []).push({
+            n: null, ficha, cuenta: CUENTA_DE_CANAL[f.canal] || '', nombre: f.nombre || '',
+            ses: f.sesion, ini: inicio[f.sesion] || 0 });
+        }
+        continue;
+      }
       if (f.pedido && !repartidas.has(f.sesion)) {
         (porPedido[f.pedido] = porPedido[f.pedido] || []).push({
           n, ficha, cuenta: CUENTA_DE_CANAL[f.canal] || '', nombre: f.nombre || '',
@@ -908,6 +919,38 @@ const aEuros = (x) => {
   const n = /,\d{1,2}$/.test(t) ? Number(t.replace(/\./g, '').replace(',', '.')) : Number(t.replace(/,/g, ''));
   return Number.isFinite(n) ? n : 0;
 };
+/* LAS VENTAS DE UNA RECOGIDA, 24 oct 2026. Para la pantalla de canceladas del
+ * almacen: de cada directo que tiene prendas en las tarjetas de ESTE juego, la
+ * lista entera de lo que se vendio (ficha y pedido). La app cruza esos pedidos
+ * con los cancelados de TikTok y saca que fichas no hay que enviar. Solo lee. */
+async function ventasDelJuego(s, res, juego) {
+  if (!juego) return res.status(400).json({ ok: false, error: 'sin-juego' });
+  const t = await s`select datos from tandas where juego = ${juego}`;
+  const peds = new Set();
+  for (const ta of ((t[0] && t[0].datos && t[0].datos.tandas) || []))
+    for (const c of (ta.compradores || ta.detalle || []))
+      for (const p of (Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []))) peds.add(String(p));
+  if (!peds.size) return res.status(200).json({ ok: true, juego, directos: [] });
+  const lista = [...peds];
+  const filas = await conReintento(s, (c) => c`
+    select sesion, estado->>'canal' as canal, estado->>'cuenta' as cuenta, estado->'ventas' as ventas
+      from directo_vivo
+     where cuando > now() - interval '21 days'
+       and jsonb_typeof(estado->'ventas') = 'array'
+       and exists (select 1 from jsonb_array_elements(estado->'ventas') v
+                    where v->>'pedido' = any(${lista}))`);
+  const directos = filas.map((f) => {
+    const vs = (Array.isArray(f.ventas) ? f.ventas : []).map((v) => ({
+      ficha: Number(v.ficha) || 0, pedido: aTexto(v.pedido), nombre: aTexto(v.nombre).slice(0, 80),
+      precio: aTexto(v.precio).slice(0, 16), hora: Number(v.hora) || 0 }));
+    const horas = vs.map((v) => v.hora).filter((h) => h > 0);
+    return { sesion: f.sesion, canal: f.canal || '', cuenta: f.cuenta || CUENTA_DE_CANAL[f.canal] || '',
+             desde: horas.length ? Math.min(...horas) : 0, hasta: horas.length ? Math.max(...horas) : 0,
+             enTarjeta: vs.filter((v) => peds.has(v.pedido)).length, ventas: vs };
+  }).sort((a, b) => a.desde - b.desde);
+  return res.status(200).json({ ok: true, juego, directos });
+}
+
 async function informeDelDia(s, res, dia, juego) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return res.status(400).json({ ok: false, error: 'dia-raro' });
   const filas = await conReintento(s, (c) => c`
@@ -1057,6 +1100,41 @@ function traducirPorPedido(datos, porPedido) {
    * directo, cada grupo pasa a llamarse "billys_de · live 1 · fri", "billys_de ·
    * live 2 · sat", por orden de la primera venta. La app los pinta como
    * percheros distintos, igual que dos cuentas. */
+  /* PRENDAS SIN NUMERO, 26 oct 2026. El sabado 24 BTo vendio con un anuncio
+   * normal ("Prenda Vintage Segunda Mano BTo") y no con los de subasta: en
+   * TikTok esas prendas no llevan numero, el paso 2 las deja fuera de la
+   * tarjeta y en el almacen no salian. Pero cada pedido es UNA prenda y cada
+   * venta de la tablet (o cargada a mano) sabe su pedido y su ficha. Asi que se
+   * añaden a la tarjeta por pedido, con su ficha y su directo. */
+  for (const t of datos.tandas) for (const c of (t.compradores || t.detalle || [])) {
+    const peds = Array.isArray(c.pedidos) ? c.pedidos : (c.pedido ? [c.pedido] : []);
+    const ya = new Set();
+    for (const g of (c.porCuenta || [])) for (const p of Object.values(g.pedidosDe || {})) ya.add(String(p));
+    const vs = [];
+    for (const p of peds) {
+      if (ya.has(String(p))) continue;
+      for (const v of (porPedido[String(p)] || [])) if (v.n === null) vs.push({ ...v, pedido: String(p) });
+    }
+    if (!vs.length) continue;
+    const grupos = {};
+    for (const v of vs) {
+      const k = (v.cuenta || '') + '|' + (v.ses || '');
+      (grupos[k] = grupos[k] || []).push(v);
+    }
+    for (const lista of Object.values(grupos)) {
+      const orden = lista.slice().sort((a, b) => a.ficha - b.ficha);
+      const g = { cuenta: orden[0].cuenta, _ses: orden[0].ses, _ini: orden[0].ini || 0, sinNumero: true,
+                  numeros: orden.map((v) => v.ficha),
+                  nombres: orden.reduce((o, v) => { o[v.ficha] = v.nombre; return o; }, {}),
+                  pedidosDe: orden.reduce((o, v) => { o[v.ficha] = v.pedido; return o; }, {}) };
+      c.porCuenta = (c.porCuenta || []).concat(g);
+      marcados.push(g);
+    }
+    c.numeros = [].concat(...(c.porCuenta || []).map((g) => g.numeros || [])).sort((a, b) => a - b);
+    c.porFicha = true;
+    n += vs.length; total += vs.length;
+  }
+
   const sesDe = {};
   for (const g of marcados) {
     if (!g._ses) continue;
@@ -1497,6 +1575,7 @@ async function atender(req, res, s, migas) {
       return res.status(200).json(v);
     }
     if (q.marcas) { aqui('marcas'); return leerMarcas(s, res, aTexto(q.juego).trim()); }
+    if (q.ventas) { aqui('ventas'); return ventasDelJuego(s, res, aTexto(q.juego).trim()); }
     if (q.informe) { aqui('informe'); return informeDelDia(s, res, aTexto(q.informe).trim(), aTexto(q.juego).trim()); }
     const dia = diaDe(q.dia);
     let juego = aTexto(q.juego).trim() || dia;
