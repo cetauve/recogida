@@ -305,6 +305,20 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   opacity:0;transform:translateY(8px);transition:.18s;pointer-events:none}
 #susurro.on{opacity:1;transform:none}
 
+/* ------------------------------------------- las canceladas, 24 oct 2026 */
+.canc .bloque{border:1px solid var(--linea);border-radius:13px;background:var(--navy);padding:12px 13px}
+.canc .bloque h2{margin:0 0 4px;font-size:16px;font-weight:900}
+.canc .bloque .sub{margin:0 0 8px}
+.cfila{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--linea)}
+.cfila .fn{font-size:22px;font-weight:900;min-width:44px;font-variant-numeric:tabular-nums;color:var(--tenue)}
+.cfila .tx{flex:1;font-size:13.5px;color:var(--tenue);line-height:1.45}
+.cfila .tx b{color:var(--bone)}
+.cfila.mala .fn{color:#ff6b5b}
+.mala-aviso{margin-top:6px;padding:7px 10px;border-radius:9px;background:rgba(255,80,60,.14);
+  border:1px solid #ff6b5b;color:#ffb3a8;font-weight:800;font-size:13.5px;cursor:pointer}
+.cancelada-pieza{margin-top:10px;padding:12px 14px;border-radius:12px;background:rgba(255,80,60,.16);
+  border:2px solid #ff6b5b;color:#ffd0c9;font-weight:900;font-size:17px}
+
 /* ------------------------------------------- la lista de pedidos, 18 oct 2026 */
 .lista .filtro{width:100%;font-family:inherit;font-size:17px;padding:12px 14px;border-radius:12px;
   border:1px solid var(--linea);background:var(--navy2);color:var(--bone);user-select:text;-webkit-user-select:text}
@@ -927,7 +941,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
   function repintar() {
     /* A quien empaqueta no se le repinta la pantalla porque alguien marque una
        prenda al otro lado del almacén. */
-    if (DONDE === 'cola' || DONDE === 'quien' || DONDE === 'lista') return;
+    if (DONDE === 'cola' || DONDE === 'quien' || DONDE === 'lista' || DONDE === 'canc') return;
     if (DONDE === 'bolsa') pintar();
     else if (DONDE === 'resumen') resumen();
     else menu();
@@ -1162,6 +1176,8 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
         </div>
         <button class="accion" id="irCola">Ir a la cola de empaquetado</button>
         <button class="accion fuera" id="verLista">Ver la lista de pedidos con su ficha</button>
+        <button class="accion fuera" id="verCanc">Ver las canceladas${CANC.cargado ? ' (' + CANC.total + ')' : ''}</button>
+        ${avisoCanceladasEnBolsa()}
         ${total ? `<button class="accion fuera" id="resumen">Ver el resumen</button>` : ''}
         ${RESCATADAS ? `<div class="nota" style="border-color:var(--verde)">
           <div><b>He rescatado ${RESCATADAS} ${RESCATADAS === 1 ? 'prenda' : 'prendas'} que estaban
@@ -1236,6 +1252,8 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
           <b style="color:var(--p${pieza.p}rot)">${esc(pieza.r)}</b>` : ''}${SIN_MARCAR ? ' y pulsa cuando la tengas.' : ' en la mano. ¿Qué es?'}
           ${NOMBRES[pieza.r + '|' + pieza.n] ? `<br><span style="display:inline-block;margin-top:6px;font-size:.95em;opacity:.85">Tiene que ser: <b>${esc(NOMBRES[pieza.r + '|' + pieza.n])}</b></span>` : ''}
           ${PEDIDO_DE[pieza.r + '|' + pieza.n] ? `<br><span style="font-size:.9em;opacity:.75">Pedido de esta prenda: <b class="copiable" data-copiar="${esc(PEDIDO_DE[pieza.r + '|' + pieza.n])}">${esc(PEDIDO_DE[pieza.r + '|' + pieza.n])}</b></span>` : ''}</p>
+        ${CANC.ped.has(PEDIDO_DE[pieza.r + '|' + pieza.n] || '-') ? `<div class="cancelada-pieza">CANCELADA EN TIKTOK.
+          No la metas en la bolsa: vuelve al perchero.</div>` : ''}
         ${rejilla}
       </div>
       <div style="display:flex;gap:9px;margin-top:14px">
@@ -1724,6 +1742,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
       T = t; B = b; foco = k; $('barra').hidden = false; pintar(); window.scrollTo(0, 0); return; }
     if (e.target.closest('#resumen')) { resumen(); return; }
     if (e.target.closest('#verLista')) { FILTRO = ''; lista(); return; }
+    if (e.target.closest('#verCanc')) { canceladas(); return; }
     if (e.target.closest('#salir')) { menu(); return; }
     if (e.target.closest('#atras')) { if (B > 0) { B--; foco = 0; pintar(); window.scrollTo(0, 0); } return; }
 
@@ -1786,7 +1805,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
           <b>${esc(f.q || '?')}</b> · T${f.tanda} · bolsa ${f.bolsa}/${f.de}<br>
           <span style="white-space:nowrap">${f.ped ? `Pedido <b class="copiable" data-copiar="${esc(f.ped)}">${esc(f.ped)}</b>` : 'Sin número de pedido'}</span>
         </span>
-        <span class="est" style="color:${f.hecha ? 'var(--verde)' : 'var(--ambar)'}">${f.hecha ? (f.cat ? esc(f.cat) : 'Cogida') : 'Sin coger'}</span>
+        <span class="est" style="color:${CANC.ped.has(f.ped) ? '#ff6b5b' : (f.hecha ? 'var(--verde)' : 'var(--ambar)')}">${CANC.ped.has(f.ped) ? 'Cancelada' : (f.hecha ? (f.cat ? esc(f.cat) : 'Cogida') : 'Sin coger')}</span>
       </button>`;
     });
     caja.innerHTML = html || `<p class="sub">Nada coincide con "${esc(FILTRO)}".</p>`;
@@ -1817,6 +1836,133 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
       let ok = false;
       try { await navigator.clipboard.writeText(txt); ok = true; } catch (err) {}
       susurro(ok ? 'Lista copiada. Pégala en una hoja.' : 'No se ha podido copiar en este móvil.');
+    });
+    window.scrollTo(0, 0);
+  }
+
+
+  /* LAS CANCELADAS, 24 oct 2026. Aaron queria ver en la app cuantas prendas de
+     esta recogida se han cancelado y cuales, y sobre todo que nadie meta en una
+     bolsa algo que TikTok ya ha cancelado (paso con la 149 del 21 oct, que se
+     cancelo despues de hacer las tarjetas).
+     De donde sale: el servidor da todas las ventas de los directos de esta
+     recogida (ficha y pedido), y TikTok da los pedidos cancelados desde el
+     primer dia de esos directos. Se cruzan por numero de pedido. Se mira al
+     abrir la app y cada cinco minutos. Solo lee: no marca nada. */
+  const TIENDA_DE_CANAL = { de: 'billys_de', nl: 'billys_nl' };
+  const tiendaDe = (canal) => TIENDA_DE_CANAL[canal] || 'billysvlc';
+  let CANC = { cargado: false, cargando: false, error: '', ped: new Set(), directos: [], total: 0, cuando: 0, corto: false };
+  const aEuros = (x) => { const n = parseFloat(String(x || '').replace(/[^\d,.-]/g, '').replace(',', '.')); return isFinite(n) ? n : 0; };
+  function dondeEsta(pedido) {
+    for (let t = 0; t < TANDAS.length; t++) for (let bi = 0; bi < TANDAS[t].b.length; bi++) {
+      const ps = TANDAS[t].b[bi].piezas;
+      for (let k = 0; k < ps.length; k++) if (PEDIDO_DE[ps[k].r + '|' + ps[k].n] === pedido) return { t, bi, k, z: ps[k] };
+    }
+    return null;
+  }
+  async function cargarCanceladas() {
+    if (CANC.cargando || !CODIGO || !JUEGO) return;
+    CANC.cargando = true;
+    try {
+      const r = await fetch('/api/tandas?d=' + encodeURIComponent(CODIGO) + '&juego=' + encodeURIComponent(JUEGO) +
+        '&ventas=1', { cache: 'no-store' });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'ventas');
+      const directos = j.directos || [];
+      const ped = new Set();
+      let corto = false;
+      const tiendas = [...new Set(directos.map((d) => tiendaDe(d.canal)))];
+      const desde = Math.min(...directos.map((d) => d.desde || Infinity));
+      for (const tienda of tiendas) {
+        if (!isFinite(desde)) break;
+        const rr = await fetch('/api/tiktok-etiquetas?d=' + encodeURIComponent(CODIGO) + '&cuenta=' + encodeURIComponent(tienda) +
+          '&estado=CANCELLED&desde=' + Math.floor(desde / 1000 - 3600), { cache: 'no-store' });
+        const jj = await rr.json();
+        if (!jj.ok) throw new Error(jj.error || 'tiktok');
+        if (jj.corto) corto = true;
+        for (const p of (jj.pedidos || [])) ped.add(String(p.id));
+      }
+      directos.forEach((d) => {
+        d.canceladas = (d.ventas || []).filter((v) => ped.has(v.pedido)).sort((a, b) => a.ficha - b.ficha);
+        const una = (d.ventas || []).map((v) => dondeEsta(v.pedido)).find(Boolean);
+        d.rotulo = una ? (una.z.r || '') : '';
+      });
+      CANC = { cargado: true, cargando: false, error: '', ped, directos, corto, cuando: Date.now(),
+               total: directos.reduce((a, d) => a + d.canceladas.length, 0) };
+    } catch (e) {
+      CANC.cargando = false; CANC.error = 'No se han podido mirar las canceladas. Prueba otra vez en un rato.';
+    }
+    if (DONDE === 'menu') menu();
+    else if (DONDE === 'bolsa') pintar();
+    else if (DONDE === 'canc') canceladas();
+  }
+  function enBolsas() {
+    const out = [];
+    CANC.directos.forEach((d) => d.canceladas.forEach((v) => { const w = dondeEsta(v.pedido); if (w) out.push({ v, w }); }));
+    return out;
+  }
+  function avisoCanceladasEnBolsa() {
+    if (!CANC.cargado) return '';
+    const malas = enBolsas();
+    if (!malas.length) return '';
+    return `<div class="nota" style="border-color:#ff6b5b"><div><b style="color:#ff8a7a">${malas.length === 1
+      ? 'Hay 1 prenda cancelada que está en una bolsa' : 'Hay ' + malas.length + ' prendas canceladas que están en bolsas'}.</b>
+      No las metas: vuelven al perchero.</div>
+      ${malas.map((m) => `<div class="mala-aviso" data-ir="${m.w.t}.${m.w.bi}.${m.w.k}">La ${m.v.ficha}${VARIOS && m.w.z.r ? ' de ' + esc(m.w.z.r) : ''}
+        · tanda ${m.w.t + 1}, bolsa ${m.w.bi + 1}</div>`).join('')}</div>`;
+  }
+  const diaLargo = (ms) => ms ? new Date(ms).toLocaleDateString('es-ES',
+    { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'Europe/Madrid' }) : '';
+  function canceladas() {
+    DONDE = 'canc';
+    $('barra').hidden = true;
+    $('lupa').hidden = true;
+    let cuerpo;
+    if (!CANC.cargado) {
+      cuerpo = `<p class="sub">${CANC.error ? esc(CANC.error) : 'Mirando en TikTok qué se ha cancelado. Tarda unos segundos.'}</p>`;
+      if (!CANC.cargando && !CANC.error) cargarCanceladas();
+    } else {
+      const ventas = CANC.directos.reduce((a, d) => a + (d.ventas || []).length, 0);
+      const euros = CANC.directos.reduce((a, d) => a + d.canceladas.reduce((s, v) => s + aEuros(v.precio), 0), 0);
+      cuerpo = `<div class="cifras">
+          <div class="cifra"><u>${CANC.total}</u><span>canceladas</span></div>
+          <div class="cifra"><u>${ventas}</u><span>vendidas</span></div>
+          <div class="cifra"><u>${ventas ? Math.round(CANC.total / ventas * 100) : 0}%</u><span>canceladas</span></div>
+        </div>
+        <p class="sub">${euros.toFixed(2).replace('.', ',')} € en prendas canceladas. Mirado a las
+          ${new Date(CANC.cuando).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.
+          ${CANC.corto ? ' TikTok ha devuelto la lista cortada: puede que falte alguna.' : ''}</p>
+        ${avisoCanceladasEnBolsa()}
+        ${CANC.directos.map((d) => `<div class="bloque">
+          <h2>${esc(d.rotulo || d.cuenta || d.canal)}</h2>
+          <p class="sub">${esc(diaLargo(d.desde))} · ${d.canceladas.length} canceladas de ${(d.ventas || []).length} ventas</p>
+          ${d.canceladas.length ? `<p class="sub" style="color:var(--bone);font-weight:800">Fichas: ${d.canceladas.map((v) => v.ficha).join(', ')}</p>` : ''}
+          ${d.canceladas.map((v) => { const w = dondeEsta(v.pedido); return `<div class="cfila${w ? ' mala' : ''}">
+            <span class="fn">${v.ficha}</span>
+            <span class="tx"><b>${esc(String(v.nombre || '').replace(/^\s*(gebrauchte[sr]?|de segunda mano|tweedehands)\s+/i, ''))}</b>
+              · ${esc(v.precio || '')}<br>Pedido <b class="copiable" data-copiar="${esc(v.pedido)}">${esc(v.pedido)}</b>
+              ${w ? `<div class="mala-aviso" data-ir="${w.t}.${w.bi}.${w.k}">Está en la tanda ${w.t + 1}, bolsa ${w.bi + 1}: no la metas</div>` : ''}</span>
+          </div>`; }).join('')}
+        </div>`).join('')}
+        <button class="accion fuera" id="cancCopiar">Copiar la lista</button>`;
+    }
+    $('pantalla').innerHTML = `<div class="fin canc">
+        <button class="volver" id="cancVolver">Volver a las tandas</button>
+        <h1>Canceladas</h1>
+        ${cuerpo}
+        <button class="accion fuera" id="cancOtra">Volver a mirar</button>
+      </div>`;
+    $('cancVolver').addEventListener('click', menu);
+    $('cancOtra').addEventListener('click', () => { CANC.cargado = false; CANC.error = ''; canceladas(); });
+    const cp = $('cancCopiar');
+    if (cp) cp.addEventListener('click', async () => {
+      const txt = ['Directo\tFicha\tPrenda\tPrecio\tPedido\tEn bolsa'].concat(...CANC.directos.map((d) =>
+        d.canceladas.map((v) => { const w = dondeEsta(v.pedido);
+          return [(d.rotulo || d.cuenta) + ' ' + diaLargo(d.desde), v.ficha, v.nombre, v.precio, v.pedido,
+                  w ? 'tanda ' + (w.t + 1) + ' bolsa ' + (w.bi + 1) : ''].join('\t'); }))).join('\n');
+      let ok = false;
+      try { await navigator.clipboard.writeText(txt); ok = true; } catch (err) {}
+      susurro(ok ? 'Lista copiada.' : 'No se ha podido copiar en este móvil.');
     });
     window.scrollTo(0, 0);
   }
@@ -1968,6 +2114,8 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
     /* Cada medio minuto se mira lo que han marcado los demás. No se recarga la
        pantalla de nadie a medio paquete: unir() solo repinta si algo cambió. */
     setInterval(() => { if (!document.hidden) leerMarcas(false); }, 30000);
+    cargarCanceladas();
+    setInterval(() => { if (!document.hidden && DONDE !== 'canc') cargarCanceladas(); }, 5 * 60 * 1000);
   }
 
   arrancar();
