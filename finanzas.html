@@ -55,6 +55,7 @@ button:disabled { opacity: .5; cursor: default; }
 .estado-sync { font-size: 12px; color: var(--t2); min-width: 220px; }
 .aviso { background: var(--aviso-fondo); color: var(--aviso-t); border-radius: 8px; padding: 9px 12px; margin-bottom: 12px; font-size: 13px; }
 .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+#kpis { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .kpi { background: var(--panel); border: 1px solid var(--linea); border-radius: 10px; padding: 12px 14px; }
 .kpi .n { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .kpi .e { font-size: 12px; color: var(--t2); }
@@ -99,7 +100,7 @@ tr.elegida { background: var(--sel); }
 .explica dt { font-weight: 600; color: var(--t1); }
 .explica dd { margin: 0; }
 .fila-sel { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
-@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } .dos { grid-template-columns: 1fr; } .ajustes-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1100px) { .kpis, #kpis { grid-template-columns: repeat(3, 1fr); } .dos { grid-template-columns: 1fr; } .ajustes-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
 <body>
@@ -432,6 +433,11 @@ function calcular() {
     const conDinero = v.estado === 'L' || v.estado === 'P';
     const reembolsada = conDinero && !(v.ingreso > 0.005);
     const cobrada = conDinero && !reembolsada;
+    /* Cancelada = en la lista de canceladas de TikTok: las que no se pagaron y
+     * las que se pagaron y se cancelaron luego (las que se aprueban en el
+     * almacen). Devuelta = reembolsada sin estar cancelada (devolucion). */
+    const cancelada = v.cancelado === true || v.estado === 'C';
+    const devuelta = reembolsada && !cancelada;
     let comision = conDinero ? v.comision : 0, neto = conDinero ? v.neto : 0;
     if (cobrada && comision9) { const nueva = -0.09 * v.ingreso; neto = neto - comision + nueva; comision = nueva; }
     /* El coste puesto a mano a esta prenda (una chaqueta de 80 €) manda sobre
@@ -452,7 +458,7 @@ function calcular() {
     const ivaVenta = ivaPrenda + ivaEnvio;
     const s = ses[v.sesion];
     const vendedora = s.sueldo / s.n;           /* se reparte entre TODAS las vendidas, cobradas o no */
-    return { ...v, cat, marca, cobrada, reembolsada, conDinero, comision, neto, coste, vendedora, ivaVenta, costeUd,
+    return { ...v, cat, marca, cobrada, reembolsada, cancelada, devuelta, conDinero, comision, neto, coste, vendedora, ivaVenta, costeUd,
       tablaCoste: aMano ? 'a mano' : (deTabla.tabla ? deTabla.tabla.nombre : ''),
       beneficio: (conDinero ? neto : 0) - ivaVenta - coste - vendedora, sinCoste: cobrada && !aMano && !(deTabla.coste > 0), aMano };
   });
@@ -468,9 +474,12 @@ function filtradas() {
 /* Suma de un grupo de prendas: lo que se enseña en todas las tablas. */
 function sumar(ps) {
   const a = { n: ps.length, cobradas: 0, remate: 0, remateCobrado: 0, ingreso: 0, comision: 0, envio: 0, ajuste: 0, neto: 0,
-    netoEstimado: 0, coste: 0, ivaVenta: 0, vendedora: 0, beneficio: 0, liquidadas: 0, sinCoste: 0, reembolsadas: 0, sinPagar: 0, canceladas: 0 };
+    netoEstimado: 0, coste: 0, ivaVenta: 0, vendedora: 0, beneficio: 0, liquidadas: 0, sinCoste: 0, reembolsadas: 0, sinPagar: 0, canceladas: 0,
+    nCancelado: 0, eurCancelado: 0, nDevuelto: 0, eurDevuelto: 0 };
   for (const p of ps) {
     a.remate += p.remate; a.vendedora += p.vendedora; a.beneficio += p.beneficio;
+    if (p.cancelada) { a.nCancelado++; a.eurCancelado += p.remate; }
+    if (p.devuelta) { a.nDevuelto++; a.eurDevuelto += p.remate; }
     if (p.sinCoste) a.sinCoste++;
     if (p.reembolsada) { a.reembolsadas++; a.neto += p.neto; a.comision += p.comision; a.envio += p.envio; a.ajuste += p.ajuste; continue; }
     if (!p.cobrada) { if (p.estado === 'C') a.canceladas++; else a.sinPagar++; continue; }
@@ -479,6 +488,8 @@ function sumar(ps) {
     if (p.estado === 'L') a.liquidadas++; else a.netoEstimado += p.neto;
   }
   a.tasaCobro = a.n ? a.cobradas / a.n : null;
+  a.pctCancelado = a.remate ? a.eurCancelado / a.remate : null;
+  a.pctDevuelto = a.remate ? a.eurDevuelto / a.remate : null;
   a.comisionPct = a.ingreso ? -a.comision / a.ingreso : null;
   a.porPrenda = a.cobradas ? a.beneficio / a.cobradas : null;
   a.precioMedio = a.cobradas ? a.remateCobrado / a.cobradas : null;
@@ -515,6 +526,8 @@ const colsDinero = [
   { k: 'cobradas', t: 'Cobradas', f: (v, f) => ent(v) + ` <span class="muted">(${pct(f.tasaCobro, 0)})</span>`, ayuda: 'Prendas con dinero en TikTok. Entre paréntesis, sobre las vendidas.' },
   { k: 'precioMedio', t: 'Precio medio', f: (v) => eur(v), ayuda: 'Remate medio de las cobradas' },
   { k: 'remateCobrado', t: 'Remate', f: eur0, ayuda: 'Suma de remates de las cobradas' },
+  { k: 'eurCancelado', t: 'Cancelado', f: (v, f) => eur0(v) + ` <span class="muted">${ent(f.nCancelado)} · ${pct(f.pctCancelado, 0)}</span>`, ayuda: 'Remate de las prendas canceladas: las que no se pagaron y las que se pagaron y se cancelaron después. Entre paréntesis, cuántas y qué parte del remate de todo lo vendido. Solo informa: ya no cuenta en el beneficio.' },
+  { k: 'eurDevuelto', t: 'Devuelto', f: (v, f) => eur0(v) + ` <span class="muted">${ent(f.nDevuelto)} · ${pct(f.pctDevuelto, 0)}</span>`, ayuda: 'Remate de las prendas pagadas y reembolsadas sin estar canceladas (devoluciones). Aparte de las canceladas.' },
   { k: 'neto', t: 'Liquidado', f: (v, f) => eur0(v) + (f.netoEstimado ? ` <span class="etiqueta" title="De esto, ${eur0(f.netoEstimado)} es estimación de TikTok">${pct(f.neto ? f.netoEstimado / f.neto : 0, 0)} est.</span>` : ''), ayuda: 'Lo que TikTok paga. Real si ya liquidó; estimado si no.' },
   { k: 'comision', t: 'Comisión', f: (v, f) => eur0(v) + ` <span class="muted">${pct(f.comisionPct)}</span>`, color: true },
   { k: 'envio', t: 'Envío neto', f: eur0, color: true, ayuda: 'Lo que TikTok abona (+) o cobra (−) por envío, neto' },
@@ -536,6 +549,10 @@ function pintar() {
   const av = [];
   const sinSync = Object.entries(CRUDO.actualizado || {}).filter(([p, v]) => !v && ps.some((x) => x.pais === p)).map(([p]) => PAISES[p]);
   if (sinSync.length) av.push('Aún no se han traído los datos de TikTok de ' + sinSync.join(' y ') + '. Pulsa «Traer datos nuevos de TikTok».');
+  if (!('canceladasAl' in CRUDO)) av.push('Falta subir el archivo nuevo del servidor (api/finanzas.js): lo cancelado sale incompleto y parte va como devuelto.');
+  const viejas = Object.keys(PAISES).filter((p) => ps.some((x) => x.pais === p)).filter((p) => {
+    const al = (CRUDO.canceladasAl || {})[p]; return !al || Date.now() - new Date(al).getTime() > 6 * 3600000; }).map((p) => PAISES[p]);
+  if (viejas.length) av.push('La lista de canceladas de ' + viejas.join(' y ') + ' tiene más de 6 horas o no tiene fecha: pueden faltar cancelaciones, que siguen llegando días después del directo. Pulsa «Traer datos nuevos de TikTok».');
   if (t.sinCoste) av.push(`${t.sinCoste} prendas cobradas son de una categoría sin coste puesto (${[...new Set(ps.filter((p) => p.sinCoste).map((p) => p.cat))].join(', ')}). Su beneficio sale inflado: ponle coste en «Costes y sueldos».`);
   if ($('#f-comision').value === '9') av.push('Estás viendo la comisión simulada al 9 %, no la real.');
   if ($('#f-iva').value === 'si') av.push('Estás viendo el beneficio con el IVA de lo que paga el comprador (prenda y envío) ya restado.');
@@ -547,6 +564,7 @@ function pintar() {
   const kpis = [
     ['Prendas vendidas', ent(t.n), `${ent(t.cobradas)} cobradas · ${ent(t.canceladas)} canceladas · ${ent(t.reembolsadas)} reembolsadas · ${ent(t.sinPagar)} sin pagar`],
     ['Precio medio', eur(t.precioMedio), `remate de las cobradas`],
+    ['Cancelado', eur0(t.eurCancelado), `${ent(t.nCancelado)} prendas · ${pct(t.pctCancelado, 0)} del remate · devuelto ${eur0(t.eurDevuelto)}`],
     ['Liquidado', eur0(t.neto), t.netoEstimado ? `${eur0(t.netoEstimado)} aún estimado` : 'todo real'],
     ['Comisión real', pct(t.comisionPct), `${eur0(-t.comision)} en total`],
     ['Beneficio', eur0(t.beneficio), `${eur(t.porPrenda)} por prenda · margen ${pct(t.margen, 0)}`],
@@ -630,7 +648,7 @@ function pMarcas(ps) {
     { k: 'n', t: 'Vendidas', f: ent },
     { k: 'netoMedio', t: 'Liquidado/prenda', f: (v) => eur(v) },
     ...colsDinero.filter((c) => !['remateCobrado', 'vendedora', 'envio'].includes(c.k)),
-  ], filas, { orden: { k: 'beneficio', d: -1 } });
+  ], filas, { orden: { k: 'beneficio', d: -1 }, total: sumar(ps.filter((p) => p.marca !== '—')) });
 }
 
 function pEvolucion(ps) {
@@ -649,7 +667,7 @@ function pEvolucion(ps) {
     { k: 'pais', t: 'País', izq: true, f: (v) => `<span class="punto" style="background:var(--${v})"></span>${PAISES[v]}` },
     { k: 'n', t: 'Vendidas', f: ent },
     ...colsDinero,
-  ], filas, { orden: { k: 'dia', d: -1 } });
+  ], filas, { orden: { k: 'dia', d: -1 }, total: sumar(ps) });
 }
 
 function pPrendas(ps) {
@@ -1041,7 +1059,11 @@ async function cargar() {
     sel.innerHTML = '<option value="">Todas</option>' + cats.map((c) => `<option ${c === ya ? 'selected' : ''}>${esc(c)}</option>`).join('');
     const act = Object.entries(j.actualizado || {}).filter(([, v]) => v).map(([p, v]) => PAISES[p] + ' ' +
       new Date(v).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
-    $('#actualizado').textContent = act.length ? 'Datos de TikTok traídos: ' + act.join(' · ') : 'Todavía no se han traído datos de TikTok';
+    const fCorta = (v) => new Date(v).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const conVentas = Object.keys(PAISES).filter((p) => PRENDAS.some((x) => x.pais === p));
+    const canc = conVentas.map((p) => PAISES[p] + ' ' + ((j.canceladasAl || {})[p] ? fCorta(j.canceladasAl[p]) : 'sin fecha'));
+    $('#actualizado').textContent = (act.length ? 'Datos de TikTok traídos: ' + act.join(' · ') : 'Todavía no se han traído datos de TikTok') +
+      (canc.length ? ' · Canceladas actualizadas: ' + canc.join(' · ') : '');
     pintar();
   } catch (e) {
     $('#avisos').innerHTML = `<div class="aviso">No se han podido leer los datos: ${esc(e.message)}</div>`;
