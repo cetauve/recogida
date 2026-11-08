@@ -294,7 +294,8 @@ async function cancelados(s, res, pais, tokenDado, t0) {
     const masViejo = Math.min(...ords.map((o) => Number(o.create_time) || Infinity));
     if (!token || !ords.length || masViejo < tope) { fin = true; break; }
   }
-  await ponerEstado(s, 'canc:' + pais, { ids: [...ids] });
+  /* "al": cuando se termino la ultima pasada completa (8 nov), para avisar si la lista es vieja. */
+  await ponerEstado(s, 'canc:' + pais, { ids: [...ids], al: fin ? new Date().toISOString() : (est.al || null) });
   return res.status(200).json({ ok: true, pais, total: ids.size, nuevos, sigue: !fin, token: fin ? '' : token });
 }
 
@@ -347,7 +348,8 @@ async function datos(s, res, desde, hasta) {
    * cuestan lo que una chaqueta normal). Mandan sobre el coste de la categoria. */
   const aMano = await leerEstado(s, 'costes_a_mano');
   const canc = {};
-  for (const p of Object.keys(TIENDAS)) canc[p] = new Set((await leerEstado(s, 'canc:' + p)).ids || []);
+  const cancAl = {};
+  for (const p of Object.keys(TIENDAS)) { const e = await leerEstado(s, 'canc:' + p); canc[p] = new Set(e.ids || []); cancAl[p] = e.al || null; }
 
   const completo = {};
   for (const p of Object.keys(TIENDAS)) {
@@ -389,7 +391,9 @@ async function datos(s, res, desde, hasta) {
     const total = grupo.reduce((a, x) => a + x.remate, 0);
     const parte = total > 0 ? v.remate / total : 1 / grupo.length;
     const fila = { h: v.ms, dia: v.dia, pais: v.pais, canal: v.canal, sesion: v.sesion, ficha: v.ficha,
-      anuncio: v.nombre, remate: v.remate, estado: d ? d.estado : '-', prendasPedido: grupo.length };
+      anuncio: v.nombre, remate: v.remate, estado: d ? d.estado : '-', prendasPedido: grupo.length,
+      /* En la lista de canceladas de TikTok, se pagara o no (8 nov). */
+      cancelado: !!(v.pedido && canc[v.pais] && canc[v.pais].has(v.pedido)) };
     const cm = aMano[v.sesion + '|' + v.ficha];
     if (cm && Number.isFinite(Number(cm.coste))) { fila.costeAMano = Number(cm.coste); if (cm.nota) fila.nota = cm.nota; }
     if (d && d.estado === 'C') { /* cancelada: sin dinero */ }
@@ -424,7 +428,7 @@ async function datos(s, res, desde, hasta) {
   const actualizado = {};
   for (const p of Object.keys(TIENDAS)) actualizado[p] = completo[p] ? new Date(completo[p]).toISOString() : null;
 
-  return res.status(200).json({ ok: true, desde, hasta, actualizado, ventas: filas, otros: Object.values(otros) });
+  return res.status(200).json({ ok: true, desde, hasta, actualizado, canceladasAl: cancAl, ventas: filas, otros: Object.values(otros) });
 }
 
 /* ------------------------------------------------------------ coste a mano */
