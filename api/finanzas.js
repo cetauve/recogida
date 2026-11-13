@@ -571,7 +571,8 @@ async function visionadoMinuto(s, res, pais, live, tokenDado, t0, crudo) {
 
 /* Lo guardado de visionado en un periodo, para la pestana "Publico" de la
  * pantalla: cada directo con su resumen y su minuto a minuto compacto
- * ([segundo, espectadores, visitas, clics]). Dice tambien que directos no
+ * ([segundo, espectadores, visitas, clics, impresiones del feed], esto ultimo
+ * desde el 13 nov para el diagnostico). Dice tambien que directos no
  * tienen aun el minuto a minuto, o lo tienen pedido demasiado pronto (TikTok
  * puede completar los datos hasta un dia despues del directo). */
 async function publico(s, res, desde, hasta) {
@@ -596,7 +597,7 @@ async function publico(s, res, desde, hasta) {
     const tarde = m && m.guardado ? new Date(m.guardado).getTime() >= x.fin + 30 * 3600000 : !!m;
     if (!m || !m.completo || !tarde) faltan.push({ id: x.id, pais: x.pais });
     const mins = m && Array.isArray(m.minutos) ? m.minutos.filter((y) => y.t >= x.inicio - 60000 && y.t <= x.fin)
-      .map((y) => [Math.round(y.t / 1000), num(y.espectadores), num(y.vistas), num(y.clicsProducto)]) : [];
+      .map((y) => [Math.round(y.t / 1000), num(y.espectadores), num(y.vistas), num(y.clicsProducto), num(y.impresiones)]) : [];
     return { ...x, minutos: mins, guardado: undefined };
   });
   return res.status(200).json({ ok: true, desde, hasta, directos: salida, faltan });
