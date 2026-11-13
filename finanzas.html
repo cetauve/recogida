@@ -5,108 +5,224 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Billy's · Finanzas</title>
 <meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 /* Finanzas de los directos, 29 sep 2026. Solo para Aaron (pide su codigo).
- * Cruza cada prenda vendida con tablet con lo que TikTok liquida por ella. */
+ * Cruza cada prenda vendida con tablet con lo que TikTok liquida por ella.
+ *
+ * 13 nov 2026: aspecto nuevo con los colores de Billy's. Blanco de fondo,
+ * rojo para lo que hay que mirar o pulsar, azul para textos y rellenos. Las
+ * tres escalas (crema, rojo, azul) son las de la marca; el verde solo se usa
+ * para "mejor de lo normal", que la marca no tiene color para eso. */
 :root {
   color-scheme: light;
-  --fondo: #f4f3f0; --panel: #fcfcfb; --linea: #e4e2dc; --linea-2: #d3d1ca;
-  --t1: #0b0b0b; --t2: #52514e; --t3: #7d7b75;
-  --es: #2a78d6; --de: #eb6834; --nl: #1baf7a;
-  --bien: #0f7a3a; --mal: #c0392b; --aviso-fondo: #fff4d6; --aviso-t: #6b4e00;
-  --acento: #0b0b0b; --acento-t: #ffffff; --sel: #eef3fb;
+  --crema-1: #F6F5F2; --crema-2: #F0EEE8; --crema-3: #EAE7E0; --crema-4: #E6E2D9; --crema-5: #BDB9B2;
+  --rojo-1: #F9BAB3; --rojo-2: #F5897D; --rojo-3: #F25E4D; --rojo: #EF3B26; --rojo-5: #C4301F; --rojo-6: #8F2317;
+  --azul-1: #AFB4BB; --azul-2: #767F8B; --azul-3: #445060; --azul: #1B2A3D; --azul-5: #162232; --azul-6: #101925; --azul-7: #0A1017;
+  --fondo: var(--crema-1); --panel: #ffffff; --panel-2: var(--crema-1); --linea: var(--crema-3); --linea-2: var(--crema-4);
+  --t1: var(--azul); --t2: var(--azul-3); --t3: #68717D;
+  --es: var(--rojo); --de: var(--azul); --nl: var(--azul-1);
+  --bien: #1B7A52; --mal: var(--rojo-5); --bien-fondo: #E3F2EA; --mal-fondo: #FDE8E5;
+  --aviso-fondo: #FDF1DC; --aviso-t: #6B4A0B;
+  --acento: var(--rojo); --acento-t: #ffffff; --relleno: var(--azul); --relleno-t: #ffffff;
+  --sel: #FDF0EE; --sombra: 0 1px 2px rgba(27, 42, 61, .04), 0 8px 24px rgba(27, 42, 61, .05);
+  --heroe: linear-gradient(140deg, #1B2A3D 0%, #101925 70%, #2a1a1f 130%);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --fondo: #121211; --panel: #1a1a19; --linea: #2c2c2a; --linea-2: #3a3a37;
-    --t1: #ffffff; --t2: #c3c2b7; --t3: #8f8e86;
-    --es: #3987e5; --de: #d95926; --nl: #199e70;
-    --bien: #4cc27a; --mal: #ff7b6b; --aviso-fondo: #3a2f0f; --aviso-t: #f3d98b;
-    --acento: #ffffff; --acento-t: #0b0b0b; --sel: #1f2a3a;
+    --fondo: var(--azul-7); --panel: var(--azul-6); --panel-2: var(--azul-5); --linea: #1f2e42; --linea-2: #2c3c52;
+    --t1: var(--crema-1); --t2: var(--azul-1); --t3: #88919c;
+    --es: var(--rojo-3); --de: var(--azul-1); --nl: var(--azul-2);
+    --bien: #5CC79A; --mal: var(--rojo-2); --bien-fondo: #12372a; --mal-fondo: #43191a;
+    --aviso-fondo: #3a2f0f; --aviso-t: #f3d98b;
+    --relleno: var(--crema-1); --relleno-t: var(--azul);
+    --sel: #1d2638; --sombra: none; --heroe: linear-gradient(140deg, #22344b 0%, #162232 100%);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --fondo: #121211; --panel: #1a1a19; --linea: #2c2c2a; --linea-2: #3a3a37;
-  --t1: #ffffff; --t2: #c3c2b7; --t3: #8f8e86;
-  --es: #3987e5; --de: #d95926; --nl: #199e70;
-  --bien: #4cc27a; --mal: #ff7b6b; --aviso-fondo: #3a2f0f; --aviso-t: #f3d98b;
-  --acento: #ffffff; --acento-t: #0b0b0b; --sel: #1f2a3a;
+  --fondo: var(--azul-7); --panel: var(--azul-6); --panel-2: var(--azul-5); --linea: #1f2e42; --linea-2: #2c3c52;
+  --t1: var(--crema-1); --t2: var(--azul-1); --t3: #88919c;
+  --es: var(--rojo-3); --de: var(--azul-1); --nl: var(--azul-2);
+  --bien: #5CC79A; --mal: var(--rojo-2); --bien-fondo: #12372a; --mal-fondo: #43191a;
+  --aviso-fondo: #3a2f0f; --aviso-t: #f3d98b;
+  --relleno: var(--crema-1); --relleno-t: var(--azul);
+  --sel: #1d2638; --sombra: none; --heroe: linear-gradient(140deg, #22344b 0%, #162232 100%);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--fondo); color: var(--t1);
-  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
-.envoltura { max-width: 1440px; margin: 0 auto; padding: 20px 24px 60px; }
-h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
-.sub { color: var(--t2); font-size: 13px; }
-.cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
-.filtros { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; background: var(--panel);
-  border: 1px solid var(--linea); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
-.filtros label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--t2); }
+  font: 14px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+.envoltura { max-width: 1560px; margin: 0 auto; padding: 0 24px 70px; }
+
+/* ---- barra de arriba */
+.barra { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px 18px; flex-wrap: wrap;
+  padding: 14px 0; margin-bottom: 8px; background: color-mix(in srgb, var(--fondo) 88%, transparent); backdrop-filter: blur(10px); }
+.marca { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+.marca .logo { width: 34px; height: 34px; border-radius: 11px; background: var(--rojo); color: #fff; display: grid; place-items: center; font-size: 18px; font-weight: 700; }
+.marca small { font-weight: 500; color: var(--t3); font-size: 13px; }
+.pestanas { display: flex; gap: 4px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--linea); border-radius: 999px; padding: 4px; box-shadow: var(--sombra); }
+.pestanas button { border: none; background: none; border-radius: 999px; padding: 7px 14px; color: var(--t2); font-weight: 500; font-size: 13px; }
+.pestanas button:hover { background: var(--panel-2); }
+.pestanas button.activa { background: var(--relleno); color: var(--relleno-t); font-weight: 600; }
+.acciones { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.estado-sync { font-size: 12px; color: var(--t2); max-width: 280px; text-align: right; }
+
+/* ---- botones y campos */
 input, select, button { font: inherit; color: var(--t1); }
-input, select { background: var(--fondo); border: 1px solid var(--linea-2); border-radius: 7px; padding: 6px 8px; }
-button { background: var(--panel); border: 1px solid var(--linea-2); border-radius: 7px; padding: 7px 12px; cursor: pointer; }
-button:hover { border-color: var(--t3); }
-button.principal { background: var(--acento); color: var(--acento-t); border-color: var(--acento); }
+input, select { background: var(--panel); border: 1px solid var(--linea-2); border-radius: 12px; padding: 7px 10px; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--rojo-2); outline-offset: 1px; }
+button { background: var(--panel); border: 1px solid var(--linea-2); border-radius: 999px; padding: 8px 15px; cursor: pointer; font-weight: 500; }
+button:hover { border-color: var(--azul-1); }
+button.principal { background: var(--acento); color: var(--acento-t); border-color: var(--acento); font-weight: 600; }
+button.principal:hover { background: var(--rojo-5); border-color: var(--rojo-5); }
+button.oscuro { background: var(--relleno); color: var(--relleno-t); border-color: var(--relleno); }
+button.redondo { width: 38px; height: 38px; padding: 0; display: grid; place-items: center; }
 button:disabled { opacity: .5; cursor: default; }
+svg.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- saludo y filtros */
+.cabecera { display: flex; align-items: end; justify-content: space-between; gap: 14px 24px; flex-wrap: wrap; margin: 10px 0 18px; }
+h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; font-weight: 600; }
+.sub { color: var(--t2); font-size: 13px; }
+.filtros { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: end; }
+.filtros label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--t3); font-weight: 500; }
 .hueco { flex: 1; }
-.estado-sync { font-size: 12px; color: var(--t2); min-width: 220px; }
-.aviso { background: var(--aviso-fondo); color: var(--aviso-t); border-radius: 8px; padding: 9px 12px; margin-bottom: 12px; font-size: 13px; }
-.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
-#kpis { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.kpi { background: var(--panel); border: 1px solid var(--linea); border-radius: 10px; padding: 12px 14px; }
-.kpi .n { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.kpi .e { font-size: 12px; color: var(--t2); }
+.aviso { background: var(--aviso-fondo); color: var(--aviso-t); border-radius: 14px; padding: 10px 14px; margin-bottom: 10px; font-size: 13px; }
+
+/* ---- cifras */
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+#kpis { grid-template-columns: minmax(280px, 1.25fr) repeat(3, minmax(0, 1fr)); }
+.kpi { background: var(--panel); border: 1px solid var(--linea); border-radius: 20px; padding: 15px 17px; box-shadow: var(--sombra); min-width: 0; }
+.kpi .e { font-size: 12.5px; color: var(--t2); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.kpi .e .chip { width: 26px; height: 26px; border-radius: 9px; background: var(--panel-2); color: var(--t2); display: grid; place-items: center; flex: none; }
+.kpi .e .chip svg { width: 15px; height: 15px; }
+.kpi .n { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin-top: 6px; }
 .kpi .x { font-size: 12px; color: var(--t3); margin-top: 2px; }
-.pestanas { display: flex; gap: 4px; border-bottom: 1px solid var(--linea); margin-bottom: 14px; }
-.pestanas button { border: none; background: none; border-radius: 0; padding: 9px 14px; color: var(--t2); border-bottom: 2px solid transparent; }
-.pestanas button.activa { color: var(--t1); border-bottom-color: var(--t1); font-weight: 600; }
-.caja { background: var(--panel); border: 1px solid var(--linea); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
-.caja h2 { font-size: 14px; margin: 0 0 2px; }
-.caja .nota { font-size: 12px; color: var(--t3); margin-bottom: 10px; }
-.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.kpi.heroe { grid-row: span 2; background: var(--heroe); border-color: transparent; color: #fff; display: flex; flex-direction: column; padding: 20px 22px; position: relative; overflow: hidden; }
+.kpi.heroe::after { content: ""; position: absolute; right: -60px; top: -60px; width: 190px; height: 190px; border-radius: 50%; background: radial-gradient(circle, rgba(239, 59, 38, .55), rgba(239, 59, 38, 0) 70%); }
+.kpi.heroe .e { color: rgba(255, 255, 255, .72); }
+.kpi.heroe .n { font-size: 40px; margin-top: 10px; color: #fff; }
+.kpi.heroe .n.neg { color: var(--rojo-2); }
+.kpi.heroe .x { color: rgba(255, 255, 255, .62); }
+.kpi.heroe .pie { margin-top: auto; padding-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kpi.heroe .pie div { background: rgba(255, 255, 255, .08); border-radius: 13px; padding: 9px 11px; }
+.kpi.heroe .pie b { display: block; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpi.heroe .pie span { font-size: 11px; color: rgba(255, 255, 255, .62); }
+
+/* ---- cajas */
+.caja { background: var(--panel); border: 1px solid var(--linea); border-radius: 20px; padding: 18px 20px; margin-bottom: 16px; box-shadow: var(--sombra); min-width: 0; }
+.caja h2 { font-size: 15px; margin: 0 0 3px; font-weight: 600; letter-spacing: -0.01em; }
+.caja .nota { font-size: 12.5px; color: var(--t3); margin-bottom: 12px; max-width: 110ch; }
+.caja .grande { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 2px 0 8px; }
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.dos-tercios { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+.dos > .caja, .dos-tercios > .caja { margin-bottom: 16px; }
 .grafico { position: relative; height: 320px; }
-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
-th, td { padding: 7px 8px; border-bottom: 1px solid var(--linea); text-align: right; white-space: nowrap; }
-th { font-weight: 600; color: var(--t2); font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
+.cab-caja { display: flex; justify-content: space-between; align-items: start; gap: 12px; flex-wrap: wrap; }
+
+/* ---- tablas */
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+th, td { padding: 9px 6px; border-bottom: 1px solid var(--linea); text-align: right; white-space: nowrap; }
+th { font-weight: 600; color: var(--t3); font-size: 11.5px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
 th:first-child, td:first-child, th.izq, td.izq { text-align: left; }
-tbody tr:hover { background: var(--sel); }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--panel-2); }
+tfoot th { border-top: 2px solid var(--linea-2); border-bottom: none; color: var(--t1); font-size: 13px; }
+/* La primera columna se queda quieta al mover a los lados una tabla ancha. */
+tbody td:first-child, tfoot th:first-child { position: sticky; left: 0; background: var(--panel); }
+thead th:first-child { left: 0; z-index: 2; }
+tbody tr:hover td:first-child { background: var(--panel-2); }
+tbody tr.elegida td:first-child { background: var(--sel); box-shadow: inset 3px 0 0 var(--rojo); }
 tr.clic { cursor: pointer; }
-tr.elegida { background: var(--sel); }
+tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0 var(--rojo); }
 .tabla-alta { max-height: 620px; overflow: auto; }
 .pos { color: var(--bien); } .neg { color: var(--mal); }
 .muted { color: var(--t3); }
 .punto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
-.etiqueta { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 10px; border: 1px solid var(--linea-2); color: var(--t2); }
-.migas { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; font-size: 13px; }
+.etiqueta { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--linea); color: var(--t2); font-weight: 500; }
+.delta { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; font-variant-numeric: tabular-nums; background: var(--panel-2); color: var(--t2); }
+.delta.pos { background: var(--bien-fondo); color: var(--bien); } .delta.neg { background: var(--mal-fondo); color: var(--mal); }
+.migas { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; font-size: 13px; }
 .oculto { display: none !important; }
 .editar-coste { cursor: pointer; border-bottom: 1px dashed var(--t3); }
-#entrar { max-width: 360px; margin: 18vh auto; background: var(--panel); border: 1px solid var(--linea); border-radius: 12px; padding: 22px; }
-#entrar input { width: 100%; margin: 10px 0; }
+
+/* ---- entrar */
+#entrar { max-width: 380px; margin: 16vh auto; background: var(--panel); border: 1px solid var(--linea); border-radius: 24px; padding: 28px; box-shadow: var(--sombra); }
+#entrar .marca { margin-bottom: 14px; }
+#entrar input { width: 100%; margin: 12px 0; }
+
+/* ---- ajustes */
 .ajustes-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; }
 .ajustes-grid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
 .ajustes-grid input { width: 80px; text-align: right; }
 .sub-ajustes { font-size: 13px; margin: 16px 0 4px; }
-.tabla-coste { border: 1px solid var(--linea); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.tabla-coste { border: 1px solid var(--linea); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
 .tabla-coste .cab { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
 .tabla-coste .ajustes-grid input::placeholder { color: var(--t3); }
-.nueva-tabla { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; font-size: 13px; padding: 10px 12px; border: 1px dashed var(--linea-2); border-radius: 8px; }
+.nueva-tabla { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; font-size: 13px; padding: 12px 14px; border: 1px dashed var(--linea-2); border-radius: 14px; }
 .nueva-tabla label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--t2); }
 .explica { font-size: 13px; color: var(--t2); }
 .explica summary { cursor: pointer; font-weight: 600; color: var(--t1); }
 .explica dl { display: grid; grid-template-columns: minmax(180px, 240px) 1fr; gap: 6px 16px; margin: 10px 0 0; }
 .explica dt { font-weight: 600; color: var(--t1); }
 .explica dd { margin: 0; }
-.fila-sel { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
-@media (max-width: 1100px) { .kpis, #kpis { grid-template-columns: repeat(3, 1fr); } .dos { grid-template-columns: 1fr; } .ajustes-grid { grid-template-columns: repeat(2, 1fr); } }
+.fila-sel { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; }
+.grupo-botones { display: inline-flex; background: var(--panel-2); border: 1px solid var(--linea); border-radius: 999px; padding: 3px; gap: 2px; }
+.grupo-botones button { border: none; background: none; padding: 5px 12px; font-size: 12.5px; color: var(--t2); }
+.grupo-botones button.activa { background: var(--panel); color: var(--t1); font-weight: 600; box-shadow: 0 1px 2px rgba(27, 42, 61, .12); }
+
+/* ---- lista de mejores directos */
+.lista { list-style: none; margin: 0; padding: 0; }
+.lista li { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-bottom: 1px solid var(--linea); cursor: pointer; border-radius: 10px; }
+.lista li:last-child { border-bottom: none; }
+.lista li:hover { background: var(--panel-2); }
+.lista .num { width: 26px; height: 26px; border-radius: 50%; background: var(--panel-2); display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--t2); flex: none; }
+.lista li:first-child .num { background: var(--rojo); color: #fff; }
+.lista .quien { flex: 1; min-width: 0; }
+.lista .quien b { display: block; font-weight: 600; font-size: 13px; }
+.lista .quien span { font-size: 12px; color: var(--t3); }
+.lista .cuanto { text-align: right; font-variant-numeric: tabular-nums; }
+.lista .cuanto b { display: block; font-size: 14px; }
+.lista .cuanto span { font-size: 12px; color: var(--t3); }
+
+/* ---- diagnostico */
+.veredicto { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 12px; margin-bottom: 16px; }
+.veredicto .kpi .n { font-size: 30px; }
+.veredicto .kpi.heroe { grid-row: auto; }
+.veredicto .kpi.heroe .n { font-size: 34px; }
+.veredicto .frase { font-size: 14px; line-height: 1.55; color: var(--t1); }
+.veredicto .frase b { font-weight: 600; }
+.pasos { width: 100%; }
+.pasos td, .pasos th { white-space: normal; }
+.pasos td.paso b { display: block; font-weight: 600; }
+.pasos td.paso span { font-size: 12px; color: var(--t3); }
+.pasos .barra-eur { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 190px; }
+.pasos .barra-eur i { display: block; height: 10px; border-radius: 5px; min-width: 2px; }
+.pasos .barra-eur i.pos { background: var(--bien); } .pasos .barra-eur i.neg { background: var(--rojo); }
+.pasos tr.total td { font-weight: 600; border-top: 2px solid var(--linea-2); }
+.barrita { display: inline-block; height: 8px; border-radius: 4px; background: var(--azul-1); vertical-align: middle; margin-right: 8px; }
+.barrita.baja { background: var(--rojo); } .barrita.alta { background: var(--azul); }
+.cifras-tt { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 6px; }
+.cifra { border: 1px solid var(--linea); border-radius: 14px; padding: 11px 13px; background: var(--panel); }
+.cifra .e { font-size: 12px; color: var(--t2); }
+.cifra .n { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; margin: 2px 0 4px; }
+.cifra .x { font-size: 11.5px; color: var(--t3); }
+.cifra.nuestra { background: var(--panel-2); border-color: var(--linea-2); }
+.titulo-grupo { font-size: 11.5px; font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 8px; }
+
+@media (max-width: 1200px) { #kpis { grid-template-columns: repeat(3, 1fr); } .kpi.heroe { grid-column: 1 / -1; grid-row: auto; } .veredicto { grid-template-columns: 1fr 1fr; } .veredicto .kpi:last-child { grid-column: 1 / -1; } .dos-tercios { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } .dos { grid-template-columns: 1fr; } .ajustes-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) { .envoltura { padding: 0 14px 50px; } .kpis, #kpis { grid-template-columns: repeat(2, 1fr); } .veredicto { grid-template-columns: 1fr; } h1 { font-size: 22px; } .acciones { margin-left: 0; } }
 </style>
 </head>
 <body>
 
 <div id="entrar" class="oculto">
-  <h1>Finanzas</h1>
+  <div class="marca"><span class="logo">B</span><span>Billy's <small>Finanzas</small></span></div>
   <p class="sub">Pon tu código de finanzas. Se queda guardado en este ordenador.</p>
   <input id="codigo" type="password" autocomplete="off" placeholder="fin-...">
   <button class="principal" id="btn-entrar">Entrar</button>
@@ -114,35 +230,48 @@ tr.elegida { background: var(--sel); }
 </div>
 
 <div class="envoltura oculto" id="app">
+  <header class="barra">
+    <div class="marca"><span class="logo">B</span><span>Billy's <small>Finanzas</small></span></div>
+    <nav class="pestanas" id="pestanas">
+      <button data-p="directos" class="activa">Directos</button>
+      <button data-p="diagnostico">Diagnóstico</button>
+      <button data-p="publico">Público</button>
+      <button data-p="categorias">Categorías</button>
+      <button data-p="marcas">Marcas</button>
+      <button data-p="evolucion">Evolución</button>
+      <button data-p="prendas">Prendas</button>
+      <button data-p="tiktok">Cargos de TikTok</button>
+    </nav>
+    <div class="acciones">
+      <span class="estado-sync" id="estado-sync"></span>
+      <button class="redondo" id="btn-ajustes" title="Costes y sueldos" aria-label="Costes y sueldos"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <button class="principal" id="btn-sync">Traer datos nuevos de TikTok</button>
+    </div>
+  </header>
+
   <div class="cabecera">
     <div>
-      <h1>Finanzas de los directos</h1>
-      <div class="sub" id="sub-cabecera">Cada prenda vendida con tablet, cruzada con lo que TikTok liquida por ella.</div>
+      <h1 id="saludo">Finanzas de los directos</h1>
+      <div class="sub" id="actualizado"></div>
     </div>
-    <div class="sub" id="actualizado"></div>
-  </div>
-
-  <div class="filtros">
-    <label>Desde <input type="date" id="f-desde"></label>
-    <label>Hasta <input type="date" id="f-hasta"></label>
-    <label>País
-      <select id="f-pais"><option value="">Todos</option><option value="es">España</option><option value="de">Alemania</option><option value="nl">Holanda</option></select>
-    </label>
-    <label>Cuenta
-      <select id="f-canal"><option value="">Todas</option><option value="bv">BV</option><option value="bto">BTo</option><option value="bta">BTa</option><option value="de">DE</option><option value="nl">NL</option></select>
-    </label>
-    <label>Categoría <select id="f-cat"><option value="">Todas</option></select></label>
-    <label>Comisión
-      <select id="f-comision"><option value="real">La real de TikTok</option><option value="9">Simular al 9 %</option></select>
-    </label>
-    <label>IVA de la venta
-      <select id="f-iva"><option value="no">Sin restar</option><option value="si">Restar IVA</option></select>
-    </label>
-    <button id="btn-cargar">Ver</button>
-    <div class="hueco"></div>
-    <span class="estado-sync" id="estado-sync"></span>
-    <button class="principal" id="btn-sync">Traer datos nuevos de TikTok</button>
-    <button id="btn-ajustes">Costes y sueldos</button>
+    <div class="filtros">
+      <label>Desde <input type="date" id="f-desde"></label>
+      <label>Hasta <input type="date" id="f-hasta"></label>
+      <label>País
+        <select id="f-pais"><option value="">Todos</option><option value="es">España</option><option value="de">Alemania</option><option value="nl">Holanda</option></select>
+      </label>
+      <label>Cuenta
+        <select id="f-canal"><option value="">Todas</option><option value="bv">BV</option><option value="bto">BTo</option><option value="bta">BTa</option><option value="de">DE</option><option value="nl">NL</option></select>
+      </label>
+      <label>Categoría <select id="f-cat"><option value="">Todas</option></select></label>
+      <label>Comisión
+        <select id="f-comision"><option value="real">La real de TikTok</option><option value="9">Simular al 9 %</option></select>
+      </label>
+      <label>IVA de la venta
+        <select id="f-iva"><option value="no">Sin restar</option><option value="si">Restar IVA</option></select>
+      </label>
+      <button id="btn-cargar" class="oscuro">Ver</button>
+    </div>
   </div>
 
   <div class="caja oculto" id="ajustes">
@@ -177,21 +306,89 @@ tr.elegida { background: var(--sel); }
     <span id="migas-texto"></span>
   </div>
 
-  <div class="pestanas" id="pestanas">
-    <button data-p="directos" class="activa">Directos</button>
-    <button data-p="publico">Público</button>
-    <button data-p="categorias">Categorías</button>
-    <button data-p="marcas">Marcas</button>
-    <button data-p="evolucion">Evolución</button>
-    <button data-p="prendas">Prendas</button>
-    <button data-p="tiktok">Cargos de TikTok</button>
-  </div>
-
   <section data-s="directos">
+    <div class="dos-tercios">
+      <div class="caja">
+        <div class="cab-caja">
+          <div><h2>Beneficio por día</h2><div class="grande" id="dir-total"></div></div>
+          <div class="sub" id="dir-total-nota"></div>
+        </div>
+        <div class="grafico" style="height:280px"><canvas id="g-dir-dias"></canvas></div>
+      </div>
+      <div class="caja">
+        <h2>Los que más dejan por hora</h2>
+        <div class="nota">Por beneficio por hora, no por facturación. Pulsa uno para verlo solo.</div>
+        <ul class="lista" id="dir-top"></ul>
+      </div>
+    </div>
     <div class="caja">
       <h2>Beneficio por directo</h2>
       <div class="nota">Pulsa un directo para ver solo ese en todas las pestañas. Liquidado = lo que TikTok paga (real si ya liquidó, estimado si no). Beneficio = liquidado − coste de las prendas − vendedora.</div>
       <div class="tabla-alta"><table id="t-directos"></table></div>
+    </div>
+  </section>
+
+  <section data-s="diagnostico" class="oculto">
+    <div class="fila-sel"><label for="diag-sel"><b>Directo</b></label><select id="diag-sel"></select><span class="muted" id="diag-normal"></span></div>
+    <div id="diag-vacio" class="caja oculto"></div>
+    <div id="diag-cuerpo">
+      <div class="veredicto" id="diag-veredicto"></div>
+
+      <div class="dos">
+        <div class="caja">
+          <h2>Dónde se ganó y dónde se perdió</h2>
+          <div class="nota">El camino de una persona desde que TikTok le enseña el directo hasta que deja beneficio. Cada paso se compara con lo normal de esa cuenta, y la última columna dice cuántos euros por hora sumó o restó ese paso. Sumados dan justo la diferencia de beneficio por hora.</div>
+          <table class="pasos" id="t-diag-pasos"></table>
+          <div class="nota" style="margin:12px 0 0">«Compran» y «Beneficio por prenda» van unidos: con prendas más caras se rematan menos por clic pero cada una deja más. Hay que mirarlos juntos, no por separado.</div>
+        </div>
+        <div class="caja">
+          <h2>De lo normal a este directo, en euros por hora</h2>
+          <div class="nota">Azul: beneficio por hora normal y el de este directo. Verde y rojo: lo que suma o resta cada paso.</div>
+          <div class="grafico" style="height:360px"><canvas id="g-diag-cascada"></canvas></div>
+        </div>
+      </div>
+
+      <div class="caja">
+        <div class="cab-caja">
+          <div><h2>Qué se vendió y cuánto rindió su tiempo</h2>
+          <div class="nota">El tiempo de directo es lo que no se puede comprar. Cada grupo con el tiempo de pantalla que ocupó y el beneficio que dejó: si ocupa más tiempo que beneficio deja, está quitando sitio a algo mejor. Tiempo de pantalla de una prenda = lo que pasa desde la venta anterior (los parones de más de 10 minutos no cuentan).</div></div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <span class="grupo-botones" id="diag-mix-de"><button data-v="uno" class="activa">Este directo</button><button data-v="todos">Todo lo filtrado</button></span>
+            <span class="grupo-botones" id="diag-mix-por"><button data-v="cat" class="activa">Categoría</button><button data-v="marca">Marca</button><button data-v="precio">Precio</button></span>
+          </div>
+        </div>
+        <div class="dos" style="align-items:start">
+          <div class="tabla-alta"><table id="t-diag-mix"></table></div>
+          <div><div class="grafico" style="height:340px"><canvas id="g-diag-mix"></canvas></div></div>
+        </div>
+      </div>
+
+      <div class="caja">
+        <h2>Las cifras de este directo, frente a lo normal</h2>
+        <div class="nota">Arriba las tuyas, que TikTok no conoce porque no sabe lo que cuesta la ropa ni lo que se cancela. Debajo las mismas que enseña TikTok en su diagnóstico, calculadas igual. La comparación es con los directos de esa cuenta de los 30 días anteriores.</div>
+        <div id="diag-cifras"></div>
+      </div>
+
+      <div class="caja">
+        <h2>Cuándo entró más gente de la que lo vio</h2>
+        <div class="nota">Tasa de entrada minuto a minuto: de cada 100 veces que TikTok enseñó el directo en el feed, cuántas entraron (media de 3 minutos). La línea gris son las veces que lo enseñó. Debajo, los momentos con mejor tasa y la prenda que había en pantalla.</div>
+        <div id="diag-entrada-falta" class="muted oculto"></div>
+        <div class="grafico" style="height:300px" id="diag-entrada-graf"><canvas id="g-diag-entrada"></canvas></div>
+        <div class="tabla-alta" style="margin-top:12px"><table id="t-diag-entrada"></table></div>
+      </div>
+    </div>
+
+    <div class="dos-tercios">
+      <div class="caja">
+        <h2>Todos los directos: por beneficio, no por facturación</h2>
+        <div class="nota">Puesto de cada directo dentro de su país por beneficio por hora y por la venta por hora que cuenta TikTok. «Puestos» = cuántos sube o baja al mirar el beneficio en vez de la facturación. Pulsa uno para diagnosticarlo arriba.</div>
+        <div class="tabla-alta"><table id="t-diag-ranking"></table></div>
+      </div>
+      <div class="caja">
+        <h2>Facturar más no siempre es ganar más</h2>
+        <div class="nota">Cada punto es un directo. A la derecha, más venta por hora según TikTok; arriba, más beneficio por hora. El marcado es el elegido.</div>
+        <div class="grafico" style="height:380px"><canvas id="g-diag-nube"></canvas></div>
+      </div>
     </div>
   </section>
 
@@ -368,6 +565,20 @@ const guardarLocal = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)
 const leerLocal = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+const ICONOS = {
+  beneficio: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  prendas: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>',
+  precio: '<path d="M18 6.5a7 7 0 1 0 0 11"/><path d="M4 10.5h9M4 13.5h9"/>',
+  cancelado: '<circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/>',
+  liquidado: '<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v10a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><circle cx="16.5" cy="14" r="1"/>',
+  comision: '<path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',
+  coste: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
+};
+const icono = (k) => `<svg class="ic" viewBox="0 0 24 24">${ICONOS[k] || ''}</svg>`;
+function saludar() {
+  const h = Number(new Date().toLocaleString('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false }));
+  $('#saludo').textContent = (h >= 6 && h < 13 ? 'Buenos días' : (h >= 13 && h < 21 ? 'Buenas tardes' : 'Buenas noches')) + ', Aaron';
+}
 let CODIGO = leerLocal('fin_codigo', '');
 /* Lo guardado en el navegador va con una llave nueva. Lo de la llave vieja
  * (fin_costes) llevaba IVA y NO se lee: no puede pisar las tablas nuevas. */
@@ -462,6 +673,18 @@ function calcular() {
       tablaCoste: aMano ? 'a mano' : (deTabla.tabla ? deTabla.tabla.nombre : ''),
       beneficio: (conDinero ? neto : 0) - ivaVenta - coste - vendedora, sinCoste: cobrada && !aMano && !(deTabla.coste > 0), aMano };
   });
+  /* Tiempo de pantalla de cada prenda: lo que pasa desde la venta anterior de
+   * su directo. Un paron de mas de 10 minutos no es tiempo de esa prenda: a
+   * esa, y a la primera del directo, se les pone lo normal de ese directo. */
+  const porSes = {};
+  for (const p of PRENDAS) (porSes[p.sesion] = porSes[p.sesion] || []).push(p);
+  for (const g of Object.values(porSes)) {
+    g.sort((a, b) => a.h - b.h);
+    const huecos = [];
+    for (let i = 1; i < g.length; i++) { const seg = (g[i].h - g[i - 1].h) / 1000; g[i].pant = seg <= TOPE_PANTALLA ? seg : null; if (seg <= TOPE_PANTALLA) huecos.push(seg); }
+    const normal = huecos.length ? mediana(huecos) : 60;
+    for (const p of g) if (p.pant == null) p.pant = normal;
+  }
   return ses;
 }
 
@@ -527,7 +750,7 @@ const colsDinero = [
   { k: 'precioMedio', t: 'Precio medio', f: (v) => eur(v), ayuda: 'Remate medio de las cobradas' },
   { k: 'remateCobrado', t: 'Remate', f: eur0, ayuda: 'Suma de remates de las cobradas' },
   { k: 'eurCancelado', t: 'Cancelado', f: (v, f) => eur0(v) + ` <span class="muted">${ent(f.nCancelado)} · ${pct(f.pctCancelado, 0)}</span>`, ayuda: 'Remate de las prendas canceladas: las que no se pagaron y las que se pagaron y se cancelaron después. Entre paréntesis, cuántas y qué parte del remate de todo lo vendido. Solo informa: ya no cuenta en el beneficio.' },
-  { k: 'eurDevuelto', t: 'Devuelto', f: (v, f) => eur0(v) + ` <span class="muted">${ent(f.nDevuelto)} · ${pct(f.pctDevuelto, 0)}</span>`, ayuda: 'Remate de las prendas pagadas y reembolsadas sin estar canceladas (devoluciones). Aparte de las canceladas.' },
+  { k: 'eurDevuelto', t: 'Devuelto', f: (v, f) => f.nDevuelto ? `<span title="${ent(f.nDevuelto)} prendas · ${pct(f.pctDevuelto, 0)} del remate">${eur0(v)} <span class="muted">${ent(f.nDevuelto)}</span></span>` : '<span class="muted">0 €</span>', ayuda: 'Remate de las prendas pagadas y reembolsadas sin estar canceladas (devoluciones). Aparte de las canceladas.' },
   { k: 'neto', t: 'Liquidado', f: (v, f) => eur0(v) + (f.netoEstimado ? ` <span class="etiqueta" title="De esto, ${eur0(f.netoEstimado)} es estimación de TikTok">${pct(f.neto ? f.netoEstimado / f.neto : 0, 0)} est.</span>` : ''), ayuda: 'Lo que TikTok paga. Real si ya liquidó; estimado si no.' },
   { k: 'comision', t: 'Comisión', f: (v, f) => eur0(v) + ` <span class="muted">${pct(f.comisionPct)}</span>`, color: true },
   { k: 'envio', t: 'Envío neto', f: eur0, color: true, ayuda: 'Lo que TikTok abona (+) o cobra (−) por envío, neto' },
@@ -561,16 +784,19 @@ function pintar() {
 
   /* ---- cifras de arriba */
   const horasTot = Object.entries(ses).filter(([k]) => ps.some((p) => p.sesion === k)).reduce((a, [, s]) => a + s.horas, 0);
-  const kpis = [
-    ['Prendas vendidas', ent(t.n), `${ent(t.cobradas)} cobradas · ${ent(t.canceladas)} canceladas · ${ent(t.reembolsadas)} reembolsadas · ${ent(t.sinPagar)} sin pagar`],
-    ['Precio medio', eur(t.precioMedio), `remate de las cobradas`],
-    ['Cancelado', eur0(t.eurCancelado), `${ent(t.nCancelado)} prendas · ${pct(t.pctCancelado, 0)} del remate · devuelto ${eur0(t.eurDevuelto)}`],
-    ['Liquidado', eur0(t.neto), t.netoEstimado ? `${eur0(t.netoEstimado)} aún estimado` : 'todo real'],
-    ['Comisión real', pct(t.comisionPct), `${eur0(-t.comision)} en total`],
-    ['Beneficio', eur0(t.beneficio), `${eur(t.porPrenda)} por prenda · margen ${pct(t.margen, 0)}`],
-    ['Beneficio por hora', eur0(horasTot ? t.beneficio / horasTot : null), `${horasTot.toLocaleString('es-ES', { maximumFractionDigits: 1 })} h de directo`],
+  const tarjetas = [
+    ['prendas', 'Prendas vendidas', ent(t.n), `${ent(t.cobradas)} cobradas · ${ent(t.reembolsadas)} reembolsadas · ${ent(t.sinPagar)} sin pagar`],
+    ['precio', 'Precio medio', eur(t.precioMedio), 'remate de las cobradas'],
+    ['cancelado', 'Cancelado', eur0(t.eurCancelado), `${ent(t.nCancelado)} prendas · ${pct(t.pctCancelado, 0)} del remate · devuelto ${eur0(t.eurDevuelto)}`],
+    ['liquidado', 'Liquidado', eur0(t.neto), t.netoEstimado ? `${eur0(t.netoEstimado)} aún estimado` : 'todo real'],
+    ['comision', 'Comisión real', pct(t.comisionPct), `${eur0(-t.comision)} en total`],
+    ['coste', 'Coste de las prendas', eur0(t.coste), `${eur(t.costeMedio)} por prenda · vendedoras ${eur0(t.vendedora)}`],
   ];
-  $('#kpis').innerHTML = kpis.map(([e, n, x]) => `<div class="kpi"><div class="e">${e}</div><div class="n ${e === 'Beneficio' ? signo(t.beneficio) : ''}">${n}</div><div class="x">${x}</div></div>`).join('');
+  $('#kpis').innerHTML =
+    `<div class="kpi heroe"><div class="e">${icono('beneficio')} Beneficio</div><div class="n ${t.beneficio < 0 ? 'neg' : ''}">${eur0(t.beneficio)}</div>` +
+    `<div class="x">${ent(t.cobradas)} prendas cobradas en ${horasTot.toLocaleString('es-ES', { maximumFractionDigits: 1 })} h de directo</div>` +
+    `<div class="pie"><div><b>${eur0(horasTot ? t.beneficio / horasTot : null)}</b><span>por hora</span></div><div><b>${eur(t.porPrenda)}</b><span>por prenda</span></div><div><b>${pct(t.margen, 0)}</b><span>margen</span></div></div></div>` +
+    tarjetas.map(([i, e, n, x]) => `<div class="kpi"><div class="e"><span class="chip">${icono(i)}</span>${e}</div><div class="n">${n}</div><div class="x">${x}</div></div>`).join('');
 
   /* ---- migas del directo elegido */
   if (DIRECTO && ses[DIRECTO]) {
@@ -581,7 +807,7 @@ function pintar() {
 
   /* ---- pestañas */
   document.querySelectorAll('section[data-s]').forEach((s) => s.classList.toggle('oculto', s.dataset.s !== PESTANA));
-  ({ directos: pDirectos, publico: pPublico, categorias: pCategorias, marcas: pMarcas, evolucion: pEvolucion, prendas: pPrendas, tiktok: pTiktok })[PESTANA](ps, t, ses);
+  ({ directos: pDirectos, diagnostico: pDiagnostico, publico: pPublico, categorias: pCategorias, marcas: pMarcas, evolucion: pEvolucion, prendas: pPrendas, tiktok: pTiktok })[PESTANA](ps, t, ses);
 }
 
 function pDirectos(ps, t, ses) {
@@ -594,6 +820,26 @@ function pDirectos(ps, t, ses) {
       horas: s.horas, n: g.length, porHora: a.beneficio / s.horas, ...a };
   });
   const tot = sumar(base); tot.horas = filas.reduce((x, f) => x + f.horas, 0); tot.porHora = tot.horas ? tot.beneficio / tot.horas : null;
+  /* Beneficio de cada dia, apilado por pais, y los directos que mas dejan por hora. */
+  $('#dir-total').textContent = eur0(tot.beneficio);
+  $('#dir-total-nota').textContent = `${ent(filas.length)} directos · ${tot.horas.toLocaleString('es-ES', { maximumFractionDigits: 1 })} h · ${eur0(tot.porHora)} por hora`;
+  const dias = [...new Set(base.map((p) => p.dia))].sort();
+  const paisesD = Object.keys(PAISES).filter((p) => base.some((x) => x.pais === p));
+  const porDia = {};
+  for (const p of base) porDia[p.pais + p.dia] = (porDia[p.pais + p.dia] || 0) + p.beneficio;
+  if (graficos['g-dir-dias']) graficos['g-dir-dias'].destroy();
+  const opD = baseGrafico(false);
+  opD.scales.x.stacked = true; opD.scales.y.stacked = true;
+  opD.scales.x.ticks = { color: color('--t2'), maxRotation: 0, autoSkip: true, maxTicksLimit: 16 };
+  if (paisesD.length < 2) opD.plugins.legend.display = false;
+  opD.plugins.tooltip.callbacks.label = (c) => ` ${c.dataset.label}: ${eur0(c.parsed.y)}`;
+  graficos['g-dir-dias'] = new Chart(document.getElementById('g-dir-dias'), { type: 'bar', data: { labels: dias.map(diaCorto),
+    datasets: paisesD.map((p) => ({ label: PAISES[p], data: dias.map((d) => porDia[p + d] == null ? null : Math.round(porDia[p + d])), backgroundColor: color('--' + p), borderRadius: 5, maxBarThickness: 26 })) }, options: opD });
+  const mejores = filas.filter((f) => f.horas >= 1).sort((a, b) => b.porHora - a.porHora).slice(0, 5);
+  $('#dir-top').innerHTML = mejores.map((f, i) => `<li data-id="${esc(f._id)}"><span class="num">${i + 1}</span>` +
+    `<span class="quien"><b><span class="punto" style="background:var(--${f.pais})"></span>${esc(f.cuenta)} · ${diaCorto(f.dia)}</b><span>${f.horas.toLocaleString('es-ES', { maximumFractionDigits: 1 })} h · ${ent(f.cobradas)} cobradas · ${eur(f.precioMedio)} de media</span></span>` +
+    `<span class="cuanto"><b>${eur0(f.porHora)}/h</b><span>${eur0(f.beneficio)}</span></span></li>`).join('') || '<li class="muted">Sin directos de una hora o más en este filtro.</li>';
+  document.querySelectorAll('#dir-top li[data-id]').forEach((li) => li.onclick = () => { DIRECTO = DIRECTO === li.dataset.id ? '' : li.dataset.id; pintar(); });
   tabla('t-directos', [
     { k: 'dia', t: 'Día', izq: true, f: (v, f) => diaCorto(v) + ' <span class="muted">' + hora(f.desde) + '</span>' },
     { k: 'cuenta', t: 'Cuenta', izq: true, f: (v, f) => `<span class="punto" style="background:var(--${f.pais})"></span>${esc(v)}` },
@@ -794,7 +1040,7 @@ function directosPublico() {
 
 function medirDirecto(L, canal, ses) {
   const p = L.publico, horas = Math.max((L.fin - L.inicio) / 3600000, 0.05);
-  const mins = (L.minutos || []).map(([t, esp, vis, cl]) => ({ t: t * 1000, esp, vis, cl, d: (t * 1000 - L.inicio) / 60000, benef: 0, n: 0 }));
+  const mins = (L.minutos || []).map(([t, esp, vis, cl, imp]) => ({ t: t * 1000, esp, vis, cl, imp: Number(imp) || 0, d: (t * 1000 - L.inicio) / 60000, benef: 0, n: 0 }));
   /* Los minutos de TikTok no empiezan en el segundo 0: se casan las ventas con
    * el minuto de TikTok en el que caen. */
   const desfase = mins.length ? mins[0].t % 60000 : 0;
@@ -1015,8 +1261,365 @@ function pPublico() {
   ], rs, { orden: { k: 'desde', d: -1 }, clic: (id) => { PUB_SEL = id; pintar(); document.getElementById('g-pub-curva').scrollIntoView({ behavior: 'smooth', block: 'center' }); }, elegida: (f) => f._id === PUB_SEL });
 }
 
+/* ============================================================ diagnostico */
+/* 13 nov 2026. TikTok saca un "diagnostico" de cada directo, pero lo mide todo
+ * en venta (GMV): un directo de prendas caras sale el primero aunque deje
+ * menos. Aqui se hace el mismo recorrido (lo ven, entran, miran, compran) pero
+ * se termina en beneficio, y cada paso se traduce a euros por hora.
+ *
+ * LO NORMAL de un directo = los directos de su misma cuenta de los 30 dias
+ * anteriores, SUMADOS (no la media de sus porcentajes): asi el producto de los
+ * pasos da exactamente su beneficio por hora y los euros cuadran.
+ *
+ * EL REPARTO EN EUROS. Beneficio por hora = paso 1 x paso 2 x ... Al ser una
+ * multiplicacion, lo que aporta cada paso se reparte por logaritmos:
+ *   euros del paso = (B - B0) x ln(paso / paso normal) / ln(B / B0)
+ * La suma de todos los pasos es justo B - B0.
+ *
+ * Las ventas de un directo son las de tablet que caen dentro de su horario en
+ * TikTok: si una sesion de tablet cubre dos directos, cada uno se queda con
+ * las suyas. */
+let DIAG_SEL = '', DIAG_MIX_DE = 'uno', DIAG_MIX_POR = 'cat';
+const TOPE_PANTALLA = 600;
+const TRAMOS_PRECIO = [[0, 3, '1 y 2 €'], [3, 6, '3 a 5 €'], [6, 10, '6 a 9 €'], [10, 15, '10 a 14 €'], [15, 25, '15 a 24 €'], [25, 40, '25 a 39 €'], [40, 1e9, '40 € o más']];
+const n0 = (x) => Number(x) || 0;
+const conSigno = (v, f) => (v > 0 ? '+' : (v < 0 ? '−' : '')) + f(Math.abs(v));
+const delta = (v, v0, menosEsMejor) => {
+  if (v == null || v0 == null || !isFinite(v) || !isFinite(v0) || !v0) return '';
+  const d = v / v0 - 1, bien = menosEsMejor ? d < 0 : d > 0;
+  return `<span class="delta ${Math.abs(d) < 0.005 ? '' : (bien ? 'pos' : 'neg')}">${conSigno(d, (x) => pct(x, 0))}</span>`;
+};
+
+const SUMAS_DIAG = ['k', 'h', 'imp', 'visMin', 'vistas', 'esp', 'clics', 'impProd', 'n', 'cob', 'ben', 'gmv', 'prendasTT', 'pedidosTT',
+  'coment', 'likes', 'seg', 'comp', 'sumEsp', 'nMin', 'pico', 'watch', 'eurCanc', 'remateTodo'];
+function medirDiag(r) {
+  const L = r.L, p = L.publico || {}, v = L.ventas || {};
+  const ps = r.ses ? r.ses.ps.filter((x) => x.h >= L.inicio - 60000 && x.h <= L.fin + 180000) : [];
+  const a = sumar(ps);
+  /* Los minutos valen si estan enteros: sus clics tienen que sumar lo mismo
+   * que el total del directo. */
+  const clicsMin = r.mins.reduce((s, m) => s + m.cl, 0);
+  const enteros = r.mins.length > 0 && n0(p.clicsProducto) > 0 && clicsMin >= 0.9 * n0(p.clicsProducto);
+  const q = { r, id: r._id, pais: r.pais, canal: r.canal, desde: r.desde, dia: r.dia, tienda: r.tienda, ps, a, k: 1, h: r.horas,
+    imp: enteros ? r.mins.reduce((s, m) => s + (m.imp || 0), 0) : 0,
+    visMin: enteros ? r.mins.reduce((s, m) => s + m.vis, 0) : 0,
+    vistas: n0(p.vistas), esp: n0(p.espectadores), clics: n0(p.clicsProducto), impProd: n0(p.impresionesProducto),
+    n: a.n, cob: a.cobradas, ben: a.beneficio, gmv: n0(v.gmv), prendasTT: n0(v.prendas), pedidosTT: n0(v.pedidos),
+    coment: n0(p.comentarios), likes: n0(p.likes), seg: n0(p.seguidoresNuevos), comp: n0(p.compartidos),
+    sumEsp: r.mins.reduce((s, m) => s + m.esp, 0), nMin: r.mins.length, pico: n0(r.pico),
+    watch: n0(p.segundosMedios) * n0(p.espectadores), eurCanc: a.eurCancelado, remateTodo: a.remate };
+  q.vale = ps.length >= 20 && q.h >= 1 && q.vistas > 0 && q.clics > 0 && q.cob > 0 && q.gmv > 0;
+  return q;
+}
+function sumarDiag(lista) {
+  const T = {};
+  for (const k of SUMAS_DIAG) T[k] = lista.reduce((s, q) => s + n0(q[k]), 0);
+  return T;
+}
+/* Los pasos. V = con que visualizaciones se cuenta: las de los minutos cuando
+ * hay impresiones (asi sale la misma tasa de entrada que enseña TikTok), o las
+ * del resumen del directo cuando no. */
+function pasosDe(conImp, V) {
+  return [
+    ...(conImp ? [
+      { k: 'impH', t: 'Lo ven en el feed', q: 'veces por hora que TikTok enseña el directo', f: (T) => T.imp / T.h, fmt: ent },
+      { k: 'entra', t: 'Entran', q: 'de cada 100 veces que lo enseña', f: (T) => T[V] / T.imp, fmt: (x) => pct(x, 2) },
+    ] : [
+      { k: 'visH', t: 'Entran', q: 'visualizaciones por hora', f: (T) => T[V] / T.h, fmt: ent },
+    ]),
+    { k: 'mira', t: 'Miran prendas', q: 'clics en prendas por cada 100 visualizaciones', f: (T) => T.clics / T[V], fmt: (x) => pct(x, 1) },
+    { k: 'compra', t: 'Compran', q: 'prendas rematadas por cada 100 clics', f: (T) => T.n / T.clics, fmt: (x) => pct(x, 2) },
+    { k: 'cobra', t: 'Se cobran', q: 'de cada 100 rematadas, las que se pagan y no se cancelan', f: (T) => T.cob / T.n, fmt: (x) => pct(x, 0) },
+    { k: 'benef', t: 'Beneficio por prenda', q: 'por prenda cobrada, ya con coste y vendedora', f: (T) => T.ben / T.cob, fmt: (x) => eur(x) },
+  ];
+}
+function normalDe(q, todos) {
+  const mismos = todos.filter((x) => x.vale && x.id !== q.id && x.canal === q.canal);
+  const antes = mismos.filter((x) => x.desde < q.desde && x.desde >= q.desde - 30 * 86400000);
+  if (antes.length >= 3) return { lista: antes, texto: `Lo normal = los ${antes.length} directos de ${q.tienda} de los 30 días anteriores` };
+  if (mismos.length >= 3) return { lista: mismos, texto: `Lo normal = los otros ${mismos.length} directos de ${q.tienda} del periodo (no hay 3 en los 30 días anteriores)` };
+  return null;
+}
+function diagnosticar(q, todos) {
+  const nor = normalDe(q, todos);
+  if (!nor) return null;
+  const conI = nor.lista.filter((x) => x.imp > 0);
+  const conImp = q.imp > 0 && conI.length >= 3;
+  const lista = conImp ? conI : nor.lista, V = conImp ? 'visMin' : 'vistas';
+  const T0 = sumarDiag(lista), B = q.ben / q.h, B0 = T0.ben / T0.h;
+  const pasos = pasosDe(conImp, V).map((p) => ({ ...p, v: p.f(q), v0: p.f(T0) }));
+  const ok = B > 0 && B0 > 0 && pasos.every((p) => p.v > 0 && p.v0 > 0);
+  const Lm = ok ? (Math.abs(B - B0) < 1e-9 ? B : (B - B0) / Math.log(B / B0)) : null;
+  for (const p of pasos) { p.dif = p.v0 ? p.v / p.v0 - 1 : null; p.eur = ok ? Lm * Math.log(p.v / p.v0) : null; }
+  return { q, nor, lista, T0, V, B, B0, pasos, conImp, ok, G: q.gmv / q.h, G0: T0.gmv / T0.h };
+}
+
+/* Reparto de un grupo de prendas por categoria, marca o precio: lo que ocupa
+ * de tiempo de pantalla y lo que deja de beneficio. */
+function mixDe(ps, por) {
+  const tramo = (p) => TRAMOS_PRECIO.findIndex(([a, b]) => p.remate >= a && p.remate < b);
+  const clave = por === 'cat' ? (p) => p.cat : (por === 'marca' ? (p) => (p.marca && p.marca !== '—' ? p.marca : 'Sin marca') : (p) => TRAMOS_PRECIO[Math.max(0, tramo(p))][2]);
+  const filas = Object.entries(agrupar(ps, clave)).map(([k, g]) => {
+    const a = sumar(g), seg = g.reduce((s, p) => s + (p.pant || 0), 0);
+    return { _id: k, nombre: k, orden: por === 'precio' ? TRAMOS_PRECIO.findIndex((x) => x[2] === k) : 0, n: a.n, precio: a.n ? a.remate / a.n : null,
+      ben: a.beneficio, porPrenda: a.n ? a.beneficio / a.n : null, seg, segPrenda: a.n ? seg / a.n : null,
+      canc: a.remate ? a.eurCancelado / a.remate : null, eurMin: seg > 0 ? a.beneficio / (seg / 60) : null };
+  });
+  const seg = filas.reduce((s, f) => s + f.seg, 0), ben = filas.reduce((s, f) => s + f.ben, 0);
+  for (const f of filas) { f.pT = seg ? f.seg / seg : null; f.pB = ben > 0 ? f.ben / ben : null; }
+  const a = sumar(ps);
+  return { filas, media: seg ? ben / (seg / 60) : null,
+    total: { nombre: 'Total', n: a.n, precio: a.n ? a.remate / a.n : null, ben, porPrenda: a.n ? ben / a.n : null, segPrenda: a.n ? seg / a.n : null,
+      pT: seg ? 1 : null, pB: ben > 0 ? 1 : null, eurMin: seg ? ben / (seg / 60) : null, canc: a.remate ? a.eurCancelado / a.remate : null } };
+}
+
+const CIFRAS_NUESTRAS = [
+  { t: 'Beneficio por hora', x: 'lo que queda limpio por cada hora de directo', f: (T) => T.ben / T.h, fmt: (x) => eur0(x) },
+  { t: 'Beneficio por prenda', x: 'por cada prenda cobrada', f: (T) => T.ben / T.cob, fmt: (x) => eur(x) },
+  { t: 'Beneficio por 1.000 visualizaciones', x: 'lo que se le saca a la gente que entra', f: (T, V) => 1000 * T.ben / T[V], fmt: (x) => eur(x) },
+  { t: 'Margen sobre la venta', x: 'beneficio por cada 100 € de venta según TikTok', f: (T) => T.ben / T.gmv, fmt: (x) => pct(x, 0) },
+  { t: 'Prendas por hora', x: 'rematadas por hora: el ritmo del directo', f: (T) => T.n / T.h, fmt: (x) => dec1(x) },
+  { t: 'Precio medio', x: 'remate medio de todo lo vendido', f: (T) => T.remateTodo / T.n, fmt: (x) => eur(x) },
+  { t: 'Cancelado', x: 'parte del remate que se canceló', f: (T) => T.eurCanc / T.remateTodo, fmt: (x) => pct(x, 0), menosEsMejor: true },
+];
+const CIFRAS_TIKTOK = [
+  ['Tráfico', [
+    { t: 'Impresiones', x: 'veces que TikTok enseñó el directo', imp: true, f: (T) => T.imp / T.k, fmt: ent },
+    { t: 'Visualizaciones', x: 'veces que alguien entró', f: (T, V) => T[V] / T.k, fmt: ent },
+    { t: 'Tasa de pulsaciones', x: 'de cada 100 veces que lo enseña, entran', imp: true, f: (T, V) => T[V] / T.imp, fmt: (x) => pct(x, 2) },
+    { t: 'Impresiones del producto', x: 'veces que se vio una prenda', f: (T) => T.impProd / T.k, fmt: ent },
+    { t: 'Índice de visibilidad del producto', x: 'prendas vistas por cada visualización', f: (T, V) => T.impProd / T[V], fmt: (x) => pct(x, 0) },
+    { t: 'Clics en el producto', x: 'veces que se pulsó en una prenda', f: (T) => T.clics / T.k, fmt: ent },
+    { t: 'CTR', x: 'clics por cada 100 veces que se vio una prenda', f: (T) => T.clics / T.impProd, fmt: (x) => pct(x, 2) },
+    { t: 'Pedidos atribuidos a LIVE', x: 'prendas vendidas según TikTok', f: (T) => T.prendasTT / T.k, fmt: ent },
+    { t: 'CTOR', x: 'pedidos por cada 100 clics en prendas', f: (T) => T.prendasTT / T.clics, fmt: (x) => pct(x, 2) },
+  ]],
+  ['Entrada y permanencia', [
+    { t: 'Impresiones por hora', x: 'lo que TikTok empuja el directo', imp: true, f: (T) => T.imp / T.h, fmt: ent },
+    { t: 'Tiempo medio por visualización', x: 'segundos que se queda cada visita', f: (T) => T.watch / T.vistas, fmt: (x) => dec1(x) + ' s' },
+    { t: 'ACU', x: 'gente dentro a la vez, de media', min: true, f: (T) => T.sumEsp / T.nMin, fmt: ent },
+    { t: 'PCU', x: 'máximo de gente dentro a la vez', min: true, f: (T) => T.pico / T.k, fmt: ent },
+    { t: 'CTR de LIVE', x: 'clics en prendas por cada 100 visualizaciones', f: (T, V) => T.clics / T[V], fmt: (x) => pct(x, 2) },
+    { t: 'GPM de apariciones', x: 'venta por cada 1.000 impresiones', imp: true, f: (T) => 1000 * T.gmv / T.imp, fmt: (x) => eur(x) },
+    { t: 'GPM de visualizaciones', x: 'venta por cada 1.000 visualizaciones', f: (T, V) => 1000 * T.gmv / T[V], fmt: (x) => eur(x) },
+  ]],
+  ['Interacción y conversión', [
+    { t: 'GMV por hora', x: 'venta por hora según TikTok, con envío', f: (T) => T.gmv / T.h, fmt: (x) => eur(x) },
+    { t: 'Índice de comentarios', x: 'comentarios por cada 100 visualizaciones', f: (T) => T.coment / T.vistas, fmt: (x) => pct(x, 2) },
+    { t: 'Índice de Me gusta', x: 'me gusta por cada 100 visualizaciones', f: (T) => T.likes / T.vistas, fmt: (x) => pct(x, 0) },
+    { t: 'Índice de seguimiento', x: 'seguidores nuevos por cada 100 visualizaciones', f: (T) => T.seg / T.vistas, fmt: (x) => pct(x, 2) },
+    { t: 'Tasa de comparticiones', x: 'veces compartido por cada 100 visualizaciones', f: (T) => T.comp / T.vistas, fmt: (x) => pct(x, 2) },
+    { t: 'AOV', x: 'importe medio de cada pedido', f: (T) => T.gmv / T.pedidosTT, fmt: (x) => eur(x) },
+  ]],
+];
+
+/* Parte un rotulo largo en dos lineas por el espacio mas cercano al centro. */
+function dosLineas(t) {
+  if (t.length < 13 || !t.includes(' ')) return t;
+  let mejor = -1;
+  for (let i = 0; i < t.length; i++) if (t[i] === ' ' && (mejor < 0 || Math.abs(i - t.length / 2) < Math.abs(mejor - t.length / 2))) mejor = i;
+  return [t.slice(0, mejor), t.slice(mejor + 1)];
+}
+function quitarGrafico(id) { if (graficos[id]) { graficos[id].destroy(); delete graficos[id]; } }
+
+function pDiagnostico(ps) {
+  const validos = directosPublico().map(medirDiag).filter((q) => q.vale).sort((a, b) => b.desde - a.desde);
+  const cuerpo = $('#diag-cuerpo'), vacio = $('#diag-vacio');
+  const sinNada = (txt) => {
+    cuerpo.classList.add('oculto'); vacio.classList.remove('oculto'); vacio.innerHTML = `<span class="muted">${txt}</span>`;
+    ['g-diag-cascada', 'g-diag-mix', 'g-diag-entrada'].forEach(quitarGrafico);
+  };
+  if (!validos.length) {
+    $('#diag-sel').innerHTML = ''; $('#diag-normal').textContent = '';
+    sinNada('No hay directos con público de TikTok y ventas de tablet en este periodo y filtro. Pulsa «Traer datos nuevos de TikTok» (TikTok da el público con un día de retraso).');
+    $('#t-diag-ranking').innerHTML = ''; quitarGrafico('g-diag-nube');
+    return;
+  }
+  const D = {};
+  for (const q of validos) D[q.id] = diagnosticar(q, validos);
+  if (!validos.some((q) => q.id === DIAG_SEL)) {
+    const delDirecto = DIRECTO ? validos.find((q) => q.r.ses && q.r.ses.id === DIRECTO) : null;
+    DIAG_SEL = (delDirecto || validos.find((q) => D[q.id]) || validos[0]).id;
+  }
+  $('#diag-sel').innerHTML = validos.map((q) => `<option value="${esc(q.id)}" ${q.id === DIAG_SEL ? 'selected' : ''}>${diaCorto(q.dia)} ${hora(q.desde)} · ${esc(q.tienda)} · ${eur0(q.ben / q.h)} por hora</option>`).join('');
+  const q = validos.find((x) => x.id === DIAG_SEL), d = D[q.id];
+
+  pintarRanking(validos, D);
+  if (!d) {
+    $('#diag-normal').textContent = '';
+    sinNada(`Este directo aún no se puede comparar: hacen falta al menos 3 directos más de ${esc(q.tienda)} en el periodo para saber qué es lo normal.`);
+    return;
+  }
+  cuerpo.classList.remove('oculto'); vacio.classList.add('oculto');
+  $('#diag-normal').textContent = d.nor.texto + (d.conImp ? '' : ' · sin impresiones del feed') + '. El filtro de categoría no se aplica al embudo.';
+
+  /* ---- veredicto: lo que dice TikTok y lo que dice el beneficio */
+  const dG = d.G0 ? d.G / d.G0 - 1 : null, dB = d.B0 > 0 ? d.B / d.B0 - 1 : null;
+  const conEur = d.ok ? d.pasos.slice().sort((a, b) => a.eur - b.eur) : [];
+  const peor = conEur[0], mejor = conEur[conEur.length - 1];
+  const como = (x) => Math.abs(x) < 0.03 ? 'como lo normal' : `un ${pct(Math.abs(x), 0)} ${x > 0 ? 'mejor' : 'peor'} de lo normal`;
+  let frase = '';
+  if (dG != null && dB != null) {
+    frase = (dG > 0.03 && dB < -0.03) || (dG < -0.03 && dB > 0.03)
+      ? `Para TikTok fue ${como(dG)}. <b>En beneficio fue ${como(dB)}.</b> Aquí es donde mirar solo la facturación engaña.`
+      : `TikTok y tu beneficio dicen lo mismo: en venta fue ${como(dG)} y <b>en beneficio ${como(dB)}</b>.`;
+  }
+  if (d.ok && peor && peor.eur < -0.5) frase += ` Lo que más restó: <b>«${peor.t}»</b>, ${conSigno(peor.eur, eur0)} por hora.`;
+  if (d.ok && mejor && mejor.eur > 0.5) frase += ` Lo que más sumó: <b>«${mejor.t}»</b>, ${conSigno(mejor.eur, eur0)} por hora.`;
+  if (!d.ok) frase += ' No se puede repartir en euros por paso porque el beneficio de este directo o el normal no es positivo.';
+  const estimado = q.a.neto ? q.a.netoEstimado / q.a.neto : 0;
+  if (estimado > 0.2) frase += ` <span class="muted">Ojo: el ${pct(estimado, 0)} de lo liquidado es aún estimación de TikTok y pueden llegar cancelaciones.</span>`;
+  $('#diag-veredicto').innerHTML =
+    `<div class="kpi"><div class="e">Según TikTok · venta por hora</div><div class="n">${eur0(d.G)} ${delta(d.G, d.G0)}</div><div class="x">normal ${eur0(d.G0)} · ${eur0(q.gmv)} en ${dec1(q.h)} h</div></div>` +
+    `<div class="kpi heroe"><div class="e">Según tu beneficio · por hora</div><div class="n ${d.B < 0 ? 'neg' : ''}">${eur0(d.B)} ${delta(d.B, d.B0 > 0 ? d.B0 : null)}</div><div class="x">normal ${eur0(d.B0)} · ${eur0(q.ben)} de beneficio, ${pct(q.gmv ? q.ben / q.gmv : null, 0)} de la venta</div></div>` +
+    `<div class="kpi"><div class="e">En una frase</div><div class="frase" style="margin-top:8px">${frase}</div></div>`;
+
+  /* ---- los pasos, con su efecto en euros por hora */
+  const maxEur = Math.max(1, ...d.pasos.map((p) => Math.abs(p.eur || 0)));
+  $('#t-diag-pasos').innerHTML = '<thead><tr><th class="izq" style="cursor:default">Paso</th><th style="cursor:default">Este directo</th><th style="cursor:default">Normal</th><th style="cursor:default">Diferencia</th><th style="cursor:default">Efecto por hora</th></tr></thead><tbody>' +
+    d.pasos.map((p) => `<tr><td class="izq paso"><b>${p.t}</b><span>${p.q}</span></td><td>${p.fmt(p.v)}</td><td class="muted">${p.fmt(p.v0)}</td><td>${delta(p.v, p.v0)}</td>` +
+      `<td>${p.eur == null ? '—' : `<div class="barra-eur"><i class="${p.eur >= 0 ? 'pos' : 'neg'}" style="width:${Math.round(110 * Math.abs(p.eur) / maxEur)}px"></i><span class="${signo(p.eur)}">${conSigno(p.eur, eur0)}</span></div>`}</td></tr>`).join('') +
+    `<tr class="total"><td class="izq">Beneficio por hora</td><td>${eur0(d.B)}</td><td class="muted">${eur0(d.B0)}</td><td>${delta(d.B, d.B0 > 0 ? d.B0 : null)}</td><td><span class="${signo(d.B - d.B0)}">${conSigno(d.B - d.B0, eur0)}</span></td></tr></tbody>`;
+
+  /* ---- la cascada */
+  quitarGrafico('g-diag-cascada');
+  if (d.ok) {
+    let acum = d.B0;
+    const tramos = d.pasos.map((p) => { const a = acum; acum += p.eur; return [a, acum]; });
+    const datos = [[0, d.B0], ...tramos, [0, d.B]];
+    const op = baseGrafico(false);
+    op.plugins.legend.display = false;
+    op.plugins.tooltip.callbacks.label = (c) => { const [a, b] = c.raw; return (c.dataIndex === 0 || c.dataIndex === datos.length - 1) ? ` ${eur0(b)} por hora` : ` ${conSigno(b - a, eur0)} por hora (de ${eur0(a)} a ${eur0(b)})`; };
+    op.scales.x.ticks = { color: color('--t2'), maxRotation: 0, autoSkip: false, font: { size: 11 } };
+    graficos['g-diag-cascada'] = new Chart(document.getElementById('g-diag-cascada'), { type: 'bar',
+      data: { labels: ['Lo normal', ...d.pasos.map((p) => dosLineas(p.t)), 'Este directo'],
+        datasets: [{ data: datos, borderRadius: 6, borderSkipped: false, barPercentage: 0.7,
+          backgroundColor: datos.map(([a, b], i) => (i === 0 || i === datos.length - 1) ? color('--de') : (b >= a ? color('--bien') : color('--es'))) }] }, options: op });
+  }
+
+  /* ---- que se vendio y cuanto rindio su tiempo */
+  document.querySelectorAll('#diag-mix-de button').forEach((b) => b.classList.toggle('activa', b.dataset.v === DIAG_MIX_DE));
+  document.querySelectorAll('#diag-mix-por button').forEach((b) => b.classList.toggle('activa', b.dataset.v === DIAG_MIX_POR));
+  const mix = mixDe(DIAG_MIX_DE === 'uno' ? q.ps : ps, DIAG_MIX_POR);
+  const maxMin = Math.max(0.01, ...mix.filas.map((f) => f.eurMin || 0));
+  const pocas = DIAG_MIX_DE === 'uno' ? 3 : 20;
+  tabla('t-diag-mix', [
+    { k: DIAG_MIX_POR === 'precio' ? 'orden' : 'nombre', t: { cat: 'Categoría', marca: 'Marca', precio: 'Precio de remate' }[DIAG_MIX_POR], izq: true, f: (v, f) => esc(f.nombre) + (f.n != null && f.n < pocas && f.nombre !== 'Total' ? ' <span class="etiqueta">pocas</span>' : '') },
+    { k: 'n', t: 'Rematadas', f: ent },
+    { k: 'precio', t: 'Precio medio', f: (v) => eur(v) },
+    { k: 'porPrenda', t: 'Beneficio/prenda', f: (v) => eur(v), color: true, ayuda: 'Beneficio entre todas las rematadas del grupo, canceladas incluidas' },
+    { k: 'segPrenda', t: 'Seg. en pantalla', f: ent, ayuda: 'Segundos de directo que ocupa cada prenda, de media' },
+    { k: 'pT', t: '% del tiempo', f: (v) => pct(v, 0) },
+    { k: 'pB', t: '% del beneficio', f: (v) => pct(v, 0) },
+    { k: 'eurMin', t: '€ por minuto', f: (v, f) => v == null ? '—' : `<span class="barrita ${mix.media && v < 0.75 * mix.media ? 'baja' : (mix.media && v > 1.25 * mix.media ? 'alta' : '')}" style="width:${Math.max(2, Math.round(56 * Math.max(0, v) / maxMin))}px"></span><b>${eur(v)}</b>`, ayuda: 'Beneficio por cada minuto de pantalla. Rojo = rinde menos del 75 % de la media; azul oscuro = más del 125 %' },
+    { k: 'canc', t: 'Cancelado', f: (v) => pct(v, 0), ayuda: 'Parte del remate del grupo que se canceló' },
+  ], mix.filas, { orden: DIAG_MIX_POR === 'precio' ? { k: 'orden', d: 1 } : { k: 'pT', d: -1 }, total: { ...mix.total, orden: 0 } });
+  const top = mix.filas.slice().sort((a, b) => DIAG_MIX_POR === 'precio' ? a.orden - b.orden : b.seg - a.seg).slice(0, 10);
+  quitarGrafico('g-diag-mix');
+  const opM = baseGrafico(true);
+  opM.scales.x.ticks.callback = (v) => ent(v) + ' %';
+  opM.plugins.tooltip.callbacks.label = (c) => ` ${c.dataset.label}: ${dec1(c.parsed.x)} %`;
+  graficos['g-diag-mix'] = new Chart(document.getElementById('g-diag-mix'), { type: 'bar', data: { labels: top.map((f) => f.nombre), datasets: [
+    { label: '% del tiempo de pantalla', data: top.map((f) => f.pT == null ? null : 100 * f.pT), backgroundColor: color('--nl'), borderRadius: 4, borderSkipped: 'start', barPercentage: 0.85, categoryPercentage: 0.72 },
+    { label: '% del beneficio', data: top.map((f) => f.pB == null ? null : 100 * f.pB), backgroundColor: color('--es'), borderRadius: 4, borderSkipped: 'start', barPercentage: 0.85, categoryPercentage: 0.72 },
+  ] }, options: opM });
+
+  /* ---- las cifras: las nuestras y las de TikTok */
+  const cifra = (c, nuestra) => {
+    const v = c.f(q, d.V), v0 = c.f(d.T0, d.V);
+    return `<div class="cifra ${nuestra ? 'nuestra' : ''}"><div class="e">${c.t}</div><div class="n">${c.fmt(v)}</div><div class="x">${delta(v, v0, c.menosEsMejor)} normal ${c.fmt(v0)}</div><div class="x">${c.x}</div></div>`;
+  };
+  $('#diag-cifras').innerHTML = '<div class="titulo-grupo">Las tuyas</div><div class="cifras-tt">' + CIFRAS_NUESTRAS.map((c) => cifra(c, true)).join('') + '</div>' +
+    CIFRAS_TIKTOK.map(([g, cs]) => { const vs = cs.filter((c) => (!c.imp || d.conImp) && (!c.min || q.nMin > 0));
+      return `<div class="titulo-grupo">TikTok · ${g}</div><div class="cifras-tt">${vs.map((c) => cifra(c, false)).join('')}</div>`; }).join('');
+
+  /* ---- la tasa de entrada minuto a minuto */
+  quitarGrafico('g-diag-entrada');
+  const mins = q.r.mins;
+  if (!(q.imp > 0)) {
+    $('#diag-entrada-graf').classList.add('oculto'); $('#t-diag-entrada').innerHTML = '';
+    $('#diag-entrada-falta').classList.remove('oculto');
+    $('#diag-entrada-falta').textContent = 'Aún no hay impresiones del feed de este directo. Hace falta el archivo nuevo del servidor (api/finanzas.js); los datos ya están guardados, no hay que volver a traerlos.';
+  } else {
+    $('#diag-entrada-graf').classList.remove('oculto'); $('#diag-entrada-falta').classList.add('oculto');
+    const de3 = (i, k) => { let s = 0; for (let j = Math.max(0, i - 1); j <= Math.min(mins.length - 1, i + 1); j++) s += mins[j][k] || 0; return s; };
+    const tasa = mins.map((m, i) => { const im = de3(i, 'imp'); return im > 0 ? de3(i, 'vis') / im : null; });
+    const media = q.visMin / q.imp;
+    const opE = baseGrafico(false);
+    opE.scales.y = { ...opE.scales.y, position: 'left', ticks: { color: color('--t2'), callback: (v) => dec1(v) + ' %' } };
+    opE.scales.y1 = { position: 'right', grid: { display: false }, border: { display: false }, ticks: { color: color('--t2'), callback: (v) => ent(v) } };
+    opE.scales.x.ticks = { color: color('--t2'), maxTicksLimit: 14, autoSkip: true, maxRotation: 0 };
+    opE.plugins.tooltip.callbacks.label = (c) => c.dataset.yAxisID === 'y1' ? ` Lo enseñó ${ent(c.parsed.y)} veces` : ` Entraron ${dec1(c.parsed.y)} de cada 100 (lo normal del directo: ${dec1(100 * media)})`;
+    graficos['g-diag-entrada'] = new Chart(document.getElementById('g-diag-entrada'), { data: { labels: mins.map((m) => hora(m.t)), datasets: [
+      { type: 'line', label: 'Tasa de entrada', data: tasa.map((x) => x == null ? null : 100 * x), yAxisID: 'y', borderColor: color('--es'), backgroundColor: color('--es'), borderWidth: 2, pointRadius: 0, tension: 0.2, spanGaps: true },
+      { type: 'line', label: 'Veces que TikTok lo enseñó', data: mins.map((m) => m.imp || 0), yAxisID: 'y1', borderColor: color('--nl'), backgroundColor: color('--nl'), borderWidth: 1.5, pointRadius: 0, tension: 0.2 },
+    ] }, options: opE });
+    /* Los mejores momentos: con un minimo de impresiones para que no gane un
+     * minuto en el que TikTok casi no lo enseño, sin los 5 primeros minutos y
+     * sin repetir el mismo rato. */
+    const medImp = mediana(mins.map((m, i) => de3(i, 'imp')));
+    const cand = mins.map((m, i) => ({ i, m, tasa: tasa[i], imp3: de3(i, 'imp') })).filter((x) => x.tasa != null && x.m.d >= 5 && x.imp3 >= 0.5 * medImp).sort((a, b) => b.tasa - a.tasa);
+    const elegidos = [];
+    for (const c of cand) { if (elegidos.length >= 6) break; if (elegidos.every((e) => Math.abs(e.i - c.i) > 5)) elegidos.push(c); }
+    const vendidas = q.ps.slice().sort((a, b) => a.h - b.h);
+    tabla('t-diag-entrada', [
+      { k: 't', t: 'Hora', izq: true, f: (v, f) => hora(v) + ` <span class="muted">min ${Math.round(f.d)}</span>` },
+      { k: 'tasa', t: 'Entraron', f: (v) => pct(v, 2), ayuda: 'De cada 100 veces que TikTok lo enseñó en esos 3 minutos' },
+      { k: 'veces', t: 'Frente al directo', f: (v) => '×' + dec1(v), ayuda: 'Cuántas veces la tasa de entrada media de este directo' },
+      { k: 'imp3', t: 'Veces enseñado', f: ent },
+      { k: 'precio', t: 'En pantalla', izq: true, f: (v, f) => prendaTxt(f.prenda), ayuda: 'La primera prenda vendida desde ese minuto: la que se estaba subastando' },
+    ], elegidos.map((c) => { const prenda = vendidas.find((v) => v.h >= c.m.t && v.h - c.m.t < 240000) || null;
+      return { _id: String(c.i), t: c.m.t, d: c.m.d, tasa: c.tasa, veces: media ? c.tasa / media : null, imp3: c.imp3, prenda, precio: prenda ? prenda.remate : null }; }), { orden: { k: 'tasa', d: -1 } });
+  }
+}
+
+/* Todos los directos, ordenados por lo que dejan y no por lo que facturan. */
+function pintarRanking(validos, D) {
+  const filas = validos.map((q) => ({ _id: q.id, q, dia: q.dia, desde: q.desde, tienda: q.tienda, pais: q.pais, h: q.h, B: q.ben / q.h, G: q.gmv / q.h, margen: q.ben / q.gmv }));
+  for (const pais of new Set(filas.map((f) => f.pais))) {
+    const g = filas.filter((f) => f.pais === pais);
+    g.slice().sort((a, b) => b.B - a.B).forEach((f, i) => f.pB = i + 1);
+    g.slice().sort((a, b) => b.G - a.G).forEach((f, i) => f.pG = i + 1);
+    for (const f of g) { f.salto = f.pG - f.pB; f.de = g.length; }
+  }
+  for (const f of filas) {
+    const d = D[f._id];
+    f.dB = d && d.B0 > 0 ? d.B / d.B0 - 1 : null;
+    const p = d && d.ok ? d.pasos.slice().sort((a, b) => Math.abs(b.eur) - Math.abs(a.eur))[0] : null;
+    f.peso = p ? p.eur : null; f.pesoTxt = p ? `${p.t} <span class="${signo(p.eur)}">${conSigno(p.eur, eur0)}</span>` : '<span class="muted">—</span>';
+  }
+  tabla('t-diag-ranking', [
+    { k: 'desde', t: 'Día', izq: true, f: (v, f) => diaCorto(f.dia) + ' <span class="muted">' + hora(v) + '</span>' },
+    { k: 'tienda', t: 'Cuenta', izq: true, f: (v, f) => `<span class="punto" style="background:var(--${f.pais})"></span>${esc(v)}` },
+    { k: 'h', t: 'Horas', f: dec1 },
+    { k: 'B', t: 'Beneficio/h', f: (v, f) => `<b>${eur0(v)}</b> <span class="muted">${f.pB}º</span>`, ayuda: 'Beneficio por hora y su puesto entre los directos de su país' },
+    { k: 'G', t: 'Venta TikTok/h', f: (v, f) => `${eur0(v)} <span class="muted">${f.pG}º</span>`, ayuda: 'Venta por hora según TikTok y su puesto entre los directos de su país' },
+    { k: 'salto', t: 'Puestos', f: (v) => v === 0 ? '<span class="muted">=</span>' : `<span class="delta ${v > 0 ? 'pos' : 'neg'}">${v > 0 ? '▲' : '▼'} ${Math.abs(v)}</span>`, ayuda: 'Puestos que sube (▲) o baja (▼) al ordenar por beneficio en vez de por venta' },
+    { k: 'margen', t: 'Margen', f: (v) => pct(v, 0), ayuda: 'Beneficio por cada 100 € de venta según TikTok' },
+    { k: 'dB', t: 'Frente a lo normal', f: (v) => v == null ? '<span class="muted">—</span>' : `<span class="delta ${v > 0.005 ? 'pos' : (v < -0.005 ? 'neg' : '')}">${conSigno(v, (x) => pct(x, 0))}</span>`, ayuda: 'Beneficio por hora frente a los directos de esa cuenta de los 30 días anteriores' },
+    { k: 'peso', t: 'Lo que más pesó (€/h)', izq: true, f: (v, f) => f.pesoTxt, ayuda: 'El paso del embudo que más euros por hora sumó o restó frente a lo normal' },
+  ], filas, { orden: { k: 'desde', d: -1 }, clic: (id) => { DIAG_SEL = id; pintar(); window.scrollTo({ top: 0, behavior: 'smooth' }); }, elegida: (f) => f._id === DIAG_SEL });
+
+  quitarGrafico('g-diag-nube');
+  const op = baseGrafico(false);
+  op.interaction = { mode: 'nearest', intersect: true };
+  op.scales.x = { type: 'linear', grid: { color: color('--linea') }, border: { display: false }, ticks: { color: color('--t2'), callback: (v) => eur0(v) }, title: { display: true, text: 'Venta por hora según TikTok', color: color('--t3') } };
+  op.scales.y.title = { display: true, text: 'Beneficio por hora', color: color('--t3') };
+  op.plugins.tooltip.callbacks.title = () => '';
+  op.plugins.tooltip.callbacks.label = (c) => { const f = c.raw.f; return ` ${diaCorto(f.dia)} ${f.tienda}: vende ${eur0(f.G)}/h, deja ${eur0(f.B)}/h (${pct(f.margen, 0)})`; };
+  op.onClick = (e, els, ch) => { if (!els.length) return; DIAG_SEL = ch.data.datasets[els[0].datasetIndex].data[els[0].index].f._id; pintar(); };
+  const paises = Object.keys(PAISES).filter((p) => filas.some((f) => f.pais === p));
+  const sel = filas.find((f) => f._id === DIAG_SEL);
+  graficos['g-diag-nube'] = new Chart(document.getElementById('g-diag-nube'), { type: 'scatter', data: { datasets: [
+    ...(sel ? [{ label: 'El elegido', data: [{ x: sel.G, y: sel.B, f: sel }], pointRadius: 10, pointHoverRadius: 11, pointStyle: 'circle', backgroundColor: 'transparent', borderColor: color('--t1'), borderWidth: 2.5 }] : []),
+    ...paises.map((p) => ({ label: PAISES[p], data: filas.filter((f) => f.pais === p).map((f) => ({ x: f.G, y: f.B, f })), backgroundColor: color('--' + p), borderColor: color('--panel'), borderWidth: 1, pointRadius: 5, pointHoverRadius: 7 })),
+  ] }, options: op });
+}
+
 /* ================================================================ graficos */
 function baseGrafico(horizontal) {
+  Chart.defaults.font.family = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  Chart.defaults.font.size = 12;
   const t2 = color('--t2'), lin = color('--linea');
   const ejeValor = { grid: { color: lin }, border: { display: false }, ticks: { color: t2, callback: (v) => eur0(v) } };
   const ejeCat = { grid: { display: false }, border: { color: lin }, ticks: { color: t2 } };
@@ -1026,7 +1629,8 @@ function baseGrafico(horizontal) {
     interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { position: 'top', align: 'start', labels: { color: t2, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8 } },
-      tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${eur(horizontal ? c.parsed.x : c.parsed.y)}` } },
+      tooltip: { backgroundColor: '#1B2A3D', titleColor: '#ffffff', bodyColor: '#ffffff', padding: 10, cornerRadius: 10, boxPadding: 4, usePointStyle: true,
+        callbacks: { label: (c) => ` ${c.dataset.label}: ${eur(horizontal ? c.parsed.x : c.parsed.y)}` } },
     },
     scales: horizontal ? { x: ejeValor, y: ejeCat } : { x: ejeCat, y: ejeValor },
   };
@@ -1180,6 +1784,7 @@ function arrancar() {
   $('#entrar').classList.add('oculto'); $('#app').classList.remove('oculto');
   const hoy = hoyMadrid();
   $('#f-desde').value = PRIMER_DIA; $('#f-desde').min = PRIMER_DIA; $('#f-hasta').value = hoy;
+  saludar();
   pintarAjustes();
   cargar();
 }
@@ -1221,6 +1826,9 @@ $('#btn-reset-ajustes').onclick = () => { TABLAS = copiaTablas(TABLAS_FABRICA); 
 $('#btn-quitar-directo').onclick = () => { DIRECTO = ''; pintar(); };
 $('#pub-sel').onchange = () => { PUB_SEL = $('#pub-sel').value; pintar(); };
 $('#pub-inicio').onchange = () => pintar();
+$('#diag-sel').onchange = () => { DIAG_SEL = $('#diag-sel').value; pintar(); };
+document.querySelectorAll('#diag-mix-de button').forEach((b) => b.onclick = () => { DIAG_MIX_DE = b.dataset.v; pintar(); });
+document.querySelectorAll('#diag-mix-por button').forEach((b) => b.onclick = () => { DIAG_MIX_POR = b.dataset.v; delete orden['t-diag-mix']; pintar(); });
 ['#f-pais', '#f-canal', '#f-cat', '#f-comision', '#f-iva'].forEach((s) => $(s).onchange = () => {
   if (s === '#f-comision' || s === '#f-iva') calcular.ses = calcular();
   pintar();
