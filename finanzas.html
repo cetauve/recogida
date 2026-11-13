@@ -2,156 +2,175 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light only">
+<meta name="theme-color" content="#ffffff">
 <title>Billy's · Finanzas</title>
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 /* Finanzas de los directos, 29 sep 2026. Solo para Aaron (pide su codigo).
  * Cruza cada prenda vendida con tablet con lo que TikTok liquida por ella.
  *
- * 13 nov 2026: aspecto nuevo con los colores de Billy's. Blanco de fondo,
- * rojo para lo que hay que mirar o pulsar, azul para textos y rellenos. Las
- * tres escalas (crema, rojo, azul) son las de la marca; el verde solo se usa
- * para "mejor de lo normal", que la marca no tiene color para eso. */
+ * ASPECTO (13 nov 2026, rehecho el 14 nov). La marca de Billy's:
+ *   - Fondo SIEMPRE blanco. No hay modo oscuro, ni aunque el movil lo pida.
+ *   - Rojo para lo que se pulsa o hay que mirar, azul para textos y rellenos,
+ *     crema para las cajas. Las tres escalas son las de la marca.
+ *   - Enunciados y cifras en Poppins negrita; el texto pequeño en Inter fina.
+ *   - El verde solo marca "mejor de lo normal": la marca no tiene color para eso.
+ * Y dos reglas de uso: en el movil se navega con la barra de abajo, y nada se
+ * enseña entero de golpe (explicaciones, columnas y secciones se despliegan). */
 :root {
-  color-scheme: light;
+  color-scheme: light only;
   --crema-1: #F6F5F2; --crema-2: #F0EEE8; --crema-3: #EAE7E0; --crema-4: #E6E2D9; --crema-5: #BDB9B2;
   --rojo-1: #F9BAB3; --rojo-2: #F5897D; --rojo-3: #F25E4D; --rojo: #EF3B26; --rojo-5: #C4301F; --rojo-6: #8F2317;
-  --azul-1: #AFB4BB; --azul-2: #767F8B; --azul-3: #445060; --azul: #1B2A3D; --azul-5: #162232; --azul-6: #101925; --azul-7: #0A1017;
-  --fondo: var(--crema-1); --panel: #ffffff; --panel-2: var(--crema-1); --linea: var(--crema-3); --linea-2: var(--crema-4);
+  --azul-1: #AFB4BB; --azul-2: #767F8B; --azul-3: #445060; --azul: #1B2A3D; --azul-5: #162232; --azul-6: #101925;
+  --fondo: #ffffff; --panel: var(--crema-1); --panel-2: #ffffff; --linea: var(--crema-3); --linea-2: var(--crema-4);
   --t1: var(--azul); --t2: var(--azul-3); --t3: #68717D;
   --es: var(--rojo); --de: var(--azul); --nl: var(--azul-1);
-  --bien: #1B7A52; --mal: var(--rojo-5); --bien-fondo: #E3F2EA; --mal-fondo: #FDE8E5;
+  --bien: #1B7A52; --mal: var(--rojo-5); --bien-fondo: #E0F1E8; --mal-fondo: #FDE5E1;
   --aviso-fondo: #FDF1DC; --aviso-t: #6B4A0B;
-  --acento: var(--rojo); --acento-t: #ffffff; --relleno: var(--azul); --relleno-t: #ffffff;
-  --sel: #FDF0EE; --sombra: 0 1px 2px rgba(27, 42, 61, .04), 0 8px 24px rgba(27, 42, 61, .05);
+  --acento: var(--rojo); --acento-t: #ffffff; --relleno: var(--azul); --relleno-t: #ffffff; --sel: #FDEBE8;
   --heroe: linear-gradient(140deg, #1B2A3D 0%, #101925 70%, #2a1a1f 130%);
+  --titulos: Poppins, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --texto: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --fondo: var(--azul-7); --panel: var(--azul-6); --panel-2: var(--azul-5); --linea: #1f2e42; --linea-2: #2c3c52;
-    --t1: var(--crema-1); --t2: var(--azul-1); --t3: #88919c;
-    --es: var(--rojo-3); --de: var(--azul-1); --nl: var(--azul-2);
-    --bien: #5CC79A; --mal: var(--rojo-2); --bien-fondo: #12372a; --mal-fondo: #43191a;
-    --aviso-fondo: #3a2f0f; --aviso-t: #f3d98b;
-    --relleno: var(--crema-1); --relleno-t: var(--azul);
-    --sel: #1d2638; --sombra: none; --heroe: linear-gradient(140deg, #22344b 0%, #162232 100%);
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --fondo: var(--azul-7); --panel: var(--azul-6); --panel-2: var(--azul-5); --linea: #1f2e42; --linea-2: #2c3c52;
-  --t1: var(--crema-1); --t2: var(--azul-1); --t3: #88919c;
-  --es: var(--rojo-3); --de: var(--azul-1); --nl: var(--azul-2);
-  --bien: #5CC79A; --mal: var(--rojo-2); --bien-fondo: #12372a; --mal-fondo: #43191a;
-  --aviso-fondo: #3a2f0f; --aviso-t: #f3d98b;
-  --relleno: var(--crema-1); --relleno-t: var(--azul);
-  --sel: #1d2638; --sombra: none; --heroe: linear-gradient(140deg, #22344b 0%, #162232 100%);
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; background: var(--fondo); color: var(--t1);
-  font: 14px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
-.envoltura { max-width: 1560px; margin: 0 auto; padding: 0 24px 70px; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: #ffffff; color: var(--t1); font: 400 14px/1.45 var(--texto); -webkit-font-smoothing: antialiased; }
+.envoltura { max-width: 1480px; margin: 0 auto; padding: 0 24px 70px; }
+h1, h2, h3 { font-family: var(--titulos); font-weight: 700; letter-spacing: -0.015em; }
+h1 { font-size: 28px; margin: 0; line-height: 1.2; }
+.sub, .nota, .muted, .kpi .x { font-weight: 300; }
+.sub { color: var(--t2); font-size: 13px; }
 
 /* ---- barra de arriba */
-.barra { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px 18px; flex-wrap: wrap;
-  padding: 14px 0; margin-bottom: 8px; background: color-mix(in srgb, var(--fondo) 88%, transparent); backdrop-filter: blur(10px); }
-.marca { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
-.marca .logo { width: 34px; height: 34px; border-radius: 11px; background: var(--rojo); color: #fff; display: grid; place-items: center; font-size: 18px; font-weight: 700; }
-.marca small { font-weight: 500; color: var(--t3); font-size: 13px; }
-.pestanas { display: flex; gap: 4px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--linea); border-radius: 999px; padding: 4px; box-shadow: var(--sombra); }
-.pestanas button { border: none; background: none; border-radius: 999px; padding: 7px 14px; color: var(--t2); font-weight: 500; font-size: 13px; }
-.pestanas button:hover { background: var(--panel-2); }
+.barra { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px 18px; padding: 14px 0; background: rgba(255, 255, 255, .92); backdrop-filter: blur(10px); }
+.marca { display: flex; align-items: center; gap: 10px; font: 700 17px var(--titulos); letter-spacing: -0.01em; }
+.marca .logo { width: 34px; height: 34px; border-radius: 11px; background: var(--rojo); color: #fff; display: grid; place-items: center; font-size: 18px; }
+.marca small { font: 300 13px var(--texto); color: var(--t3); }
+.pestanas { display: flex; gap: 4px; background: var(--panel); border-radius: 999px; padding: 4px; margin: 0 auto; }
+.pestanas button { border: none; background: none; border-radius: 999px; padding: 8px 16px; color: var(--t2); font-weight: 500; font-size: 13.5px; display: inline-flex; align-items: center; gap: 7px; }
+.pestanas button svg { width: 16px; height: 16px; }
+.pestanas button:hover { background: #fff; }
 .pestanas button.activa { background: var(--relleno); color: var(--relleno-t); font-weight: 600; }
-.acciones { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.estado-sync { font-size: 12px; color: var(--t2); max-width: 280px; text-align: right; }
+.acciones { display: flex; align-items: center; gap: 8px; }
 
 /* ---- botones y campos */
 input, select, button { font: inherit; color: var(--t1); }
-input, select { background: var(--panel); border: 1px solid var(--linea-2); border-radius: 12px; padding: 7px 10px; }
-input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--rojo-2); outline-offset: 1px; }
-button { background: var(--panel); border: 1px solid var(--linea-2); border-radius: 999px; padding: 8px 15px; cursor: pointer; font-weight: 500; }
+input, select { background: #fff; border: 1px solid var(--linea-2); border-radius: 12px; padding: 8px 10px; }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--rojo-2); outline-offset: 2px; }
+button { background: #fff; border: 1px solid var(--linea-2); border-radius: 999px; padding: 8px 15px; cursor: pointer; font-weight: 500; }
 button:hover { border-color: var(--azul-1); }
-button.principal { background: var(--acento); color: var(--acento-t); border-color: var(--acento); font-weight: 600; }
+button.principal { background: var(--acento); color: var(--acento-t); border-color: var(--acento); font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
 button.principal:hover { background: var(--rojo-5); border-color: var(--rojo-5); }
-button.oscuro { background: var(--relleno); color: var(--relleno-t); border-color: var(--relleno); }
-button.redondo { width: 38px; height: 38px; padding: 0; display: grid; place-items: center; }
+button.redondo { width: 40px; height: 40px; padding: 0; display: grid; place-items: center; flex: none; }
 button:disabled { opacity: .5; cursor: default; }
-svg.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+svg.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+#btn-sync.girando svg { animation: giro 1s linear infinite; }
+@keyframes giro { to { transform: rotate(360deg); } }
+.grupo-botones { display: inline-flex; background: var(--panel); border-radius: 999px; padding: 3px; gap: 2px; flex: none; }
+.caja .grupo-botones { background: #fff; }
+.grupo-botones button { border: none; background: none; padding: 6px 13px; font-size: 13px; color: var(--t2); white-space: nowrap; }
+.grupo-botones button.activa { background: var(--relleno); color: var(--relleno-t); font-weight: 600; }
 
-/* ---- saludo y filtros */
-.cabecera { display: flex; align-items: end; justify-content: space-between; gap: 14px 24px; flex-wrap: wrap; margin: 10px 0 18px; }
-h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; font-weight: 600; }
-.sub { color: var(--t2); font-size: 13px; }
-.filtros { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: end; }
-.filtros label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--t3); font-weight: 500; }
-.hueco { flex: 1; }
+/* ---- titulo de la pagina, periodo y filtros */
+.cabecera { display: flex; align-items: end; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; margin: 6px 0 14px; }
+.cabecera .sub { margin-top: 2px; }
+.estado-sync { color: var(--rojo-5); font-weight: 400; }
+.filtros-barra { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.chip-filtros { display: inline-flex; align-items: center; gap: 7px; background: var(--panel); border-color: transparent; font-size: 13px; }
+.chip-filtros.con { background: var(--sel); color: var(--rojo-5); }
+.filtros { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 12px; background: var(--panel); border-radius: 18px; padding: 14px 16px; margin-bottom: 14px; }
+.filtros label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--t2); }
+.filtros input, .filtros select { width: 100%; }
+
+/* ---- avisos: uno a la vista, el resto al tocar */
+.avisos { background: var(--aviso-fondo); color: var(--aviso-t); border-radius: 14px; margin-bottom: 14px; font-size: 13px; }
+.avisos summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; gap: 10px; align-items: center; }
+.avisos summary::-webkit-details-marker { display: none; }
+.avisos summary .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.avisos summary b { flex: none; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.avisos[open] summary .txt { visibility: hidden; }
+.avisos ul { margin: 0; padding: 0 14px 12px 30px; }
+.avisos li { margin-bottom: 6px; }
 .aviso { background: var(--aviso-fondo); color: var(--aviso-t); border-radius: 14px; padding: 10px 14px; margin-bottom: 10px; font-size: 13px; }
 
 /* ---- cifras */
 .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-#kpis { grid-template-columns: minmax(280px, 1.25fr) repeat(3, minmax(0, 1fr)); }
-.kpi { background: var(--panel); border: 1px solid var(--linea); border-radius: 20px; padding: 15px 17px; box-shadow: var(--sombra); min-width: 0; }
-.kpi .e { font-size: 12.5px; color: var(--t2); font-weight: 500; display: flex; align-items: center; gap: 8px; }
-.kpi .e .chip { width: 26px; height: 26px; border-radius: 9px; background: var(--panel-2); color: var(--t2); display: grid; place-items: center; flex: none; }
+#kpis { grid-template-columns: minmax(300px, 1.2fr) 3fr; }
+.kpis-fila { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.kpi { background: var(--panel); border-radius: 20px; padding: 15px 17px; min-width: 0; }
+.kpi .e { font-size: 13px; color: var(--t2); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.kpi .e .chip { width: 28px; height: 28px; border-radius: 10px; background: #fff; color: var(--t2); display: grid; place-items: center; flex: none; }
 .kpi .e .chip svg { width: 15px; height: 15px; }
-.kpi .n { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin-top: 6px; }
-.kpi .x { font-size: 12px; color: var(--t3); margin-top: 2px; }
-.kpi.heroe { grid-row: span 2; background: var(--heroe); border-color: transparent; color: #fff; display: flex; flex-direction: column; padding: 20px 22px; position: relative; overflow: hidden; }
-.kpi.heroe::after { content: ""; position: absolute; right: -60px; top: -60px; width: 190px; height: 190px; border-radius: 50%; background: radial-gradient(circle, rgba(239, 59, 38, .55), rgba(239, 59, 38, 0) 70%); }
-.kpi.heroe .e { color: rgba(255, 255, 255, .72); }
-.kpi.heroe .n { font-size: 40px; margin-top: 10px; color: #fff; }
+.kpi .n { font: 600 24px var(--titulos); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin-top: 6px; }
+.kpi .x { font-size: 12.5px; color: var(--t2); margin-top: 2px; }
+.kpi.heroe { background: var(--heroe); color: #fff; display: flex; flex-direction: column; padding: 20px 22px; position: relative; overflow: hidden; }
+.kpi.heroe::after { content: ""; position: absolute; right: -60px; top: -60px; width: 190px; height: 190px; border-radius: 50%; background: radial-gradient(circle, rgba(239, 59, 38, .55), rgba(239, 59, 38, 0) 70%); pointer-events: none; }
+.kpi.heroe .e { color: rgba(255, 255, 255, .78); }
+.kpi.heroe .n { font-size: 42px; font-weight: 700; margin-top: 8px; color: #fff; }
 .kpi.heroe .n.neg { color: var(--rojo-2); }
-.kpi.heroe .x { color: rgba(255, 255, 255, .62); }
+.kpi.heroe .x { color: rgba(255, 255, 255, .7); }
 .kpi.heroe .pie { margin-top: auto; padding-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.kpi.heroe .pie div { background: rgba(255, 255, 255, .08); border-radius: 13px; padding: 9px 11px; }
-.kpi.heroe .pie b { display: block; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.kpi.heroe .pie span { font-size: 11px; color: rgba(255, 255, 255, .62); }
+.kpi.heroe .pie div { background: rgba(255, 255, 255, .09); border-radius: 13px; padding: 9px 11px; }
+.kpi.heroe .pie b { display: block; font: 600 16px var(--titulos); font-variant-numeric: tabular-nums; }
+.kpi.heroe .pie span { font-size: 11.5px; font-weight: 300; color: rgba(255, 255, 255, .7); }
 
 /* ---- cajas */
-.caja { background: var(--panel); border: 1px solid var(--linea); border-radius: 20px; padding: 18px 20px; margin-bottom: 16px; box-shadow: var(--sombra); min-width: 0; }
-.caja h2 { font-size: 15px; margin: 0 0 3px; font-weight: 600; letter-spacing: -0.01em; }
-.caja .nota { font-size: 12.5px; color: var(--t3); margin-bottom: 12px; max-width: 110ch; }
-.caja .grande { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 2px 0 8px; }
+.caja { background: var(--panel); border-radius: 20px; padding: 18px 20px; margin-bottom: 16px; min-width: 0; }
+.caja h2 { font-size: 16px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.caja .nota { font-size: 13px; color: var(--t2); margin-bottom: 12px; max-width: 105ch; }
+.caja .nota.plegada { display: none; }
+.caja .grande { font: 700 30px var(--titulos); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0 0 8px; }
+button.info { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1.5px solid var(--azul-1); background: none; color: var(--t3); font: 600 11px/1 var(--texto); flex: none; display: inline-grid; place-items: center; }
+button.info:hover, button.info.abierta { border-color: var(--azul); color: var(--azul); background: #fff; }
 .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .dos-tercios { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
-.dos > .caja, .dos-tercios > .caja { margin-bottom: 16px; }
+.dos > *, .dos-tercios > *, .veredicto > *, .cab-caja > * { min-width: 0; }
 .grafico { position: relative; height: 320px; }
-.cab-caja { display: flex; justify-content: space-between; align-items: start; gap: 12px; flex-wrap: wrap; }
+.cab-caja { display: flex; justify-content: space-between; align-items: start; gap: 10px 12px; flex-wrap: wrap; margin-bottom: 6px; }
+/* Secciones que se abren y se cierran */
+details.plegable > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+details.plegable > summary::-webkit-details-marker { display: none; }
+details.plegable > summary::after { content: ""; width: 9px; height: 9px; border-right: 2px solid var(--t3); border-bottom: 2px solid var(--t3); transform: rotate(45deg); transition: transform .15s; flex: none; margin: 0 6px 4px; }
+details.plegable[open] > summary::after { transform: rotate(-135deg); margin-bottom: -4px; }
+details.plegable > summary h2 { margin: 0; }
+details.plegable > summary .pista { font-size: 12.5px; font-weight: 300; color: var(--t3); margin-left: auto; text-align: right; }
+details.plegable[open] > summary { margin-bottom: 12px; }
+details.plegable[open] > summary .pista { display: none; }
 
 /* ---- tablas */
-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 12.5px; }
-th, td { padding: 9px 6px; border-bottom: 1px solid var(--linea); text-align: right; white-space: nowrap; }
-th { font-weight: 600; color: var(--t3); font-size: 11.5px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+th, td { padding: 10px 8px; border-bottom: 1px solid var(--linea); text-align: right; white-space: nowrap; }
+th { font-weight: 500; color: var(--t3); font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); z-index: 1; }
 th:first-child, td:first-child, th.izq, td.izq { text-align: left; }
 tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: var(--panel-2); }
-tfoot th { border-top: 2px solid var(--linea-2); border-bottom: none; color: var(--t1); font-size: 13px; }
+tbody tr:hover { background: #fff; }
+tfoot th { border-top: 2px solid var(--linea-2); border-bottom: none; color: var(--t1); font-size: 13px; font-weight: 600; position: static; }
 /* La primera columna se queda quieta al mover a los lados una tabla ancha. */
 tbody td:first-child, tfoot th:first-child { position: sticky; left: 0; background: var(--panel); }
 thead th:first-child { left: 0; z-index: 2; }
-tbody tr:hover td:first-child { background: var(--panel-2); }
-tbody tr.elegida td:first-child { background: var(--sel); box-shadow: inset 3px 0 0 var(--rojo); }
+tbody tr:hover td:first-child { background: #fff; }
 tr.clic { cursor: pointer; }
-tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0 var(--rojo); }
-.tabla-alta { max-height: 620px; overflow: auto; }
+tr.elegida, tr.elegida:hover, tbody tr.elegida td:first-child { background: var(--sel); }
+tbody tr.elegida td:first-child { box-shadow: inset 3px 0 0 var(--rojo); }
+.tabla-alta { max-height: 620px; overflow: auto; -webkit-overflow-scrolling: touch; }
+button.ver-columnas { margin-top: 10px; font-size: 12.5px; padding: 6px 13px; color: var(--t2); }
 .pos { color: var(--bien); } .neg { color: var(--mal); }
 .muted { color: var(--t3); }
 .punto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
-.etiqueta { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--linea); color: var(--t2); font-weight: 500; }
-.delta { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; font-variant-numeric: tabular-nums; background: var(--panel-2); color: var(--t2); }
+.etiqueta { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #fff; border: 1px solid var(--linea); color: var(--t2); font-weight: 500; }
+.delta { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; font-variant-numeric: tabular-nums; background: #fff; color: var(--t2); font-family: var(--texto); letter-spacing: 0; vertical-align: middle; }
 .delta.pos { background: var(--bien-fondo); color: var(--bien); } .delta.neg { background: var(--mal-fondo); color: var(--mal); }
-.migas { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; font-size: 13px; }
+.migas { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; font-size: 13px; background: var(--sel); border-radius: 14px; padding: 8px 10px; }
 .oculto { display: none !important; }
 .editar-coste { cursor: pointer; border-bottom: 1px dashed var(--t3); }
 
 /* ---- entrar */
-#entrar { max-width: 380px; margin: 16vh auto; background: var(--panel); border: 1px solid var(--linea); border-radius: 24px; padding: 28px; box-shadow: var(--sombra); }
+#entrar { max-width: 380px; margin: 14vh auto; background: var(--panel); border-radius: 24px; padding: 28px; }
 #entrar .marca { margin-bottom: 14px; }
 #entrar input { width: 100%; margin: 12px 0; }
 
@@ -159,71 +178,131 @@ tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0
 .ajustes-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; }
 .ajustes-grid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
 .ajustes-grid input { width: 80px; text-align: right; }
-.sub-ajustes { font-size: 13px; margin: 16px 0 4px; }
-.tabla-coste { border: 1px solid var(--linea); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+.sub-ajustes { font-size: 14px; margin: 16px 0 4px; }
+.tabla-coste { background: #fff; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
 .tabla-coste .cab { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
 .tabla-coste .ajustes-grid input::placeholder { color: var(--t3); }
-.nueva-tabla { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; font-size: 13px; padding: 12px 14px; border: 1px dashed var(--linea-2); border-radius: 14px; }
+.nueva-tabla { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; font-size: 13px; padding: 12px 14px; border: 1px dashed var(--crema-5); border-radius: 14px; }
 .nueva-tabla label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--t2); }
 .explica { font-size: 13px; color: var(--t2); }
 .explica summary { cursor: pointer; font-weight: 600; color: var(--t1); }
-.explica dl { display: grid; grid-template-columns: minmax(180px, 240px) 1fr; gap: 6px 16px; margin: 10px 0 0; }
+.explica dl { display: grid; grid-template-columns: minmax(150px, 240px) 1fr; gap: 6px 16px; margin: 10px 0 0; }
 .explica dt { font-weight: 600; color: var(--t1); }
-.explica dd { margin: 0; }
-.fila-sel { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; }
-.grupo-botones { display: inline-flex; background: var(--panel-2); border: 1px solid var(--linea); border-radius: 999px; padding: 3px; gap: 2px; }
-.grupo-botones button { border: none; background: none; padding: 5px 12px; font-size: 12.5px; color: var(--t2); }
-.grupo-botones button.activa { background: var(--panel); color: var(--t1); font-weight: 600; box-shadow: 0 1px 2px rgba(27, 42, 61, .12); }
+.explica dd { margin: 0; font-weight: 300; }
+.fila-sel { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; }
+.fila-sel select { max-width: 100%; }
 
-/* ---- lista de mejores directos */
+/* ---- lista de los mejores directos */
 .lista { list-style: none; margin: 0; padding: 0; }
-.lista li { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-bottom: 1px solid var(--linea); cursor: pointer; border-radius: 10px; }
+.lista li { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-bottom: 1px solid var(--linea); cursor: pointer; border-radius: 12px; }
 .lista li:last-child { border-bottom: none; }
-.lista li:hover { background: var(--panel-2); }
-.lista .num { width: 26px; height: 26px; border-radius: 50%; background: var(--panel-2); display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--t2); flex: none; }
+.lista li:hover { background: #fff; }
+.lista .num { width: 26px; height: 26px; border-radius: 50%; background: #fff; display: grid; place-items: center; font: 600 12px var(--titulos); color: var(--t2); flex: none; }
 .lista li:first-child .num { background: var(--rojo); color: #fff; }
 .lista .quien { flex: 1; min-width: 0; }
-.lista .quien b { display: block; font-weight: 600; font-size: 13px; }
-.lista .quien span { font-size: 12px; color: var(--t3); }
+.lista .quien b { display: block; font-weight: 600; font-size: 13.5px; }
+.lista .quien span { font-size: 12.5px; font-weight: 300; color: var(--t2); }
 .lista .cuanto { text-align: right; font-variant-numeric: tabular-nums; }
-.lista .cuanto b { display: block; font-size: 14px; }
-.lista .cuanto span { font-size: 12px; color: var(--t3); }
+.lista .cuanto b { display: block; font: 600 15px var(--titulos); }
+.lista .cuanto span { font-size: 12.5px; font-weight: 300; color: var(--t2); }
 
 /* ---- diagnostico */
 .veredicto { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 12px; margin-bottom: 16px; }
-.veredicto .kpi .n { font-size: 30px; }
-.veredicto .kpi.heroe { grid-row: auto; }
-.veredicto .kpi.heroe .n { font-size: 34px; }
-.veredicto .frase { font-size: 14px; line-height: 1.55; color: var(--t1); }
+.veredicto .kpi .n { font-size: 30px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.veredicto .kpi.heroe .n { font-size: 36px; }
+.veredicto .frase { font-size: 14.5px; line-height: 1.55; color: var(--t1); margin-top: 8px; }
 .veredicto .frase b { font-weight: 600; }
-.pasos { width: 100%; }
-.pasos td, .pasos th { white-space: normal; }
-.pasos td.paso b { display: block; font-weight: 600; }
-.pasos td.paso span { font-size: 12px; color: var(--t3); }
-.pasos .barra-eur { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 190px; }
-.pasos .barra-eur i { display: block; height: 10px; border-radius: 5px; min-width: 2px; }
-.pasos .barra-eur i.pos { background: var(--bien); } .pasos .barra-eur i.neg { background: var(--rojo); }
-.pasos tr.total td { font-weight: 600; border-top: 2px solid var(--linea-2); }
+.pasos td, .pasos th { white-space: normal; cursor: default; }
+.pasos td.paso b { display: block; font-weight: 600; font-size: 13.5px; }
+.pasos td.paso span { font-size: 12.5px; font-weight: 300; color: var(--t2); }
+.pasos tbody td:first-child { position: static; }
+.pasos .barra-eur { display: flex; align-items: center; gap: 8px; justify-content: flex-end; white-space: nowrap; }
+.pasos .via { width: 110px; display: flex; justify-content: flex-end; flex: none; }
+.pasos .via i { display: block; height: 10px; border-radius: 5px; min-width: 3px; }
+.pasos .via i.pos { background: var(--bien); } .pasos .via i.neg { background: var(--rojo); }
+.pasos tr.total td { font-weight: 600; border-top: 2px solid var(--linea-2); border-bottom: none; }
 .barrita { display: inline-block; height: 8px; border-radius: 4px; background: var(--azul-1); vertical-align: middle; margin-right: 8px; }
 .barrita.baja { background: var(--rojo); } .barrita.alta { background: var(--azul); }
-.cifras-tt { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 6px; }
-.cifra { border: 1px solid var(--linea); border-radius: 14px; padding: 11px 13px; background: var(--panel); }
-.cifra .e { font-size: 12px; color: var(--t2); }
-.cifra .n { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; margin: 2px 0 4px; }
-.cifra .x { font-size: 11.5px; color: var(--t3); }
-.cifra.nuestra { background: var(--panel-2); border-color: var(--linea-2); }
-.titulo-grupo { font-size: 11.5px; font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 8px; }
+.cifras-tt { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; }
+.cifra { border-radius: 14px; padding: 11px 13px; background: #fff; min-width: 0; }
+.cifra .e { font-size: 12.5px; color: var(--t2); }
+.cifra .n { font: 600 18px var(--titulos); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; margin: 2px 0 4px; }
+.cifra .x { font-size: 12px; font-weight: 300; color: var(--t2); }
+details.grupo-cifras { margin-top: 12px; }
+details.grupo-cifras summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--t2); padding: 6px 0; }
+details.grupo-cifras .cifras-tt { margin-top: 8px; }
 
-@media (max-width: 1200px) { #kpis { grid-template-columns: repeat(3, 1fr); } .kpi.heroe { grid-column: 1 / -1; grid-row: auto; } .veredicto { grid-template-columns: 1fr 1fr; } .veredicto .kpi:last-child { grid-column: 1 / -1; } .dos-tercios { grid-template-columns: 1fr; } }
-@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } .dos { grid-template-columns: 1fr; } .ajustes-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 700px) { .envoltura { padding: 0 14px 50px; } .kpis, #kpis { grid-template-columns: repeat(2, 1fr); } .veredicto { grid-template-columns: 1fr; } h1 { font-size: 22px; } .acciones { margin-left: 0; } }
+/* ---- pantallas medianas */
+@media (max-width: 1200px) {
+  #kpis { grid-template-columns: 1fr; }
+  .veredicto { grid-template-columns: 1fr 1fr; } .veredicto .kpi:last-child { grid-column: 1 / -1; }
+  .dos-tercios, .dos { grid-template-columns: 1fr; }
+  .ajustes-grid { grid-template-columns: repeat(2, 1fr); }
+  .kpis { grid-template-columns: repeat(3, 1fr); }
+  .barra .marca small { display: none; }
+}
+
+/* ---- movil: se navega con la barra de abajo */
+@media (max-width: 760px) {
+  body { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+  .envoltura { padding: 0 16px 30px; }
+  /* Sin desenfoque: con el, la barra de abajo se quedaria pegada a esta y no a la pantalla. */
+  .barra { position: static; padding: 12px 0 6px; justify-content: space-between; backdrop-filter: none; background: none; }
+  .barra .marca small { display: inline; }
+  .pestanas { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; border-radius: 0; border-top: 1px solid var(--linea);
+    background: rgba(255, 255, 255, .96); backdrop-filter: blur(12px); padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; }
+  .pestanas button { flex-direction: column; gap: 3px; font-size: 10.5px; padding: 6px 2px; border-radius: 12px; color: var(--t3); font-weight: 500; }
+  .pestanas button svg { width: 22px; height: 22px; }
+  .pestanas button:hover { background: none; }
+  .pestanas button.activa { background: none; color: var(--rojo); font-weight: 600; }
+  #btn-sync span { display: none; }
+  #btn-sync { width: 40px; height: 40px; padding: 0; justify-content: center; }
+  h1 { font-size: 23px; }
+  input, select { font-size: 16px; }
+  .cabecera { margin: 4px 0 12px; }
+  /* Las filas de botones se deslizan con el dedo en vez de partirse en dos lineas */
+  .filtros-barra { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px 12px; padding: 0 16px 2px; scrollbar-width: none; }
+  .filtros-barra::-webkit-scrollbar, .kpis-fila::-webkit-scrollbar, .deslizar::-webkit-scrollbar { display: none; }
+  .filtros-barra > * { flex: none; }
+  .deslizar { overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .filtros { grid-template-columns: 1fr 1fr; }
+  .kpi.heroe .n { font-size: 38px; }
+  .kpis-fila { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; gap: 10px; }
+  .kpis-fila .kpi { flex: 0 0 64%; scroll-snap-align: center; }
+  .kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .caja { padding: 16px 14px; border-radius: 18px; }
+  .caja .grande { font-size: 26px; }
+  .grafico { height: 240px !important; }
+  table { font-size: 12.5px; }
+  th, td { padding: 9px 7px; }
+  .tabla-alta { max-height: 70vh; margin: 0 -6px; }
+  .veredicto { grid-template-columns: 1fr; }
+  /* Los pasos, uno debajo de otro: arriba el nombre, debajo sus cifras. */
+  .pasos thead { display: none; }
+  .pasos, .pasos tbody { display: block; }
+  .pasos tr { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 4px 10px; padding: 11px 0; border-bottom: 1px solid var(--linea); }
+  .pasos tr:last-child { border-bottom: none; }
+  .pasos td { border: none !important; padding: 0; text-align: left; }
+  .pasos td.paso, .pasos tr.total td:first-child { grid-column: 1 / -1; }
+  .pasos td:nth-child(2) { font: 600 15px var(--titulos); }
+  .pasos td:nth-child(3)::before { content: "normal "; }
+  .pasos td:nth-child(3) { font-size: 12.5px; font-weight: 300; }
+  .pasos .via { width: 50px; }
+  .solo-grande { display: none; }
+  .cifras-tt { grid-template-columns: 1fr 1fr; }
+  .ajustes-grid { grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+  .ajustes-grid input { width: 64px; }
+  .explica dl { grid-template-columns: 1fr; gap: 2px; } .explica dd { margin-bottom: 8px; }
+  details.plegable > summary .pista { display: none; }
+}
 </style>
 </head>
 <body>
 
 <div id="entrar" class="oculto">
   <div class="marca"><span class="logo">B</span><span>Billy's <small>Finanzas</small></span></div>
-  <p class="sub">Pon tu código de finanzas. Se queda guardado en este ordenador.</p>
+  <p class="sub">Pon tu código de finanzas. Se queda guardado en este dispositivo.</p>
   <input id="codigo" type="password" autocomplete="off" placeholder="fin-...">
   <button class="principal" id="btn-entrar">Entrar</button>
   <p id="entrar-error" class="neg"></p>
@@ -232,53 +311,56 @@ tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0
 <div class="envoltura oculto" id="app">
   <header class="barra">
     <div class="marca"><span class="logo">B</span><span>Billy's <small>Finanzas</small></span></div>
-    <nav class="pestanas" id="pestanas">
-      <button data-p="directos" class="activa">Directos</button>
-      <button data-p="diagnostico">Diagnóstico</button>
-      <button data-p="publico">Público</button>
-      <button data-p="categorias">Categorías</button>
-      <button data-p="marcas">Marcas</button>
-      <button data-p="evolucion">Evolución</button>
-      <button data-p="prendas">Prendas</button>
-      <button data-p="tiktok">Cargos de TikTok</button>
+    <nav class="pestanas" id="pestanas" aria-label="Secciones">
+      <button data-g="resumen" class="activa"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Resumen</span></button>
+      <button data-g="diagnostico"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Diagnóstico</span></button>
+      <button data-g="publico"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/></svg><span>Público</span></button>
+      <button data-g="producto"><svg class="ic" viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg><span>Producto</span></button>
+      <button data-g="detalle"><svg class="ic" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg><span>Detalle</span></button>
     </nav>
     <div class="acciones">
-      <span class="estado-sync" id="estado-sync"></span>
       <button class="redondo" id="btn-ajustes" title="Costes y sueldos" aria-label="Costes y sueldos"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
-      <button class="principal" id="btn-sync">Traer datos nuevos de TikTok</button>
+      <button class="principal" id="btn-sync" title="Traer datos nuevos de TikTok" aria-label="Traer datos nuevos de TikTok"><svg class="ic" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg><span>Actualizar datos</span></button>
     </div>
   </header>
 
   <div class="cabecera">
     <div>
-      <h1 id="saludo">Finanzas de los directos</h1>
+      <h1 id="saludo">Finanzas</h1>
       <div class="sub" id="actualizado"></div>
+      <div class="sub estado-sync" id="estado-sync"></div>
     </div>
-    <div class="filtros">
-      <label>Desde <input type="date" id="f-desde"></label>
-      <label>Hasta <input type="date" id="f-hasta"></label>
-      <label>País
-        <select id="f-pais"><option value="">Todos</option><option value="es">España</option><option value="de">Alemania</option><option value="nl">Holanda</option></select>
-      </label>
-      <label>Cuenta
-        <select id="f-canal"><option value="">Todas</option><option value="bv">BV</option><option value="bto">BTo</option><option value="bta">BTa</option><option value="de">DE</option><option value="nl">NL</option></select>
-      </label>
-      <label>Categoría <select id="f-cat"><option value="">Todas</option></select></label>
-      <label>Comisión
-        <select id="f-comision"><option value="real">La real de TikTok</option><option value="9">Simular al 9 %</option></select>
-      </label>
-      <label>IVA de la venta
-        <select id="f-iva"><option value="no">Sin restar</option><option value="si">Restar IVA</option></select>
-      </label>
-      <button id="btn-cargar" class="oscuro">Ver</button>
-    </div>
+    <div class="grupo-botones oculto" id="subpestanas"></div>
+  </div>
+
+  <div class="filtros-barra">
+    <span class="grupo-botones" id="periodos"><button data-d="7">7 días</button><button data-d="30">30 días</button><button data-d="0">Todo</button></span>
+    <span class="grupo-botones" id="paises"><button data-v="">Todos</button><button data-v="es">España</button><button data-v="de">Alemania</button><button data-v="nl">Holanda</button></span>
+    <button class="chip-filtros" id="btn-filtros"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="14" cy="18" r="2"/></svg><span id="filtros-resumen">Filtros</span></button>
+  </div>
+  <div class="filtros oculto" id="filtros">
+    <label>Desde <input type="date" id="f-desde"></label>
+    <label>Hasta <input type="date" id="f-hasta"></label>
+    <label>País
+      <select id="f-pais"><option value="">Todos</option><option value="es">España</option><option value="de">Alemania</option><option value="nl">Holanda</option></select>
+    </label>
+    <label>Cuenta
+      <select id="f-canal"><option value="">Todas</option><option value="bv">BV</option><option value="bto">BTo</option><option value="bta">BTa</option><option value="de">DE</option><option value="nl">NL</option></select>
+    </label>
+    <label>Categoría <select id="f-cat"><option value="">Todas</option></select></label>
+    <label>Comisión
+      <select id="f-comision"><option value="real">La real de TikTok</option><option value="9">Simular al 9 %</option></select>
+    </label>
+    <label>IVA de la venta
+      <select id="f-iva"><option value="no">Sin restar</option><option value="si">Restar IVA</option></select>
+    </label>
   </div>
 
   <div class="caja oculto" id="ajustes">
     <h2>Costes y sueldos</h2>
-    <div class="nota">Costes por prenda SIN IVA (las compras son intracomunitarias: ese IVA se deduce, no es coste). Cada venta usa la tabla de su país con la fecha de inicio más reciente que no sea posterior al día de la venta. Una casilla vacía hereda el coste de la tabla anterior del mismo país. Se guardan en este ordenador.</div>
+    <div class="nota">Costes por prenda SIN IVA (las compras son intracomunitarias: ese IVA se deduce, no es coste). Cada venta usa la tabla de su país con la fecha de inicio más reciente que no sea posterior al día de la venta. Una casilla vacía hereda el coste de la tabla anterior del mismo país. Se guardan en este dispositivo.</div>
     <h3 class="sub-ajustes">IVA de la venta por país</h3>
-    <div class="nota">Solo se usa si arriba eliges «IVA de la venta: Restar IVA». Entonces se quita de todo lo que paga el comprador (la prenda y el envío): importe / (1 + IVA). Hoy todo tributa en España (21 %).</div>
+    <div class="nota">Solo se usa si en los filtros eliges «IVA de la venta: Restar IVA». Entonces se quita de todo lo que paga el comprador (la prenda y el envío): importe / (1 + IVA). Hoy todo tributa en España (21 %).</div>
     <div class="ajustes-grid" id="ajustes-iva"></div>
     <h3 class="sub-ajustes">Tablas de coste</h3>
     <div id="ajustes-tablas"></div>
@@ -286,25 +368,26 @@ tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0
       <b>Nueva tabla</b> (para la próxima compra)
       <label>País <select id="nt-pais"><option value="es">España</option><option value="de">Alemania</option><option value="nl">Holanda</option></select></label>
       <label>Desde <input type="date" id="nt-desde"></label>
-      <label>Nombre <input type="text" id="nt-nombre" placeholder="p. ej. ReRags 123 (nov 2026)" style="width:240px"></label>
+      <label>Nombre <input type="text" id="nt-nombre" placeholder="p. ej. ReRags 123 (nov 2026)" style="width:240px;max-width:100%"></label>
       <button id="btn-nueva-tabla">Añadir</button>
       <span class="neg" id="nt-error"></span>
     </div>
     <h3 class="sub-ajustes">Sueldos</h3>
     <div class="ajustes-grid" id="ajustes-sueldos"></div>
-    <div style="margin-top:12px; display:flex; gap:8px">
+    <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
       <button id="btn-guardar-ajustes" class="principal">Guardar</button>
       <button id="btn-reset-ajustes">Volver a los de fábrica</button>
     </div>
   </div>
 
   <div id="avisos"></div>
-  <div class="kpis" id="kpis"></div>
 
   <div class="migas oculto" id="migas">
     <button id="btn-quitar-directo">← Todos los directos</button>
     <span id="migas-texto"></span>
   </div>
+
+  <div class="kpis" id="kpis"></div>
 
   <section data-s="directos">
     <div class="dos-tercios">
@@ -313,23 +396,23 @@ tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0
           <div><h2>Beneficio por día</h2><div class="grande" id="dir-total"></div></div>
           <div class="sub" id="dir-total-nota"></div>
         </div>
-        <div class="grafico" style="height:280px"><canvas id="g-dir-dias"></canvas></div>
+        <div class="grafico" style="height:270px"><canvas id="g-dir-dias"></canvas></div>
       </div>
       <div class="caja">
         <h2>Los que más dejan por hora</h2>
-        <div class="nota">Por beneficio por hora, no por facturación. Pulsa uno para verlo solo.</div>
+        <div class="nota">Ordenados por beneficio por hora, no por facturación. Pulsa uno para verlo solo.</div>
         <ul class="lista" id="dir-top"></ul>
       </div>
     </div>
     <div class="caja">
-      <h2>Beneficio por directo</h2>
-      <div class="nota">Pulsa un directo para ver solo ese en todas las pestañas. Liquidado = lo que TikTok paga (real si ya liquidó, estimado si no). Beneficio = liquidado − coste de las prendas − vendedora.</div>
+      <h2>Todos los directos</h2>
+      <div class="nota">Pulsa un directo para ver solo ese en toda la página. Liquidado = lo que TikTok paga (real si ya liquidó, estimado si no). Beneficio = liquidado − coste de las prendas − vendedora.</div>
       <div class="tabla-alta"><table id="t-directos"></table></div>
     </div>
   </section>
 
   <section data-s="diagnostico" class="oculto">
-    <div class="fila-sel"><label for="diag-sel"><b>Directo</b></label><select id="diag-sel"></select><span class="muted" id="diag-normal"></span></div>
+    <div class="fila-sel"><label for="diag-sel"><b>Directo</b></label><select id="diag-sel"></select></div>
     <div id="diag-vacio" class="caja oculto"></div>
     <div id="diag-cuerpo">
       <div class="veredicto" id="diag-veredicto"></div>
@@ -337,59 +420,52 @@ tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0
       <div class="dos">
         <div class="caja">
           <h2>Dónde se ganó y dónde se perdió</h2>
-          <div class="nota">El camino de una persona desde que TikTok le enseña el directo hasta que deja beneficio. Cada paso se compara con lo normal de esa cuenta, y la última columna dice cuántos euros por hora sumó o restó ese paso. Sumados dan justo la diferencia de beneficio por hora.</div>
+          <div class="nota">El camino de una persona desde que TikTok le enseña el directo hasta que deja beneficio. Cada paso se compara con lo normal de esa cuenta, y la última columna dice cuántos euros por hora sumó o restó. Sumados dan justo la diferencia de beneficio por hora. «Compran» y «Beneficio por prenda» van unidos: con prendas más caras se rematan menos por clic pero cada una deja más. <span id="diag-normal"></span></div>
           <table class="pasos" id="t-diag-pasos"></table>
-          <div class="nota" style="margin:12px 0 0">«Compran» y «Beneficio por prenda» van unidos: con prendas más caras se rematan menos por clic pero cada una deja más. Hay que mirarlos juntos, no por separado.</div>
         </div>
-        <div class="caja">
-          <h2>De lo normal a este directo, en euros por hora</h2>
-          <div class="nota">Azul: beneficio por hora normal y el de este directo. Verde y rojo: lo que suma o resta cada paso.</div>
+        <div class="caja solo-grande">
+          <h2>De lo normal a este directo</h2>
+          <div class="nota">En euros por hora. Azul: el beneficio por hora normal y el de este directo. Verde y rojo: lo que suma o resta cada paso.</div>
           <div class="grafico" style="height:360px"><canvas id="g-diag-cascada"></canvas></div>
         </div>
       </div>
 
-      <div class="caja">
-        <div class="cab-caja">
-          <div><h2>Qué se vendió y cuánto rindió su tiempo</h2>
-          <div class="nota">El tiempo de directo es lo que no se puede comprar. Cada grupo con el tiempo de pantalla que ocupó y el beneficio que dejó: si ocupa más tiempo que beneficio deja, está quitando sitio a algo mejor. Tiempo de pantalla de una prenda = lo que pasa desde la venta anterior (los parones de más de 10 minutos no cuentan).</div></div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap">
-            <span class="grupo-botones" id="diag-mix-de"><button data-v="uno" class="activa">Este directo</button><button data-v="todos">Todo lo filtrado</button></span>
-            <span class="grupo-botones" id="diag-mix-por"><button data-v="cat" class="activa">Categoría</button><button data-v="marca">Marca</button><button data-v="precio">Precio</button></span>
-          </div>
+      <details class="caja plegable" open>
+        <summary><h2>Qué se vendió y cuánto rindió su tiempo</h2></summary>
+        <div class="nota">El tiempo de directo es lo que no se puede comprar. Cada grupo con el tiempo de pantalla que ocupó y el beneficio que dejó: si ocupa más tiempo que beneficio deja, está quitando sitio a algo mejor. Tiempo de pantalla de una prenda = lo que pasa desde la venta anterior (los parones de más de 10 minutos no cuentan).</div>
+        <div class="fila-sel deslizar">
+          <span class="grupo-botones" id="diag-mix-por"><button data-v="cat" class="activa">Categoría</button><button data-v="marca">Marca</button><button data-v="precio">Precio</button></span>
+          <span class="grupo-botones" id="diag-mix-de"><button data-v="uno" class="activa">Este directo</button><button data-v="todos">Todo el periodo</button></span>
         </div>
         <div class="dos" style="align-items:start">
-          <div class="tabla-alta"><table id="t-diag-mix"></table></div>
-          <div><div class="grafico" style="height:340px"><canvas id="g-diag-mix"></canvas></div></div>
+          <div><div class="tabla-alta"><table id="t-diag-mix"></table></div></div>
+          <div><div class="grafico" style="height:330px"><canvas id="g-diag-mix"></canvas></div></div>
         </div>
-      </div>
+      </details>
 
-      <div class="caja">
-        <h2>Las cifras de este directo, frente a lo normal</h2>
-        <div class="nota">Arriba las tuyas, que TikTok no conoce porque no sabe lo que cuesta la ropa ni lo que se cancela. Debajo las mismas que enseña TikTok en su diagnóstico, calculadas igual. La comparación es con los directos de esa cuenta de los 30 días anteriores.</div>
+      <details class="caja plegable">
+        <summary><h2>Las cifras de este directo, frente a lo normal</h2><span class="pista">las tuyas y las de TikTok</span></summary>
+        <div class="nota">Primero las tuyas, que TikTok no conoce porque no sabe lo que cuesta la ropa ni lo que se cancela. Debajo, las mismas que enseña TikTok en su diagnóstico, calculadas igual. Se comparan con los directos de esa cuenta de los 30 días anteriores.</div>
         <div id="diag-cifras"></div>
-      </div>
+      </details>
 
-      <div class="caja">
-        <h2>Cuándo entró más gente de la que lo vio</h2>
-        <div class="nota">Tasa de entrada minuto a minuto: de cada 100 veces que TikTok enseñó el directo en el feed, cuántas entraron (media de 3 minutos). La línea gris son las veces que lo enseñó. Debajo, los momentos con mejor tasa y la prenda que había en pantalla.</div>
+      <details class="caja plegable">
+        <summary><h2>Cuándo entró más gente de la que lo vio</h2><span class="pista">tasa de entrada minuto a minuto</span></summary>
+        <div class="nota">De cada 100 veces que TikTok enseñó el directo en el feed, cuántas entraron (media de 3 minutos). La línea gris son las veces que lo enseñó. Debajo, los momentos con mejor tasa y la prenda que había en pantalla.</div>
         <div id="diag-entrada-falta" class="muted oculto"></div>
         <div class="grafico" style="height:300px" id="diag-entrada-graf"><canvas id="g-diag-entrada"></canvas></div>
         <div class="tabla-alta" style="margin-top:12px"><table id="t-diag-entrada"></table></div>
-      </div>
+      </details>
     </div>
 
-    <div class="dos-tercios">
-      <div class="caja">
-        <h2>Todos los directos: por beneficio, no por facturación</h2>
-        <div class="nota">Puesto de cada directo dentro de su país por beneficio por hora y por la venta por hora que cuenta TikTok. «Puestos» = cuántos sube o baja al mirar el beneficio en vez de la facturación. Pulsa uno para diagnosticarlo arriba.</div>
-        <div class="tabla-alta"><table id="t-diag-ranking"></table></div>
+    <details class="caja plegable">
+      <summary><h2>Todos los directos, por beneficio y no por facturación</h2><span class="pista">ranking y comparación con TikTok</span></summary>
+      <div class="nota">Puesto de cada directo dentro de su país por beneficio por hora y por la venta por hora que cuenta TikTok. «Puestos» = cuántos sube o baja al mirar el beneficio en vez de la facturación. En el gráfico cada punto es un directo: a la derecha, más venta por hora; arriba, más beneficio por hora. Pulsa uno para diagnosticarlo.</div>
+      <div class="dos-tercios" style="align-items:start">
+        <div><div class="tabla-alta"><table id="t-diag-ranking"></table></div></div>
+        <div><div class="grafico" style="height:360px"><canvas id="g-diag-nube"></canvas></div></div>
       </div>
-      <div class="caja">
-        <h2>Facturar más no siempre es ganar más</h2>
-        <div class="nota">Cada punto es un directo. A la derecha, más venta por hora según TikTok; arriba, más beneficio por hora. El marcado es el elegido.</div>
-        <div class="grafico" style="height:380px"><canvas id="g-diag-nube"></canvas></div>
-      </div>
-    </div>
+    </details>
   </section>
 
   <section data-s="publico" class="oculto">
@@ -413,29 +489,33 @@ tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0
     </div>
     <div class="caja">
       <h2>La curva de un directo</h2>
-      <div class="nota">Gente en sala minuto a minuto (línea de color) y beneficio acumulado de lo vendido (línea discontinua, escala de la derecha): donde sube más rápido es donde se está ganando dinero. La franja gris es el empujón de TikTok, del minuto 10 al 20. Pulsa un directo en la tabla de abajo para verlo aquí.</div>
-      <div class="fila-sel"><label for="pub-sel">Directo</label><select id="pub-sel"></select><span class="muted" id="pub-curva-nota"></span></div>
-      <div class="grafico" style="height:360px"><canvas id="g-pub-curva"></canvas></div>
-      <h2 style="margin-top:14px">Picos de este directo</h2>
+      <div class="nota">Gente en sala minuto a minuto (línea de color) y beneficio acumulado de lo vendido (línea discontinua, escala de la derecha): donde sube más rápido es donde se está ganando dinero. La franja gris es el empujón de TikTok, del minuto 10 al 20.</div>
+      <div class="fila-sel"><label for="pub-sel"><b>Directo</b></label><select id="pub-sel"></select></div>
+      <div class="sub" id="pub-curva-nota" style="margin-bottom:10px"></div>
+      <div class="grafico" style="height:340px"><canvas id="g-pub-curva"></canvas></div>
+      <h2 style="margin-top:16px">Picos de este directo</h2>
       <div class="nota">Los triángulos de la curva. En pantalla = la prenda que se estaba subastando mientras entraba la gente (la primera que se vende desde el minuto del pico). Anterior y siguiente = las vendidas justo antes y justo después.</div>
       <div class="tabla-alta"><table id="t-pub-picos-uno"></table></div>
     </div>
-    <div class="caja">
-      <h2>Todos los picos de público del periodo</h2>
+    <details class="caja plegable">
+      <summary><h2>Todos los picos de público del periodo</h2><span class="pista">qué había en pantalla cuando entró gente de golpe</span></summary>
       <div class="nota">Cada momento en que entró mucha más gente de golpe, con la prenda que había en pantalla. Pulsa una fila para ver la curva de ese directo. Pico = un minuto con al menos un 35 % más de gente (y 25 personas más) que la mediana de los 15 minutos anteriores, y el más alto de los 6 minutos de alrededor.</div>
       <div class="fila-sel"><label><input type="checkbox" id="pub-inicio"> Incluir el empujón de inicio (primeros 30 minutos, lo trae TikTok al empezar)</label></div>
       <div class="sub" id="pub-picos-resumen" style="margin-bottom:10px"></div>
       <div class="dos">
-        <div><div class="nota">Categoría de la prenda en pantalla en los picos, frente a lo que se vende normalmente en esos mismos directos.</div><table id="t-picos-cat"></table></div>
-        <div><div class="nota">Lo mismo por marca.</div><table id="t-picos-marca"></table></div>
+        <div><div class="sub" style="margin-bottom:6px">Categoría de la prenda en pantalla en los picos, frente a lo que se vende normalmente en esos mismos directos.</div><div class="tabla-alta"><table id="t-picos-cat"></table></div></div>
+        <div><div class="sub" style="margin-bottom:6px">Lo mismo por marca.</div><div class="tabla-alta"><table id="t-picos-marca"></table></div></div>
       </div>
       <div class="tabla-alta" style="margin-top:14px"><table id="t-pub-picos"></table></div>
-    </div>
-    <div class="dos">
-      <div class="caja"><h2>El empujón de TikTok al empezar</h2><div class="nota">Gente en sala según los minutos que lleva el directo, en % de lo normal en ese mismo directo (100 % = su mediana).</div><div class="grafico"><canvas id="g-pub-arranque"></canvas></div></div>
-      <div class="caja"><h2>Gente en sala según la hora</h2><div class="nota">Media de personas en el directo en cada hora del reloj (hora de Madrid). Al pasar el ratón, el valor del espectador en esa hora.</div><div class="grafico"><canvas id="g-pub-horas"></canvas></div></div>
-    </div>
-    <div class="caja"><h2>Cada directo, visto desde el público</h2><div class="nota">Datos de TikTok con un día de retraso. Pulsa una fila para ver su curva arriba. Los directos sin tablet (p. ej. los de noche de billysvlc) solo tienen datos de TikTok, sin beneficio. El filtro de categoría no se aplica en esta pestaña.</div><div class="tabla-alta"><table id="t-pub"></table></div></div>
+    </details>
+    <details class="caja plegable">
+      <summary><h2>Cuándo hay más gente</h2><span class="pista">el empujón del principio y las horas del día</span></summary>
+      <div class="dos">
+        <div><h2 style="font-size:14px">El empujón de TikTok al empezar</h2><div class="sub" style="margin-bottom:8px">Gente en sala según los minutos que lleva el directo, en % de lo normal en ese mismo directo (100 % = su mediana).</div><div class="grafico"><canvas id="g-pub-arranque"></canvas></div></div>
+        <div><h2 style="font-size:14px">Gente en sala según la hora</h2><div class="sub" style="margin-bottom:8px">Media de personas en el directo en cada hora del reloj (hora de Madrid).</div><div class="grafico"><canvas id="g-pub-horas"></canvas></div></div>
+      </div>
+    </details>
+    <div class="caja"><h2>Cada directo, visto desde el público</h2><div class="nota">Datos de TikTok con un día de retraso. Pulsa una fila para ver su curva arriba. Los directos sin tablet (p. ej. los de noche de billysvlc) solo tienen datos de TikTok, sin beneficio. El filtro de categoría no se aplica aquí.</div><div class="tabla-alta"><table id="t-pub"></table></div></div>
   </section>
 
   <section data-s="categorias" class="oculto">
@@ -447,7 +527,7 @@ tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0
   </section>
 
   <section data-s="marcas" class="oculto">
-    <div class="caja"><h2>Marcas que más beneficio dejan</h2><div class="nota">Las 15 primeras por beneficio total en el periodo. Usa el filtro de categoría de arriba para ver, por ejemplo, solo sudaderas.</div><div class="grafico" style="height:380px"><canvas id="g-marcas"></canvas></div></div>
+    <div class="caja"><h2>Marcas que más beneficio dejan</h2><div class="nota">Las 15 primeras por beneficio total en el periodo. Usa el filtro de categoría para ver, por ejemplo, solo sudaderas.</div><div class="grafico" style="height:380px"><canvas id="g-marcas"></canvas></div></div>
     <div class="caja"><h2>Todas las marcas</h2><div class="nota">Ordena pulsando en la cabecera. Marcas con menos de 5 prendas: la media no es fiable.</div><div class="tabla-alta"><table id="t-marcas"></table></div></div>
   </section>
 
@@ -460,7 +540,7 @@ tr.elegida, tr.elegida:hover { background: var(--sel); box-shadow: inset 3px 0 0
   </section>
 
   <section data-s="prendas" class="oculto">
-    <div class="caja"><h2>Cada prenda</h2><div class="nota">Sin datos del comprador ni números de pedido. "Cancelada" = el pedido está cancelado en TikTok. "Sin cobrar" = TikTok no tiene dinero de ese pedido: sin pagar o todavía no traído.</div><div class="tabla-alta"><table id="t-prendas"></table></div></div>
+    <div class="caja"><h2>Cada prenda</h2><div class="nota">Sin datos del comprador ni números de pedido. «Cancelada» = el pedido está cancelado en TikTok. «Sin cobrar» = TikTok no tiene dinero de ese pedido: sin pagar o todavía no traído. Pulsa el coste de una prenda para poner el suyo real.</div><div class="tabla-alta"><table id="t-prendas"></table></div></div>
   </section>
 
   <section data-s="tiktok" class="oculto">
@@ -575,10 +655,12 @@ const ICONOS = {
   coste: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
 };
 const icono = (k) => `<svg class="ic" viewBox="0 0 24 24">${ICONOS[k] || ''}</svg>`;
-function saludar() {
+function saludo() {
   const h = Number(new Date().toLocaleString('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false }));
-  $('#saludo').textContent = (h >= 6 && h < 13 ? 'Buenos días' : (h >= 13 && h < 21 ? 'Buenas tardes' : 'Buenas noches')) + ', Aaron';
+  return (h >= 6 && h < 13 ? 'Buenos días' : (h >= 13 && h < 21 ? 'Buenas tardes' : 'Buenas noches')) + ', Aaron';
 }
+const hace = (t) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  return m < 60 ? `hace ${m} min` : (m < 48 * 60 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`); };
 let CODIGO = leerLocal('fin_codigo', '');
 /* Lo guardado en el navegador va con una llave nueva. Lo de la llave vieja
  * (fin_costes) llevaba IVA y NO se lee: no puede pisar las tablas nuevas. */
@@ -609,9 +691,23 @@ function costeDe(pais, dia, cat) {
 const ivaDe = (pais) => (Number(IVA[pais]) || 0) / 100;
 let SUELDOS = { ...SUELDOS_FABRICA, ...leerLocal('fin_sueldos', {}) };
 let CRUDO = null;         /* respuesta del servidor */
-let PRENDAS = [];         /* prendas ya calculadas */
+let PRENDAS = [];         /* prendas ya calculadas, las del periodo elegido */
+let PRENDAS_TODAS = [];   /* todas las traidas, sea cual sea el periodo */
 let DIRECTO = '';         /* sesion elegida, o '' */
 let PESTANA = 'directos';
+let AVISOS_ABIERTOS = false;
+const COMPLETA = {};      /* tablas en las que se han pedido todas las columnas */
+/* Las ocho pestañas de antes, agrupadas en cinco secciones. */
+const GRUPOS = {
+  resumen: ['Resumen', [['directos', 'Por directo'], ['evolucion', 'Día a día']]],
+  diagnostico: ['Diagnóstico', [['diagnostico', '']]],
+  publico: ['Público', [['publico', '']]],
+  producto: ['Producto', [['categorias', 'Categorías'], ['marcas', 'Marcas']]],
+  detalle: ['Detalle', [['prendas', 'Cada prenda'], ['tiktok', 'Cargos de TikTok']]],
+};
+let GRUPO = 'resumen';
+const ULTIMA = {};        /* la ultima vista abierta de cada seccion */
+const estrecha = () => window.matchMedia('(max-width: 760px)').matches;
 const graficos = {};
 
 async function pedir(params) {
@@ -636,7 +732,7 @@ function calcular() {
     s.horas = Math.max((s.hasta - s.desde) / 3600000, 0.25);
     s.sueldo = s.horas * (Number(SUELDOS[s.pais]) || 0) * (Number(SUELDOS.vendedoras) || 1);
   }
-  PRENDAS = CRUDO.ventas.map((v) => {
+  PRENDAS_TODAS = CRUDO.ventas.map((v) => {
     const { cat, marca } = leerAnuncio(v.anuncio);
     /* Con dinero en TikTok pero venta a cero = reembolsada o cancelada despues
      * de pagar. La prenda no sale del almacen: no lleva coste, pero lo que
@@ -677,7 +773,7 @@ function calcular() {
    * su directo. Un paron de mas de 10 minutos no es tiempo de esa prenda: a
    * esa, y a la primera del directo, se les pone lo normal de ese directo. */
   const porSes = {};
-  for (const p of PRENDAS) (porSes[p.sesion] = porSes[p.sesion] || []).push(p);
+  for (const p of PRENDAS_TODAS) (porSes[p.sesion] = porSes[p.sesion] || []).push(p);
   for (const g of Object.values(porSes)) {
     g.sort((a, b) => a.h - b.h);
     const huecos = [];
@@ -685,6 +781,9 @@ function calcular() {
     const normal = huecos.length ? mediana(huecos) : 60;
     for (const p of g) if (p.pant == null) p.pant = normal;
   }
+  const d1 = $('#f-desde').value || PRIMER_DIA, d2 = $('#f-hasta').value || hoyMadrid();
+  PRENDAS = PRENDAS_TODAS.filter((p) => p.dia >= d1 && p.dia <= d2);
+  if (DIRECTO && !PRENDAS.some((p) => p.sesion === DIRECTO)) DIRECTO = '';
   return ses;
 }
 
@@ -728,6 +827,9 @@ const orden = {};
 function tabla(id, columnas, filas, opciones = {}) {
   if ($('#f-iva').value !== 'si') columnas = columnas.filter((c) => c.k !== 'ivaVenta');
   const el = document.getElementById(id);
+  const todas = columnas.length, principales = (estrecha() && opciones.movil) || opciones.simple;
+  if (principales && !COMPLETA[id]) columnas = columnas.filter((c) => principales.includes(c.k));
+  botonColumnas(el, id, principales ? todas : 0, columnas.length);
   const o = orden[id] || opciones.orden || null;
   if (o) filas = filas.slice().sort((a, b) => { const x = a[o.k], y = b[o.k];
     return (typeof x === 'string' ? String(x).localeCompare(String(y)) : ((x ?? -Infinity) - (y ?? -Infinity))) * o.d; });
@@ -745,6 +847,19 @@ function tabla(id, columnas, filas, opciones = {}) {
   if (opciones.clic) el.querySelectorAll('tbody tr').forEach((tr) => tr.onclick = () => opciones.clic(tr.dataset.id));
 }
 
+/* El boton de debajo de una tabla para ver todas sus columnas o solo las principales. */
+function botonColumnas(el, id, todas, vistas) {
+  const caja = el.closest('.tabla-alta') || el;
+  let b = caja.nextElementSibling;
+  if (!b || !b.classList.contains('ver-columnas')) {
+    if (!todas) return;
+    b = document.createElement('button'); b.type = 'button'; b.className = 'ver-columnas';
+    b.onclick = () => { COMPLETA[id] = !COMPLETA[id]; pintar(); };
+    caja.after(b);
+  }
+  b.classList.toggle('oculto', !todas || (vistas >= todas && !COMPLETA[id]));
+  b.textContent = COMPLETA[id] ? 'Ver solo lo principal' : `Ver todas las columnas (${todas})`;
+}
 const colsDinero = [
   { k: 'cobradas', t: 'Cobradas', f: (v, f) => ent(v) + ` <span class="muted">(${pct(f.tasaCobro, 0)})</span>`, ayuda: 'Prendas con dinero en TikTok. Entre paréntesis, sobre las vendidas.' },
   { k: 'precioMedio', t: 'Precio medio', f: (v) => eur(v), ayuda: 'Remate medio de las cobradas' },
@@ -762,8 +877,41 @@ const colsDinero = [
 ];
 
 /* ================================================================= pintar */
+function irA(grupo, pestana) {
+  GRUPO = grupo; PESTANA = pestana || ULTIMA[grupo] || GRUPOS[grupo][1][0][0]; ULTIMA[grupo] = PESTANA;
+  pintarNavegacion(); pintar();
+}
+function recalcular() { if (!CRUDO) return; calcular.ses = calcular(); pintar(); }
+/* Lo de arriba: seccion activa, titulo, vistas, periodo, pais y resumen de filtros. */
+function pintarNavegacion() {
+  document.querySelectorAll('#pestanas button').forEach((b) => b.classList.toggle('activa', b.dataset.g === GRUPO));
+  const [nombre, subs] = GRUPOS[GRUPO];
+  $('#saludo').textContent = GRUPO === 'resumen' ? saludo() : nombre;
+  const sp = $('#subpestanas');
+  sp.classList.toggle('oculto', subs.length < 2);
+  sp.innerHTML = subs.length < 2 ? '' : subs.map(([k, t]) => `<button data-p="${k}" class="${k === PESTANA ? 'activa' : ''}">${t}</button>`).join('');
+  sp.querySelectorAll('button').forEach((b) => b.onclick = () => irA(GRUPO, b.dataset.p));
+  $('#kpis').classList.toggle('oculto', GRUPO !== 'resumen');
+  const d1 = $('#f-desde').value, d2 = $('#f-hasta').value, hoy = hoyMadrid();
+  const dias = d2 === hoy ? Math.round((new Date(d2) - new Date(d1)) / 86400000) + 1 : -1;
+  let conPeriodo = false;
+  document.querySelectorAll('#periodos button').forEach((b) => {
+    const si = b.dataset.d === '0' ? (d1 === PRIMER_DIA && d2 === hoy) : (Number(b.dataset.d) === dias && d1 !== PRIMER_DIA);
+    b.classList.toggle('activa', si); if (si) conPeriodo = true; });
+  document.querySelectorAll('#paises button').forEach((b) => b.classList.toggle('activa', b.dataset.v === $('#f-pais').value));
+  const extra = [];
+  if (!conPeriodo && d1 && d2) extra.push(`${diaCorto(d1)} a ${diaCorto(d2)}`);
+  if ($('#f-canal').value) extra.push(CUENTAS[$('#f-canal').value] || $('#f-canal').value);
+  if ($('#f-cat').value) extra.push($('#f-cat').value);
+  if ($('#f-comision').value === '9') extra.push('comisión al 9 %');
+  if ($('#f-iva').value === 'si') extra.push('IVA restado');
+  $('#filtros-resumen').textContent = extra.length ? extra.join(' · ') : 'Más filtros';
+  $('#btn-filtros').classList.toggle('con', extra.length > 0);
+}
+
 function pintar() {
   if (!CRUDO) return;
+  pintarNavegacion();
   const ps = filtradas();
   const t = sumar(ps);
   const ses = calcular.ses || {};
@@ -771,16 +919,18 @@ function pintar() {
   /* ---- avisos */
   const av = [];
   const sinSync = Object.entries(CRUDO.actualizado || {}).filter(([p, v]) => !v && ps.some((x) => x.pais === p)).map(([p]) => PAISES[p]);
-  if (sinSync.length) av.push('Aún no se han traído los datos de TikTok de ' + sinSync.join(' y ') + '. Pulsa «Traer datos nuevos de TikTok».');
+  if (sinSync.length) av.push('Aún no se han traído los datos de TikTok de ' + sinSync.join(' y ') + '. Pulsa «Actualizar datos».');
   if (!('canceladasAl' in CRUDO)) av.push('Falta subir el archivo nuevo del servidor (api/finanzas.js): lo cancelado sale incompleto y parte va como devuelto.');
   const viejas = Object.keys(PAISES).filter((p) => ps.some((x) => x.pais === p)).filter((p) => {
     const al = (CRUDO.canceladasAl || {})[p]; return !al || Date.now() - new Date(al).getTime() > 6 * 3600000; }).map((p) => PAISES[p]);
-  if (viejas.length) av.push('La lista de canceladas de ' + viejas.join(' y ') + ' tiene más de 6 horas o no tiene fecha: pueden faltar cancelaciones, que siguen llegando días después del directo. Pulsa «Traer datos nuevos de TikTok».');
+  if (viejas.length) av.push('Las canceladas de ' + viejas.join(' y ') + ' llevan más de 6 horas sin actualizar y pueden faltar: siguen llegando días después del directo. Pulsa «Actualizar datos».');
   if (t.sinCoste) av.push(`${t.sinCoste} prendas cobradas son de una categoría sin coste puesto (${[...new Set(ps.filter((p) => p.sinCoste).map((p) => p.cat))].join(', ')}). Su beneficio sale inflado: ponle coste en «Costes y sueldos».`);
   if ($('#f-comision').value === '9') av.push('Estás viendo la comisión simulada al 9 %, no la real.');
   if ($('#f-iva').value === 'si') av.push('Estás viendo el beneficio con el IVA de lo que paga el comprador (prenda y envío) ya restado.');
   if (t.netoEstimado && t.neto && t.netoEstimado / t.neto > 0.2) av.push('Buena parte de lo liquidado es aún estimación de TikTok, y sus estimaciones no incluyen el envío hasta que el paquete se entrega. En las liquidaciones reales del 29 sep el envío neto fue de unos +0,25 € por pedido en Alemania y −0,07 € en España: Alemania saldrá algo mejor cuando se liquide.');
-  $('#avisos').innerHTML = av.map((x) => `<div class="aviso">${esc(x)}</div>`).join('');
+  $('#avisos').innerHTML = !av.length ? '' : `<details class="avisos" ${AVISOS_ABIERTOS ? 'open' : ''}><summary><span class="txt">${esc(av[0])}</span><b>${av.length === 1 ? 'Ver aviso' : 'Ver los ' + av.length + ' avisos'}</b></summary><ul>${av.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>`;
+  const cajaAvisos = document.querySelector('#avisos details');
+  if (cajaAvisos) cajaAvisos.ontoggle = () => { AVISOS_ABIERTOS = cajaAvisos.open; cajaAvisos.querySelector('summary b').textContent = cajaAvisos.open ? 'Cerrar' : (av.length === 1 ? 'Ver aviso' : 'Ver los ' + av.length + ' avisos'); };
 
   /* ---- cifras de arriba */
   const horasTot = Object.entries(ses).filter(([k]) => ps.some((p) => p.sesion === k)).reduce((a, [, s]) => a + s.horas, 0);
@@ -796,7 +946,7 @@ function pintar() {
     `<div class="kpi heroe"><div class="e">${icono('beneficio')} Beneficio</div><div class="n ${t.beneficio < 0 ? 'neg' : ''}">${eur0(t.beneficio)}</div>` +
     `<div class="x">${ent(t.cobradas)} prendas cobradas en ${horasTot.toLocaleString('es-ES', { maximumFractionDigits: 1 })} h de directo</div>` +
     `<div class="pie"><div><b>${eur0(horasTot ? t.beneficio / horasTot : null)}</b><span>por hora</span></div><div><b>${eur(t.porPrenda)}</b><span>por prenda</span></div><div><b>${pct(t.margen, 0)}</b><span>margen</span></div></div></div>` +
-    tarjetas.map(([i, e, n, x]) => `<div class="kpi"><div class="e"><span class="chip">${icono(i)}</span>${e}</div><div class="n">${n}</div><div class="x">${x}</div></div>`).join('');
+    '<div class="kpis-fila">' + tarjetas.map(([i, e, n, x]) => `<div class="kpi"><div class="e"><span class="chip">${icono(i)}</span>${e}</div><div class="n">${n}</div><div class="x">${x}</div></div>`).join('') + '</div>';
 
   /* ---- migas del directo elegido */
   if (DIRECTO && ses[DIRECTO]) {
@@ -847,7 +997,7 @@ function pDirectos(ps, t, ses) {
     { k: 'n', t: 'Vendidas', f: ent },
     ...colsDinero,
     { k: 'porHora', t: '€/hora', f: eur0, color: true },
-  ], filas, { orden: { k: 'desde', d: -1 }, clic: (id) => { DIRECTO = DIRECTO === id ? '' : id; pintar(); },
+  ], filas, { simple: ['dia', 'cuenta', 'horas', 'n', 'cobradas', 'eurCancelado', 'neto', 'beneficio', 'porHora'], movil: ['dia', 'cuenta', 'cobradas', 'beneficio', 'porHora'], orden: { k: 'desde', d: -1 }, clic: (id) => { DIRECTO = DIRECTO === id ? '' : id; pintar(); },
     elegida: (f) => f._id === DIRECTO, total: tot });
 }
 
@@ -878,7 +1028,7 @@ function pCategorias(ps) {
     { k: 'netoMedio', t: 'Liquidado/prenda', f: (v) => eur(v) },
     ...colsDinero,
     { k: 'margen', t: 'Margen', f: (v) => pct(v, 0), color: true, ayuda: 'Beneficio sobre liquidado' },
-  ], filas, { orden: { k: 'beneficio', d: -1 }, total: sumar(ps) });
+  ], filas, { simple: ['cat', 'n', 'cobradas', 'precioMedio', 'eurCancelado', 'beneficio', 'porPrenda', 'margen'], movil: ['cat', 'cobradas', 'precioMedio', 'beneficio', 'porPrenda'], orden: { k: 'beneficio', d: -1 }, total: sumar(ps) });
 }
 
 function pMarcas(ps) {
@@ -894,7 +1044,7 @@ function pMarcas(ps) {
     { k: 'n', t: 'Vendidas', f: ent },
     { k: 'netoMedio', t: 'Liquidado/prenda', f: (v) => eur(v) },
     ...colsDinero.filter((c) => !['remateCobrado', 'vendedora', 'envio'].includes(c.k)),
-  ], filas, { orden: { k: 'beneficio', d: -1 }, total: sumar(ps.filter((p) => p.marca !== '—')) });
+  ], filas, { simple: ['marca', 'n', 'cobradas', 'precioMedio', 'beneficio', 'porPrenda'], movil: ['marca', 'cobradas', 'beneficio', 'porPrenda'], orden: { k: 'beneficio', d: -1 }, total: sumar(ps.filter((p) => p.marca !== '—')) });
 }
 
 function pEvolucion(ps) {
@@ -913,7 +1063,7 @@ function pEvolucion(ps) {
     { k: 'pais', t: 'País', izq: true, f: (v) => `<span class="punto" style="background:var(--${v})"></span>${PAISES[v]}` },
     { k: 'n', t: 'Vendidas', f: ent },
     ...colsDinero,
-  ], filas, { orden: { k: 'dia', d: -1 }, total: sumar(ps) });
+  ], filas, { simple: ['dia', 'pais', 'n', 'cobradas', 'eurCancelado', 'neto', 'beneficio', 'porPrenda'], movil: ['dia', 'pais', 'cobradas', 'beneficio'], orden: { k: 'dia', d: -1 }, total: sumar(ps) });
 }
 
 function pPrendas(ps) {
@@ -934,7 +1084,7 @@ function pPrendas(ps) {
     { k: 'coste', t: 'Coste', f: (v, f) => `<span class="editar-coste" title="${esc(f.tablaCoste ? 'Coste sin IVA: ' + f.tablaCoste + '. ' : '')}Pulsa para poner el coste real de esta prenda" data-s="${esc(f.sesion)}" data-f="${f.ficha ?? ''}" data-nota="${esc(f.nota || '')}" data-v="${f.aMano ? f.costeAMano : ''}">${f.cobrada ? eur(-v) : '—'}${f.aMano ? ' <span class="etiqueta">a mano</span>' : ' ✎'}</span>` },
     { k: 'nota', t: 'Nota', izq: true, muted: true, f: (v) => esc(v || '') },
     { k: 'beneficio', t: 'Beneficio', f: (v) => eur(v), color: true },
-  ], filas, { orden: { k: 'h', d: -1 } });
+  ], filas, { simple: ['h', 'cuenta', 'cat', 'marca', 'remate', 'estadoTxt', 'coste', 'beneficio'], movil: ['cat', 'marca', 'remate', 'beneficio'], orden: { k: 'h', d: -1 } });
   document.querySelectorAll('#t-prendas .editar-coste').forEach((el) => el.onclick = (e) => {
     e.stopPropagation();
     if (el.querySelector('input')) return;
@@ -986,7 +1136,8 @@ function pTiktok(ps) {
     { k: 'porPrenda', t: 'Por prenda cobrada', f: (v) => eur(v), color: true },
   ], filas, { orden: { k: 'total', d: 1 } });
   const pais = $('#f-pais').value;
-  const otros = (CRUDO.otros || []).filter((o) => !pais || o.pais === pais).map((o, i) => ({ _id: String(i), ...o,
+  const d1 = $('#f-desde').value || PRIMER_DIA, d2 = $('#f-hasta').value || hoyMadrid();
+  const otros = (CRUDO.otros || []).filter((o) => (!pais || o.pais === pais) && o.dia >= d1 && o.dia <= d2).map((o, i) => ({ _id: String(i), ...o,
     queTxt: o.que === 'pedido-fuera-de-tablet' ? 'Pedidos sin tablet (antes del 28 sep o fuera de directo)' : (o.que === 'ADJUSTMENT' ? 'Ajustes' : o.que) }));
   const tot = { n: 0, ingreso: 0, comision: 0, envio: 0, ajuste: 0, neto: 0 };
   for (const o of otros) for (const k of Object.keys(tot)) tot[k] += o[k];
@@ -1017,10 +1168,11 @@ const TRAMOS_PUB = [[0, 5, '0-5 min'], [5, 10, '5-10 min'], [10, 20, '10-20 min'
 
 /* Cada directo de TikTok con su sesion de tablet (misma cuenta, la que mas se
  * solapa en el tiempo) y sus cifras. */
-function directosPublico() {
+function directosPublico(todo) {
   if (!PUBLICO || !Array.isArray(PUBLICO.directos)) return [];
+  const d1 = $('#f-desde').value || PRIMER_DIA, d2 = $('#f-hasta').value || hoyMadrid();
   const sesT = {};
-  for (const p of PRENDAS) {
+  for (const p of (todo ? PRENDAS_TODAS : PRENDAS)) {
     const s = sesT[p.sesion] = sesT[p.sesion] || { id: p.sesion, canal: p.canal, desde: p.h, hasta: p.h, ps: [] };
     s.desde = Math.min(s.desde, p.h); s.hasta = Math.max(s.hasta, p.h); s.ps.push(p);
   }
@@ -1035,7 +1187,7 @@ function directosPublico() {
     }
     return { L, canal, ses };
   }).filter((x) => (!pais || x.L.pais === pais) && (!canalF || x.canal === canalF))
-    .map(({ L, canal, ses }) => medirDirecto(L, canal, ses));
+    .map(({ L, canal, ses }) => medirDirecto(L, canal, ses)).filter((r) => todo || (r.dia >= d1 && r.dia <= d2));
 }
 
 function medirDirecto(L, canal, ses) {
@@ -1123,7 +1275,7 @@ function pPublico() {
   const rs = directosPublico();
   if (!rs.length) {
     $('#pub-kpis').innerHTML = '';
-    $('#t-pub').innerHTML = '<tbody><tr><td class="izq muted">No hay datos de público en este periodo. Pulsa «Traer datos nuevos de TikTok» (TikTok los da con un día de retraso).</td></tr></tbody>';
+    $('#t-pub').innerHTML = '<tbody><tr><td class="izq muted">No hay datos de público en este periodo. Pulsa «Actualizar datos» (TikTok los da con un día de retraso).</td></tr></tbody>';
     ['g-pub-curva', 'g-pub-arranque', 'g-pub-horas'].forEach((id) => { if (graficos[id]) { graficos[id].destroy(); delete graficos[id]; } });
     $('#pub-sel').innerHTML = ''; $('#pub-curva-nota').textContent = '';
     return;
@@ -1258,7 +1410,7 @@ function pPublico() {
     { k: 'segHora', t: 'Seguidores/h', f: dec1, ayuda: 'Seguidores nuevos por hora de directo' },
     { k: 'beneficio', t: 'Beneficio', f: eur0, color: true },
     { k: 'ventaTT', t: 'Venta TikTok', f: eur0, ayuda: 'Lo que TikTok cuenta como venta del directo' },
-  ], rs, { orden: { k: 'desde', d: -1 }, clic: (id) => { PUB_SEL = id; pintar(); document.getElementById('g-pub-curva').scrollIntoView({ behavior: 'smooth', block: 'center' }); }, elegida: (f) => f._id === PUB_SEL });
+  ], rs, { simple: ['desde', 'tienda', 'horas', 'espectadores', 'enSala', 'compraMil', 'valorMil', 'beneficio'], movil: ['desde', 'tienda', 'espectadores', 'valorMil', 'beneficio'], orden: { k: 'desde', d: -1 }, clic: (id) => { PUB_SEL = id; pintar(); document.getElementById('g-pub-curva').scrollIntoView({ behavior: 'smooth', block: 'center' }); }, elegida: (f) => f._id === PUB_SEL });
 }
 
 /* ============================================================ diagnostico */
@@ -1280,6 +1432,7 @@ function pPublico() {
  * TikTok: si una sesion de tablet cubre dos directos, cada uno se queda con
  * las suyas. */
 let DIAG_SEL = '', DIAG_MIX_DE = 'uno', DIAG_MIX_POR = 'cat';
+const CIFRAS_ABIERTAS = new Set();   /* grupos de cifras de TikTok desplegados */
 const TOPE_PANTALLA = 600;
 const TRAMOS_PRECIO = [[0, 3, '1 y 2 €'], [3, 6, '3 a 5 €'], [6, 10, '6 a 9 €'], [10, 15, '10 a 14 €'], [15, 25, '15 a 24 €'], [25, 40, '25 a 39 €'], [40, 1e9, '40 € o más']];
 const n0 = (x) => Number(x) || 0;
@@ -1423,7 +1576,11 @@ function dosLineas(t) {
 function quitarGrafico(id) { if (graficos[id]) { graficos[id].destroy(); delete graficos[id]; } }
 
 function pDiagnostico(ps) {
-  const validos = directosPublico().map(medirDiag).filter((q) => q.vale).sort((a, b) => b.desde - a.desde);
+  /* Lo normal se saca de TODOS los directos guardados, aunque arriba se haya
+   * elegido solo una semana; para elegir y ordenar, solo los del periodo. */
+  const todos = directosPublico(true).map(medirDiag).filter((q) => q.vale).sort((a, b) => b.desde - a.desde);
+  const d1 = $('#f-desde').value || PRIMER_DIA, d2 = $('#f-hasta').value || hoyMadrid();
+  const validos = todos.filter((q) => q.dia >= d1 && q.dia <= d2);
   const cuerpo = $('#diag-cuerpo'), vacio = $('#diag-vacio');
   const sinNada = (txt) => {
     cuerpo.classList.add('oculto'); vacio.classList.remove('oculto'); vacio.innerHTML = `<span class="muted">${txt}</span>`;
@@ -1431,12 +1588,12 @@ function pDiagnostico(ps) {
   };
   if (!validos.length) {
     $('#diag-sel').innerHTML = ''; $('#diag-normal').textContent = '';
-    sinNada('No hay directos con público de TikTok y ventas de tablet en este periodo y filtro. Pulsa «Traer datos nuevos de TikTok» (TikTok da el público con un día de retraso).');
+    sinNada('No hay directos con público de TikTok y ventas de tablet en este periodo y filtro. TikTok da el público con un día de retraso: prueba con un periodo más largo o pulsa «Actualizar datos».');
     $('#t-diag-ranking').innerHTML = ''; quitarGrafico('g-diag-nube');
     return;
   }
   const D = {};
-  for (const q of validos) D[q.id] = diagnosticar(q, validos);
+  for (const q of validos) D[q.id] = diagnosticar(q, todos);
   if (!validos.some((q) => q.id === DIAG_SEL)) {
     const delDirecto = DIRECTO ? validos.find((q) => q.r.ses && q.r.ses.id === DIRECTO) : null;
     DIAG_SEL = (delDirecto || validos.find((q) => D[q.id]) || validos[0]).id;
@@ -1447,11 +1604,11 @@ function pDiagnostico(ps) {
   pintarRanking(validos, D);
   if (!d) {
     $('#diag-normal').textContent = '';
-    sinNada(`Este directo aún no se puede comparar: hacen falta al menos 3 directos más de ${esc(q.tienda)} en el periodo para saber qué es lo normal.`);
+    sinNada(`Este directo aún no se puede comparar: hacen falta al menos 3 directos más de ${esc(q.tienda)} para saber qué es lo normal.`);
     return;
   }
   cuerpo.classList.remove('oculto'); vacio.classList.add('oculto');
-  $('#diag-normal').textContent = d.nor.texto + (d.conImp ? '' : ' · sin impresiones del feed') + '. El filtro de categoría no se aplica al embudo.';
+  $('#diag-normal').textContent = d.nor.texto + (d.conImp ? '' : ', sin impresiones del feed') + '. El filtro de categoría no se aplica aquí.';
 
   /* ---- veredicto: lo que dice TikTok y lo que dice el beneficio */
   const dG = d.G0 ? d.G / d.G0 - 1 : null, dB = d.B0 > 0 ? d.B / d.B0 - 1 : null;
@@ -1470,15 +1627,15 @@ function pDiagnostico(ps) {
   const estimado = q.a.neto ? q.a.netoEstimado / q.a.neto : 0;
   if (estimado > 0.2) frase += ` <span class="muted">Ojo: el ${pct(estimado, 0)} de lo liquidado es aún estimación de TikTok y pueden llegar cancelaciones.</span>`;
   $('#diag-veredicto').innerHTML =
-    `<div class="kpi"><div class="e">Según TikTok · venta por hora</div><div class="n">${eur0(d.G)} ${delta(d.G, d.G0)}</div><div class="x">normal ${eur0(d.G0)} · ${eur0(q.gmv)} en ${dec1(q.h)} h</div></div>` +
-    `<div class="kpi heroe"><div class="e">Según tu beneficio · por hora</div><div class="n ${d.B < 0 ? 'neg' : ''}">${eur0(d.B)} ${delta(d.B, d.B0 > 0 ? d.B0 : null)}</div><div class="x">normal ${eur0(d.B0)} · ${eur0(q.ben)} de beneficio, ${pct(q.gmv ? q.ben / q.gmv : null, 0)} de la venta</div></div>` +
-    `<div class="kpi"><div class="e">En una frase</div><div class="frase" style="margin-top:8px">${frase}</div></div>`;
+    `<div class="kpi heroe"><div class="e">Tu beneficio por hora</div><div class="n ${d.B < 0 ? 'neg' : ''}">${eur0(d.B)} ${delta(d.B, d.B0 > 0 ? d.B0 : null)}</div><div class="x">lo normal son ${eur0(d.B0)} · dejó ${eur0(q.ben)} en ${dec1(q.h)} h</div></div>` +
+    `<div class="kpi"><div class="e">Lo que ve TikTok: venta por hora</div><div class="n">${eur0(d.G)} ${delta(d.G, d.G0)}</div><div class="x">lo normal son ${eur0(d.G0)} · de cada 100 € de venta te quedan ${ent(q.gmv ? 100 * q.ben / q.gmv : null)} €</div></div>` +
+    `<div class="kpi"><div class="e">En una frase</div><div class="frase">${frase}</div></div>`;
 
   /* ---- los pasos, con su efecto en euros por hora */
   const maxEur = Math.max(1, ...d.pasos.map((p) => Math.abs(p.eur || 0)));
-  $('#t-diag-pasos').innerHTML = '<thead><tr><th class="izq" style="cursor:default">Paso</th><th style="cursor:default">Este directo</th><th style="cursor:default">Normal</th><th style="cursor:default">Diferencia</th><th style="cursor:default">Efecto por hora</th></tr></thead><tbody>' +
+  $('#t-diag-pasos').innerHTML = '<thead><tr><th class="izq">Paso</th><th>Este directo</th><th>Normal</th><th>Diferencia</th><th>Efecto por hora</th></tr></thead><tbody>' +
     d.pasos.map((p) => `<tr><td class="izq paso"><b>${p.t}</b><span>${p.q}</span></td><td>${p.fmt(p.v)}</td><td class="muted">${p.fmt(p.v0)}</td><td>${delta(p.v, p.v0)}</td>` +
-      `<td>${p.eur == null ? '—' : `<div class="barra-eur"><i class="${p.eur >= 0 ? 'pos' : 'neg'}" style="width:${Math.round(110 * Math.abs(p.eur) / maxEur)}px"></i><span class="${signo(p.eur)}">${conSigno(p.eur, eur0)}</span></div>`}</td></tr>`).join('') +
+      `<td>${p.eur == null ? '—' : `<div class="barra-eur"><span class="via"><i class="${p.eur >= 0 ? 'pos' : 'neg'}" style="width:${Math.round(100 * Math.abs(p.eur) / maxEur)}%"></i></span><span class="${signo(p.eur)}">${conSigno(p.eur, eur0)}</span></div>`}</td></tr>`).join('') +
     `<tr class="total"><td class="izq">Beneficio por hora</td><td>${eur0(d.B)}</td><td class="muted">${eur0(d.B0)}</td><td>${delta(d.B, d.B0 > 0 ? d.B0 : null)}</td><td><span class="${signo(d.B - d.B0)}">${conSigno(d.B - d.B0, eur0)}</span></td></tr></tbody>`;
 
   /* ---- la cascada */
@@ -1513,7 +1670,7 @@ function pDiagnostico(ps) {
     { k: 'pB', t: '% del beneficio', f: (v) => pct(v, 0) },
     { k: 'eurMin', t: '€ por minuto', f: (v, f) => v == null ? '—' : `<span class="barrita ${mix.media && v < 0.75 * mix.media ? 'baja' : (mix.media && v > 1.25 * mix.media ? 'alta' : '')}" style="width:${Math.max(2, Math.round(56 * Math.max(0, v) / maxMin))}px"></span><b>${eur(v)}</b>`, ayuda: 'Beneficio por cada minuto de pantalla. Rojo = rinde menos del 75 % de la media; azul oscuro = más del 125 %' },
     { k: 'canc', t: 'Cancelado', f: (v) => pct(v, 0), ayuda: 'Parte del remate del grupo que se canceló' },
-  ], mix.filas, { orden: DIAG_MIX_POR === 'precio' ? { k: 'orden', d: 1 } : { k: 'pT', d: -1 }, total: { ...mix.total, orden: 0 } });
+  ], mix.filas, { simple: ['nombre', 'orden', 'n', 'precio', 'pT', 'pB', 'eurMin'], movil: ['nombre', 'orden', 'n', 'pT', 'pB', 'eurMin'], orden: DIAG_MIX_POR === 'precio' ? { k: 'orden', d: 1 } : { k: 'pT', d: -1 }, total: { ...mix.total, orden: 0 } });
   const top = mix.filas.slice().sort((a, b) => DIAG_MIX_POR === 'precio' ? a.orden - b.orden : b.seg - a.seg).slice(0, 10);
   quitarGrafico('g-diag-mix');
   const opM = baseGrafico(true);
@@ -1527,11 +1684,12 @@ function pDiagnostico(ps) {
   /* ---- las cifras: las nuestras y las de TikTok */
   const cifra = (c, nuestra) => {
     const v = c.f(q, d.V), v0 = c.f(d.T0, d.V);
-    return `<div class="cifra ${nuestra ? 'nuestra' : ''}"><div class="e">${c.t}</div><div class="n">${c.fmt(v)}</div><div class="x">${delta(v, v0, c.menosEsMejor)} normal ${c.fmt(v0)}</div><div class="x">${c.x}</div></div>`;
+    return `<div class="cifra"><div class="e">${c.t}</div><div class="n">${c.fmt(v)}</div><div class="x">${delta(v, v0, c.menosEsMejor)} normal ${c.fmt(v0)}</div><div class="x">${c.x}</div></div>`;
   };
-  $('#diag-cifras').innerHTML = '<div class="titulo-grupo">Las tuyas</div><div class="cifras-tt">' + CIFRAS_NUESTRAS.map((c) => cifra(c, true)).join('') + '</div>' +
+  $('#diag-cifras').innerHTML = '<div class="cifras-tt">' + CIFRAS_NUESTRAS.map((c) => cifra(c, true)).join('') + '</div>' +
     CIFRAS_TIKTOK.map(([g, cs]) => { const vs = cs.filter((c) => (!c.imp || d.conImp) && (!c.min || q.nMin > 0));
-      return `<div class="titulo-grupo">TikTok · ${g}</div><div class="cifras-tt">${vs.map((c) => cifra(c, false)).join('')}</div>`; }).join('');
+      return `<details class="grupo-cifras" data-g="${g}" ${CIFRAS_ABIERTAS.has(g) ? 'open' : ''}><summary>Las de TikTok · ${g} (${vs.length})</summary><div class="cifras-tt">${vs.map((c) => cifra(c, false)).join('')}</div></details>`; }).join('');
+  document.querySelectorAll('#diag-cifras details').forEach((x) => x.ontoggle = () => { if (x.open) CIFRAS_ABIERTAS.add(x.dataset.g); else CIFRAS_ABIERTAS.delete(x.dataset.g); });
 
   /* ---- la tasa de entrada minuto a minuto */
   quitarGrafico('g-diag-entrada');
@@ -1598,7 +1756,8 @@ function pintarRanking(validos, D) {
     { k: 'margen', t: 'Margen', f: (v) => pct(v, 0), ayuda: 'Beneficio por cada 100 € de venta según TikTok' },
     { k: 'dB', t: 'Frente a lo normal', f: (v) => v == null ? '<span class="muted">—</span>' : `<span class="delta ${v > 0.005 ? 'pos' : (v < -0.005 ? 'neg' : '')}">${conSigno(v, (x) => pct(x, 0))}</span>`, ayuda: 'Beneficio por hora frente a los directos de esa cuenta de los 30 días anteriores' },
     { k: 'peso', t: 'Lo que más pesó (€/h)', izq: true, f: (v, f) => f.pesoTxt, ayuda: 'El paso del embudo que más euros por hora sumó o restó frente a lo normal' },
-  ], filas, { orden: { k: 'desde', d: -1 }, clic: (id) => { DIAG_SEL = id; pintar(); window.scrollTo({ top: 0, behavior: 'smooth' }); }, elegida: (f) => f._id === DIAG_SEL });
+  ], filas, { orden: { k: 'desde', d: -1 }, clic: (id) => { DIAG_SEL = id; pintar(); window.scrollTo({ top: 0, behavior: 'smooth' }); }, elegida: (f) => f._id === DIAG_SEL,
+    simple: ['desde', 'tienda', 'B', 'G', 'salto', 'dB', 'peso'], movil: ['desde', 'tienda', 'B', 'salto', 'dB'] });
 
   quitarGrafico('g-diag-nube');
   const op = baseGrafico(false);
@@ -1650,34 +1809,40 @@ function lineas(id, etiquetas, series) {
 
 /* ================================================================== cargar */
 async function cargar() {
-  $('#btn-cargar').disabled = true;
+  if (!CRUDO) $('#actualizado').textContent = 'Cargando…';
   try {
-    const j = await pedir({ accion: 'datos', desde: $('#f-desde').value, hasta: $('#f-hasta').value });
+    const j = await pedir({ accion: 'datos', desde: PRIMER_DIA, hasta: hoyMadrid() });
     if (!j.ok) throw new Error(j.detalle || j.error || 'fallo');
     CRUDO = j;
     calcular.ses = calcular();
     /* El publico de TikTok, ya guardado. Si falla, el resto de la pantalla sigue. */
-    try { const pj = await pedir({ accion: 'publico', desde: $('#f-desde').value, hasta: $('#f-hasta').value }); PUBLICO = pj && pj.ok ? pj : null; } catch (e) { PUBLICO = null; }
-    const cats = [...new Set(PRENDAS.map((p) => p.cat))].sort();
+    try { const pj = await pedir({ accion: 'publico', desde: PRIMER_DIA, hasta: hoyMadrid() }); PUBLICO = pj && pj.ok ? pj : null; } catch (e) { PUBLICO = null; }
+    const cats = [...new Set(PRENDAS_TODAS.map((p) => p.cat))].sort();
     const sel = $('#f-cat'), ya = sel.value;
     sel.innerHTML = '<option value="">Todas</option>' + cats.map((c) => `<option ${c === ya ? 'selected' : ''}>${esc(c)}</option>`).join('');
-    const act = Object.entries(j.actualizado || {}).filter(([, v]) => v).map(([p, v]) => PAISES[p] + ' ' +
-      new Date(v).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
-    const fCorta = (v) => new Date(v).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    const conVentas = Object.keys(PAISES).filter((p) => PRENDAS.some((x) => x.pais === p));
-    const canc = conVentas.map((p) => PAISES[p] + ' ' + ((j.canceladasAl || {})[p] ? fCorta(j.canceladasAl[p]) : 'sin fecha'));
-    $('#actualizado').textContent = (act.length ? 'Datos de TikTok traídos: ' + act.join(' · ') : 'Todavía no se han traído datos de TikTok') +
-      (canc.length ? ' · Canceladas actualizadas: ' + canc.join(' · ') : '');
+    /* Arriba, corto: hace cuanto se trajeron los datos y las canceladas (lo mas
+     * viejo de los paises con ventas). El detalle por pais sale al pasar el
+     * raton o al tocarlo. */
+    const conVentas = Object.keys(PAISES).filter((p) => PRENDAS_TODAS.some((x) => x.pais === p));
+    const masViejo = (o) => { const ts = conVentas.map((p) => ((o || {})[p] ? new Date(o[p]).getTime() : 0)); return ts.length ? Math.min(...ts) : 0; };
+    const fCorta = (v) => v ? new Date(v).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'sin fecha';
+    const tD = masViejo(j.actualizado), tC = masViejo(j.canceladasAl), el = $('#actualizado');
+    const detalle = conVentas.map((p) => `${PAISES[p]}: datos ${fCorta((j.actualizado || {})[p])}, canceladas ${fCorta((j.canceladasAl || {})[p])}`).join(' · ');
+    const corto = !tD ? 'Todavía no se han traído datos de TikTok'
+      : (tC && Math.abs(tC - tD) < 3600000 ? `Datos y canceladas de TikTok de ${hace(tD)}` : `Datos de TikTok de ${hace(tD)} · canceladas ${tC ? 'de ' + hace(tC) : 'sin fecha'}`);
+    el.textContent = corto; el.title = detalle;
+    el.onclick = () => { el.textContent = el.textContent === corto ? detalle : corto; };
+    document.querySelector('#paises button[data-v="nl"]').classList.toggle('oculto', !conVentas.includes('nl'));
     pintar();
   } catch (e) {
     $('#avisos').innerHTML = `<div class="aviso">No se han podido leer los datos: ${esc(e.message)}</div>`;
-  } finally { $('#btn-cargar').disabled = false; }
+  }
 }
 
 /* Traer de TikTok, a trozos: cada llamada al servidor dura menos de 8 s. */
 async function sincronizar() {
   const b = $('#btn-sync'), est = $('#estado-sync');
-  b.disabled = true;
+  b.disabled = true; b.classList.add('girando');
   const errores = [];
   try {
     for (const pais of Object.keys(PAISES)) {
@@ -1738,7 +1903,7 @@ async function sincronizar() {
     await cargar();
   } catch (e) {
     est.textContent = 'Fallo: ' + e.message;
-  } finally { b.disabled = false; }
+  } finally { b.disabled = false; b.classList.remove('girando'); }
 }
 
 /* ================================================================= ajustes */
@@ -1784,7 +1949,8 @@ function arrancar() {
   $('#entrar').classList.add('oculto'); $('#app').classList.remove('oculto');
   const hoy = hoyMadrid();
   $('#f-desde').value = PRIMER_DIA; $('#f-desde').min = PRIMER_DIA; $('#f-hasta').value = hoy;
-  saludar();
+  $('#f-hasta').max = hoy;
+  pintarNavegacion();
   pintarAjustes();
   cargar();
 }
@@ -1795,7 +1961,6 @@ $('#btn-entrar').onclick = async () => {
   guardarLocal('fin_codigo', CODIGO); arrancar();
 };
 $('#codigo').onkeydown = (e) => { if (e.key === 'Enter') $('#btn-entrar').click(); };
-$('#btn-cargar').onclick = cargar;
 $('#btn-sync').onclick = sincronizar;
 $('#btn-ajustes').onclick = () => $('#ajustes').classList.toggle('oculto');
 $('#btn-nueva-tabla').onclick = () => {
@@ -1833,11 +1998,34 @@ document.querySelectorAll('#diag-mix-por button').forEach((b) => b.onclick = () 
   if (s === '#f-comision' || s === '#f-iva') calcular.ses = calcular();
   pintar();
 });
-document.querySelectorAll('#pestanas button').forEach((b) => b.onclick = () => {
-  PESTANA = b.dataset.p;
-  document.querySelectorAll('#pestanas button').forEach((x) => x.classList.toggle('activa', x === b));
-  pintar();
+document.querySelectorAll('#pestanas button').forEach((b) => b.onclick = () => { irA(b.dataset.g); window.scrollTo(0, 0); });
+document.querySelectorAll('#periodos button').forEach((b) => b.onclick = () => {
+  const n = Number(b.dataset.d), hoy = hoyMadrid();
+  let desde = n ? new Date(Date.now() - (n - 1) * 86400000).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }) : PRIMER_DIA;
+  if (desde < PRIMER_DIA) desde = PRIMER_DIA;
+  $('#f-desde').value = desde; $('#f-hasta').value = hoy; recalcular();
 });
+document.querySelectorAll('#paises button').forEach((b) => b.onclick = () => { $('#f-pais').value = b.dataset.v; pintar(); });
+['#f-desde', '#f-hasta'].forEach((x) => $(x).onchange = () => {
+  if (!$('#f-desde').value) $('#f-desde').value = PRIMER_DIA;
+  if (!$('#f-hasta').value) $('#f-hasta').value = hoyMadrid();
+  recalcular();
+});
+$('#btn-filtros').onclick = () => $('#filtros').classList.toggle('oculto');
+/* Las explicaciones largas de cada caja se guardan detras de una "i". */
+document.querySelectorAll('.caja:not(#ajustes) h2').forEach((h) => {
+  const junto = h.parentElement.tagName === 'SUMMARY' ? h.parentElement.nextElementSibling : h.nextElementSibling;
+  if (!junto || !junto.classList.contains('nota')) return;
+  junto.classList.add('plegada');
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'info'; b.textContent = 'i'; b.title = 'Cómo leer esto'; b.setAttribute('aria-label', 'Cómo leer esto');
+  b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); const cerrada = junto.classList.toggle('plegada'); b.classList.toggle('abierta', !cerrada);
+    const d = h.closest('details.plegable'); if (d && !cerrada && !d.open) d.open = true; };
+  h.appendChild(b);
+});
+/* Al abrir una seccion plegada se pinta de nuevo: los graficos necesitan su sitio. */
+document.querySelectorAll('details.plegable').forEach((d) => d.addEventListener('toggle', () => { if (d.open) pintar(); }));
+window.matchMedia('(max-width: 760px)').addEventListener('change', () => pintar());
 if (CODIGO) arrancar(); else $('#entrar').classList.remove('oculto');
 </script>
 </body>
