@@ -165,6 +165,35 @@ button.ver-columnas { margin-top: 10px; font-size: 12.5px; padding: 6px 13px; co
 .etiqueta { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #fff; border: 1px solid var(--linea); color: var(--t2); font-weight: 500; }
 .delta { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; font-variant-numeric: tabular-nums; background: #fff; color: var(--t2); font-family: var(--texto); letter-spacing: 0; vertical-align: middle; }
 .delta.pos { background: var(--bien-fondo); color: var(--bien); } .delta.neg { background: var(--mal-fondo); color: var(--mal); }
+.delta.medio { background: #FDF1DC; color: #6B4A0B; }
+.delta { white-space: nowrap; }
+
+/* ---- qué funciona */
+.recos { list-style: none; margin: 0; padding: 0; }
+.recos li { display: flex; align-items: start; gap: 10px; padding: 11px 4px; border-bottom: 1px solid var(--linea); font-size: 14px; line-height: 1.5; }
+.recos li:last-child { border-bottom: none; }
+.recos li .txt { flex: 1; min-width: 0; }
+.recos li .txt b { font-weight: 600; }
+.recos li .delta { flex: none; margin-top: 2px; }
+.icono-rec { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; flex: none; margin-top: 1px; background: #fff; color: var(--t3); }
+.recos li.sube .icono-rec { background: var(--bien-fondo); color: var(--bien); }
+.recos li.baja .icono-rec { background: var(--mal-fondo); color: var(--mal); }
+.fam-efectos { margin-bottom: 14px; }
+.fam-efectos h3 { font-size: 13.5px; margin: 6px 0 6px; }
+.fam-efectos h3 .muted { font: 300 12.5px var(--texto); letter-spacing: 0; }
+.efecto { display: grid; grid-template-columns: minmax(120px, 230px) minmax(120px, 1fr) 90px 82px; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; }
+.efecto .lab { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.efecto .lab .muted { font-size: 11.5px; }
+.efecto .eje { position: relative; height: 18px; }
+.efecto .eje i { position: absolute; top: 50%; transform: translateY(-50%); display: block; }
+.efecto .eje .cero { left: 50%; width: 1.5px; height: 18px; background: var(--crema-5); }
+.efecto .eje .int { height: 4px; border-radius: 2px; opacity: .35; }
+.efecto .eje .pt { width: 11px; height: 11px; border-radius: 50%; margin-left: -5.5px; }
+.efecto .val { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.efecto .delta { justify-self: start; }
+.verde { color: var(--bien); } .rojo { color: var(--mal); } .gris { color: var(--t3); }
+.eje .verde { background: var(--bien); } .eje .rojo { background: var(--rojo); } .eje .gris { background: var(--azul-1); }
+#reg-cifras { grid-template-columns: 1.3fr 1fr 1fr; }
 .migas { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; font-size: 13px; background: var(--sel); border-radius: 14px; padding: 8px 10px; }
 .oculto { display: none !important; }
 .editar-coste { cursor: pointer; border-bottom: 1px dashed var(--t3); }
@@ -243,7 +272,12 @@ details.grupo-cifras .cifras-tt { margin-top: 8px; }
 }
 
 /* ---- movil: se navega con la barra de abajo */
+@media (max-width: 1200px) { #reg-cifras { grid-template-columns: 1fr 1fr; } #reg-cifras .heroe { grid-column: 1 / -1; } }
 @media (max-width: 760px) {
+  #reg-cifras { grid-template-columns: 1fr; }
+  .efecto { grid-template-columns: 1fr auto; grid-template-areas: "lab val" "eje fia"; gap: 4px 10px; padding: 8px 0; border-bottom: 1px solid var(--linea); }
+  .efecto .lab { grid-area: lab; } .efecto .val { grid-area: val; } .efecto .eje { grid-area: eje; } .efecto .delta { grid-area: fia; justify-self: end; }
+  .recos li { font-size: 13.5px; }
   body { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
   .envoltura { padding: 0 16px 30px; }
   /* Sin desenfoque: con el, la barra de abajo se quedaria pegada a esta y no a la pantalla. */
@@ -465,6 +499,43 @@ details.grupo-cifras .cifras-tt { margin-top: 8px; }
         <div><div class="tabla-alta"><table id="t-diag-ranking"></table></div></div>
         <div><div class="grafico" style="height:360px"><canvas id="g-diag-nube"></canvas></div></div>
       </div>
+    </details>
+  </section>
+
+  <section data-s="regresiones" class="oculto">
+    <div class="fila-sel deslizar">
+      <span class="grupo-botones" id="reg-obj"><button data-v="min" class="activa">Beneficio por minuto</button><button data-v="precio">Precio</button><button data-v="cancel">Cancelaciones</button></span>
+      <span class="grupo-botones" id="reg-vent"><button data-v="28" class="activa">4 semanas</button><button data-v="56">8 semanas</button><button data-v="0">Todo</button></span>
+      <span class="grupo-botones oculto" id="reg-pais"></span>
+    </div>
+    <div id="reg-vacio" class="caja oculto"></div>
+    <div id="reg-cuerpo">
+      <div class="kpis" id="reg-cifras"></div>
+      <div class="caja">
+        <h2>Qué hacer, según los datos</h2>
+        <div class="nota">Cada frase compara dentro de los mismos directos, así que un día con más público o mejor stock no cuenta como "esto vende mejor". Fiable: la probabilidad de que sea casualidad es menor del 1 %. Probable: menor del 5 %. Lo que podría ser casualidad no sale aquí. Son datos del día a día, no experimentos: si una vendedora guarda lo mejor para el final, también se nota en el minuto del directo.</div>
+        <ul class="recos" id="reg-recos"></ul>
+      </div>
+      <div class="caja" id="reg-cambios-caja">
+        <h2>Qué ha cambiado frente a las semanas anteriores</h2>
+        <div class="nota">El mismo cálculo con el periodo anterior de la misma duración. Sale lo que se ha movido más de lo que explicaría la casualidad.</div>
+        <ul class="recos" id="reg-cambios"></ul>
+      </div>
+      <details class="caja plegable">
+        <summary><h2>Todos los efectos</h2><span class="pista">con su margen de error</span></summary>
+        <div class="nota">Cada punto es cuánto suma o resta ese grupo frente a la media de los de su tipo, con todo lo demás igual. La raya es el margen de error: si cruza la línea del centro, puede ser casualidad. Al lado de cada grupo, cuántas prendas tiene. Verde: mejor; rojo: peor; gris: no se sabe.</div>
+        <div id="reg-efectos"></div>
+      </details>
+    </div>
+    <details class="caja plegable" open>
+      <summary><h2>Pruebas</h2><span class="pista">uno o dos directos a la vez, y la hora de empezar</span></summary>
+      <div class="nota">Lo que la regresión no puede decir porque depende de cómo se organiza el día. Dos directos del mismo país que coinciden al menos 30 minutos cuentan como "dos a la vez". Usa el mismo periodo y país de arriba.</div>
+      <h3 style="margin:4px 0 8px">Uno o dos directos a la vez</h3>
+      <div class="tabla-alta"><table id="t-reg-dos"></table></div>
+      <div class="sub" id="reg-dos-nota" style="margin:8px 0 18px"></div>
+      <h3 style="margin:4px 0 8px">Empezar antes de las 17 h</h3>
+      <div class="tabla-alta"><table id="t-reg-hora"></table></div>
+      <div class="sub" id="reg-hora-nota" style="margin-top:8px"></div>
     </details>
   </section>
 
@@ -700,7 +771,7 @@ const COMPLETA = {};      /* tablas en las que se han pedido todas las columnas 
 /* Las ocho pestañas de antes, agrupadas en cinco secciones. */
 const GRUPOS = {
   resumen: ['Resumen', [['directos', 'Por directo'], ['evolucion', 'Día a día']]],
-  diagnostico: ['Diagnóstico', [['diagnostico', '']]],
+  diagnostico: ['Diagnóstico', [['diagnostico', 'Un directo'], ['regresiones', 'Qué funciona']]],
   publico: ['Público', [['publico', '']]],
   producto: ['Producto', [['categorias', 'Categorías'], ['marcas', 'Marcas']]],
   detalle: ['Detalle', [['prendas', 'Cada prenda'], ['tiktok', 'Cargos de TikTok']]],
@@ -892,6 +963,9 @@ function pintarNavegacion() {
   sp.innerHTML = subs.length < 2 ? '' : subs.map(([k, t]) => `<button data-p="${k}" class="${k === PESTANA ? 'activa' : ''}">${t}</button>`).join('');
   sp.querySelectorAll('button').forEach((b) => b.onclick = () => irA(GRUPO, b.dataset.p));
   $('#kpis').classList.toggle('oculto', GRUPO !== 'resumen');
+  /* Qué funciona lleva su propio periodo (4 semanas, 8 o todo): el de arriba no se usa. */
+  $('#periodos').classList.toggle('oculto', PESTANA === 'regresiones');
+  $('#paises').classList.toggle('oculto', PESTANA === 'regresiones');
   const d1 = $('#f-desde').value, d2 = $('#f-hasta').value, hoy = hoyMadrid();
   const dias = d2 === hoy ? Math.round((new Date(d2) - new Date(d1)) / 86400000) + 1 : -1;
   let conPeriodo = false;
@@ -957,7 +1031,7 @@ function pintar() {
 
   /* ---- pestañas */
   document.querySelectorAll('section[data-s]').forEach((s) => s.classList.toggle('oculto', s.dataset.s !== PESTANA));
-  ({ directos: pDirectos, diagnostico: pDiagnostico, publico: pPublico, categorias: pCategorias, marcas: pMarcas, evolucion: pEvolucion, prendas: pPrendas, tiktok: pTiktok })[PESTANA](ps, t, ses);
+  ({ directos: pDirectos, diagnostico: pDiagnostico, regresiones: pRegresiones, publico: pPublico, categorias: pCategorias, marcas: pMarcas, evolucion: pEvolucion, prendas: pPrendas, tiktok: pTiktok })[PESTANA](ps, t, ses);
 }
 
 function pDirectos(ps, t, ses) {
@@ -1775,6 +1849,368 @@ function pintarRanking(validos, D) {
   ] }, options: op });
 }
 
+/* ============================================================ qué funciona */
+/* 15 nov 2026. Regresiones con los datos de la página, cuando se quieran y
+ * sin tocar el servidor. Lo que vende bien va cambiando (las chaquetas
+ * restaban en septiembre y en noviembre son lo que más deja), así que por
+ * defecto se miran las últimas 4 semanas y se comparan con las 4 anteriores.
+ *
+ * CÓMO SE CALCULA. Cada prenda rematada es un dato. Se compara siempre dentro
+ * del mismo directo (a cada dato se le resta la media de su directo), así un
+ * día con más público o mejor stock no se confunde con "esta categoría vende
+ * mejor". Mínimos cuadrados, y el margen de error se calcula por directo
+ * (las prendas de un mismo directo se parecen entre sí, no son independientes).
+ *   fiable    = la probabilidad de que sea casualidad es menor del 1 %
+ *   probable  = menor del 5 %
+ *   no se sabe = más del 5 %: puede ser casualidad
+ * Para "se cancela o no" se usa la misma regresión sobre 0 y 1 (probabilidad
+ * lineal): con cancelaciones del 10 al 20 % da lo mismo que una logística y
+ * permite seguir comparando dentro de cada directo.
+ *
+ * Solo entran grupos con al menos 40 prendas (con menos, alguno saldría
+ * "fiable" por pura casualidad) y hacen falta 8 directos como mínimo. */
+let REG_OBJ = 'min', REG_VENT = 28;
+const REG_CACHE = {};
+const REG_MIN_N = 40;
+const OBJETIVOS = {
+  min: { t: 'Beneficio por minuto', mas: 'Lo que más suma', menos: 'Lo que más resta', verbo: 'deja', fmt: (b) => eur(Math.abs(b)) + ' ' + (b >= 0 ? 'más' : 'menos') + ' por minuto de pantalla', corto: (b) => conSigno(b, (x) => eur(x)) + '/min', buenoSiSube: true },
+  precio: { t: 'Precio de remate', mas: 'Lo que se remata más caro', menos: 'Lo que se remata más barato', verbo: 'se remata', fmt: (b) => 'un ' + pct(Math.abs(Math.exp(b) - 1), 0) + ' ' + (b >= 0 ? 'más caro' : 'más barato'), corto: (b) => conSigno(Math.exp(b) - 1, (x) => pct(x, 0)), buenoSiSube: true },
+  cancel: { t: 'Cancelaciones', mas: 'Lo que menos se cancela', menos: 'Lo que más se cancela', verbo: 'se cancela', fmt: (b) => dec1(Math.abs(100 * b)) + ' puntos ' + (b >= 0 ? 'más' : 'menos'), corto: (b) => conSigno(100 * b, (x) => dec1(x) + ' pt'), buenoSiSube: false },
+};
+const TRAMOS_REG = [[0, 3, '1 y 2 €'], [3, 6, '3 a 5 €'], [6, 10, '6 a 9 €'], [10, 15, '10 a 14 €'], [15, 25, '15 a 24 €'], [25, 40, '25 a 39 €'], [40, 1e9, '40 € o más']];
+const MINUTOS_REG = [[0, 30, 'Los primeros 30 minutos'], [30, 90, 'Del minuto 30 al 90'], [90, 150, 'Del minuto 90 al 150'], [150, 210, 'Del minuto 150 al 210'], [210, 1e9, 'A partir del minuto 210']];
+const HORAS_REG = [[0, 17, 'Antes de las 17 h'], [17, 19, 'De 17 a 19 h'], [19, 21, 'De 19 a 21 h'], [21, 99, 'A partir de las 21 h']];
+const horaMadrid = (t) => { const d = new Date(t); return Number(d.toLocaleString('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false })) + Number(d.toLocaleString('en-GB', { timeZone: 'Europe/Madrid', minute: '2-digit' })) / 60; };
+const sumaDias = (dia, n) => new Date(new Date(dia + 'T12:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10);
+
+/* Las prendas de un periodo, ya con todo lo que necesita la regresión. */
+function filasReg(pais, d1, d2) {
+  const canal = $('#f-canal').value;
+  const todas = PRENDAS_TODAS.filter((p) => p.pais === pais && p.dia >= d1 && p.dia <= d2 && (!canal || p.canal === canal));
+  const porSes = agrupar(todas, (p) => p.sesion);
+  /* Gente en sala de cada minuto, si TikTok la tiene. */
+  const sala = {};
+  for (const L of (PUBLICO && PUBLICO.directos) || []) {
+    const c = CUENTA_CANAL[L.cuenta]; if (!c || !L.minutos || !L.minutos.length) continue;
+    (sala[c] = sala[c] || []).push(L);
+  }
+  const genteEn = (p) => {
+    const L = (sala[p.canal] || []).find((x) => p.h >= x.inicio - 60000 && p.h <= x.fin + 180000);
+    if (!L) return null;
+    const s = p.h / 1000; let a = 0, b = L.minutos.length - 1, r = -1;
+    while (a <= b) { const m = (a + b) >> 1; if (L.minutos[m][0] <= s) { r = m; a = m + 1; } else b = m - 1; }
+    return r < 0 ? null : L.minutos[r][1];
+  };
+  const filas = [];
+  for (const [ses, g] of Object.entries(porSes)) {
+    if (g.length < 20) continue;
+    g.sort((a, b) => a.h - b.h);
+    const ini = g[0].h;
+    g.forEach((p, i) => {
+      const prev = i > 0 ? g[i - 1] : null;
+      const gente = genteEn(p);
+      filas.push({ g: ses, dia: p.dia, h: p.h, cat: p.cat, marca: p.marca && p.marca !== '—' ? p.marca : 'Sin marca', remate: p.remate,
+        ben: p.beneficio, pant: Math.max(20, p.pant || 60), canc: p.cancelada ? 1 : 0, dm: (p.h - ini) / 60000, hora: horaMadrid(p.h),
+        gente: gente > 0 ? gente : null, prev: prev && prev.remate > 0 && (p.h - prev.h) < 900000 ? prev.remate : null });
+    });
+  }
+  return filas;
+}
+
+/* Mínimos cuadrados comparando dentro de cada directo, con el error por directo. */
+function ajustar(filas, y, cols) {
+  const G = {};
+  filas.forEach((r, i) => (G[r.g] = G[r.g] || []).push(i));
+  const n = filas.length, Y = filas.map(y);
+  let X = filas.map((r) => cols.map((c) => c.f(r)));
+  for (const ids of Object.values(G)) {
+    const my = ids.reduce((a, i) => a + Y[i], 0) / ids.length; ids.forEach((i) => { Y[i] -= my; });
+    for (let j = 0; j < cols.length; j++) { const m = ids.reduce((a, i) => a + X[i][j], 0) / ids.length; ids.forEach((i) => { X[i][j] -= m; }); }
+  }
+  /* Fuera las columnas que no varían dentro de ningún directo. */
+  const vale = cols.map((c, j) => X.reduce((a, x) => a + x[j] * x[j], 0) > 1e-8);
+  cols = cols.filter((c, j) => vale[j]); X = X.map((x) => x.filter((v, j) => vale[j]));
+  const k = cols.length, ng = Object.keys(G).length;
+  if (!k || ng < 8) return null;
+  const A = Array.from({ length: k }, () => new Float64Array(k)), c = new Float64Array(k);
+  for (let i = 0; i < n; i++) { const x = X[i]; for (let a = 0; a < k; a++) { if (!x[a]) continue; c[a] += x[a] * Y[i]; for (let b = a; b < k; b++) A[a][b] += x[a] * x[b]; } }
+  for (let a = 0; a < k; a++) for (let b = 0; b < a; b++) A[a][b] = A[b][a];
+  const I = invertir(A); if (!I) return null;
+  const beta = I.map((f) => f.reduce((s, v, j) => s + v * c[j], 0));
+  const e = Y.map((v, i) => v - X[i].reduce((s, x, j) => s + x * beta[j], 0));
+  const M = Array.from({ length: k }, () => new Float64Array(k));
+  for (const ids of Object.values(G)) { const s = new Float64Array(k); for (const i of ids) for (let j = 0; j < k; j++) s[j] += X[i][j] * e[i]; for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) M[a][b] += s[a] * s[b]; }
+  const IM = I.map((f) => Array.from({ length: k }, (_, j) => f.reduce((s, v, l) => s + v * M[l][j], 0)));
+  const V = IM.map((f) => Array.from({ length: k }, (_, a) => f.reduce((s, v, l) => s + v * I[l][a], 0) * ng / (ng - 1)));
+  const se = V.map((f, a) => Math.sqrt(Math.max(0, f[a])));
+  return { n, ng, V, coef: cols.map((col, j) => ({ ...col, b: beta[j], se: se[j], t: se[j] ? beta[j] / se[j] : 0 })) };
+}
+function invertir(A) {
+  const n = A.length, M = A.map((f, i) => [...f, ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-10) return null;
+    [M[c], M[p]] = [M[p], M[c]]; const d = M[c][c];
+    for (let j = 0; j < 2 * n; j++) M[c][j] /= d;
+    for (let r = 0; r < n; r++) if (r !== c && M[r][c]) { const f = M[r][c]; for (let j = 0; j < 2 * n; j++) M[r][j] -= f * M[c][j]; }
+  }
+  return M.map((f) => f.slice(n));
+}
+
+/* Las variables. Cada grupo se compara con uno de referencia, que se dice en la frase. */
+function columnasReg(filas, obj) {
+  const cuenta = (f) => { const o = {}; for (const r of filas) { const k = f(r); o[k] = (o[k] || 0) + 1; } return o; };
+  const cols = [], fam = {};
+  /* Los grupos con menos de 40 prendas van juntos en "Otras", para que no se
+   * mezclen con el de referencia. */
+  /* Un grupo solo se puede medir si aparece mezclado con otros en al menos 5
+   * directos. Si casi siempre va solo (p. ej. un directo entero de prendas
+   * únicas), compararlo "dentro del directo" no tiene con qué y el resultado
+   * sale disparatado. */
+  const porSes = Object.values(agrupar(filas, (r) => r.g));
+  const mezclado = (esDelGrupo) => porSes.filter((g) => { const k = g.filter(esDelGrupo).length; return k > 0 && k < 0.9 * g.length; }).length >= 5;
+  const anadir = (familia, base, lista, f, otras) => {
+    fam[familia] = base;
+    const chicos = new Set(lista.filter(([nombre, n]) => nombre !== base && n > 0 && n < REG_MIN_N).map(([nombre]) => nombre));
+    for (const [nombre, n] of lista) if (nombre !== base && n >= REG_MIN_N && mezclado((r) => f(r) === nombre)) cols.push({ fam: familia, lab: nombre, n, f: (r) => (f(r) === nombre ? 1 : 0) });
+    const nChicos = lista.filter(([nombre]) => chicos.has(nombre)).reduce((a, x) => a + x[1], 0);
+    if (otras && nChicos >= REG_MIN_N && mezclado((r) => chicos.has(f(r)))) cols.push({ fam: familia, lab: otras, n: nChicos, f: (r) => (chicos.has(f(r)) ? 1 : 0) });
+  };
+  const cats = Object.entries(cuenta((r) => r.cat)).sort((a, b) => b[1] - a[1]);
+  if (cats.length) anadir('cat', cats[0][0], cats, (r) => r.cat, 'Otras categorías');
+  const marcas = Object.entries(cuenta((r) => r.marca)).sort((a, b) => b[1] - a[1]);
+  if (marcas.some(([m]) => m === 'Sin marca')) anadir('marca', 'Sin marca', marcas, (r) => r.marca, 'Otras marcas');
+  /* El tramo de precio solo explica las cancelaciones. En el beneficio por
+   * minuto sería trampa: lo caro deja más porque es caro, y taparía lo que
+   * aporta cada categoría o marca, que es lo que sirve para comprar. */
+  if (obj === 'cancel') {
+    const tr = (r) => TRAMOS_REG.find(([a, b]) => r.remate >= a && r.remate < b)[2];
+    anadir('tramo', '6 a 9 €', TRAMOS_REG.map((x) => [x[2], filas.filter((r) => tr(r) === x[2]).length]), tr);
+  }
+  const mi = (r) => MINUTOS_REG.find(([a, b]) => r.dm >= a && r.dm < b)[2];
+  anadir('minuto', 'Del minuto 30 al 90', MINUTOS_REG.map((x) => [x[2], filas.filter((r) => mi(r) === x[2]).length]), mi);
+  const ho = (r) => HORAS_REG.find(([a, b]) => r.hora >= a && r.hora < b)[2];
+  anadir('hora', 'De 19 a 21 h', HORAS_REG.map((x) => [x[2], filas.filter((r) => ho(r) === x[2]).length]), ho);
+  /* Gente en sala: solo si TikTok la da para casi todas las prendas. */
+  const conGente = filas.filter((r) => r.gente).length;
+  if (conGente >= 0.85 * filas.length) {
+    const med = mediana(filas.filter((r) => r.gente).map((r) => r.gente));
+    cols.push({ fam: 'gente', lab: 'Con el doble de gente en sala', n: conGente, f: (r) => Math.log((r.gente || med) / med) / Math.LN2 });
+  }
+  return { cols, fam };
+}
+/* Lo que se explica, según lo elegido. El beneficio por minuto se recorta en
+ * los extremos (1 % por cada lado): una prenda de 100 € vendida en 20 segundos
+ * no puede decidir todo. */
+function yReg(filas, obj) {
+  if (obj === 'precio') return (r) => Math.log(r.remate);
+  if (obj === 'cancel') return (r) => r.canc;
+  const v = filas.map((r) => r.ben / (r.pant / 60)).sort((a, b) => a - b);
+  const lo = v[Math.floor(0.01 * v.length)], hi = v[Math.floor(0.99 * v.length)];
+  return (r) => Math.min(hi, Math.max(lo, r.ben / (r.pant / 60)));
+}
+/* Cada grupo frente a la MEDIA de su familia (ponderada por prendas), no
+ * frente a un grupo de referencia: así "deja más" quiere decir "más que lo
+ * normal" y el de referencia también sale. El margen de error se calcula con
+ * las covarianzas, no se aproxima. */
+function frenteALaMedia(m, filas, fam) {
+  if (!m) return m;
+  const coef = [];
+  const idx = (c) => m.coef.indexOf(c);
+  for (const familia of Object.keys(fam)) {
+    const J = m.coef.filter((c) => c.fam === familia);
+    if (!J.length) continue;
+    const nBase = filas.filter((r) => J.every((c) => !c.f(r))).length;
+    const N = nBase + J.reduce((a, c) => a + c.n, 0);
+    const w = J.map((c) => c.n / N);
+    const media = J.reduce((a, c, j) => a + w[j] * c.b, 0);
+    const varDe = (v) => { let s = 0; for (let a = 0; a < J.length; a++) for (let b = 0; b < J.length; b++) s += v[a] * v[b] * m.V[idx(J[a])][idx(J[b])]; return s; };
+    const fila = (lab, n, d, v) => { const se = Math.sqrt(Math.max(0, varDe(v))); coef.push({ fam: familia, lab, n, b: d, se, t: se ? d / se : 0 }); };
+    J.forEach((c, j) => fila(c.lab, c.n, c.b - media, J.map((_, l) => (l === j ? 1 : 0) - w[l])));
+    if (nBase >= REG_MIN_N) fila(fam[familia], nBase, -media, J.map((_, l) => -w[l]));
+  }
+  for (const c of m.coef) if (!fam[c.fam]) coef.push(c);
+  return { ...m, coef };
+}
+function analizarReg(pais, d1, d2, obj) {
+  let filas = filasReg(pais, d1, d2);
+  if (obj === 'precio') filas = filas.filter((r) => r.remate > 0);
+  /* Las cancelaciones de los 2 últimos días aún no han llegado todas. */
+  if (obj === 'cancel') { const tope = sumaDias(d2, -2); filas = filas.filter((r) => r.dia <= tope); }
+  if (filas.length < 300) return { filas, m: null };
+  const { cols, fam } = columnasReg(filas, obj);
+  const m = frenteALaMedia(ajustar(filas, yReg(filas, obj), cols), filas, fam);
+  return { filas, m, fam, ses: new Set(filas.map((r) => r.g)).size, d1: filas.reduce((a, r) => (r.dia < a ? r.dia : a), d2), d2: filas.reduce((a, r) => (r.dia > a ? r.dia : a), d1) };
+}
+
+const FAMILIAS = {
+  cat: { t: 'Qué categoría', base: () => 'que la media de las categorías' },
+  marca: { t: 'Qué marca', base: () => 'que la media de las marcas' },
+  tramo: { t: 'A qué precio se remata', base: () => 'que la media de todos los precios' },
+  minuto: { t: 'En qué momento del directo', base: () => 'que la media del directo' },
+  hora: { t: 'A qué hora del día', base: () => 'que la media del día' },
+  gente: { t: 'Con cuánta gente', base: () => '' },
+};
+const fiab = (c) => Math.abs(c.t) >= 2.58 ? 'fiable' : (Math.abs(c.t) >= 1.96 ? 'probable' : 'no se sabe');
+const chipFiab = (c) => { const f = fiab(c); return `<span class="delta ${f === 'fiable' ? 'pos' : (f === 'probable' ? 'medio' : '')}">${f}</span>`; };
+const buena = (c, obj) => (OBJETIVOS[obj].buenoSiSube ? c.b > 0 : c.b < 0);
+function fraseReg(c, obj, fam) {
+  const O = OBJETIVOS[obj];
+  if (c.fam === 'gente') return `${c.lab}, cada prenda ${O.verbo} ${O.fmt(c.b)}.`;
+  const quien = c.fam === 'minuto' || c.fam === 'hora' ? `${c.lab}, cada prenda` : `«${c.lab}»`;
+  return `${quien} ${O.verbo} ${O.fmt(c.b)} ${FAMILIAS[c.fam].base(fam[c.fam])}.`;
+}
+/* Una pista de qué hacer, solo para el beneficio por minuto y solo si es clara. */
+function pistaReg(c, obj) {
+  if (obj !== 'min' || fiab(c) === 'no se sabe') return '';
+  const sube = c.b > 0;
+  if (c.fam === 'cat' || c.fam === 'marca') return sube ? 'Compra más.' : 'Compra menos, o que no se remate barato.';
+  if (c.fam === 'tramo') return sube ? '' : 'Que lo que tiene coste alto no salga a este precio.';
+  if (c.fam === 'minuto' && !sube) return 'No saques lo mejor en ese tramo.';
+  if (c.fam === 'minuto' && sube) return 'Guarda lo mejor para ese tramo.';
+  if (c.fam === 'hora') return sube ? 'Buena franja para lo mejor.' : 'Franja floja: mejor no sacar lo mejor aquí.';
+  return '';
+}
+
+function pRegresiones() {
+  /* País: el de arriba; si arriba están todos, el de la vista (o el que más vende). */
+  const conVentas = Object.keys(PAISES).filter((p) => PRENDAS_TODAS.some((x) => x.pais === p));
+  /* Aquí siempre se mira un país (cada uno vende distinto). Se elige con sus
+   * propios botones, que cambian también el filtro de país de arriba. */
+  const pais = conVentas.includes($('#f-pais').value) ? $('#f-pais').value : (conVentas.includes('de') ? 'de' : conVentas[0]);
+  const pp = $('#reg-pais');
+  pp.classList.toggle('oculto', conVentas.length < 2);
+  pp.innerHTML = conVentas.map((p) => `<button data-v="${p}" class="${p === pais ? 'activa' : ''}">${PAISES[p]}</button>`).join('');
+  pp.querySelectorAll('button').forEach((b) => b.onclick = () => { $('#f-pais').value = b.dataset.v; pintar(); });
+  document.querySelectorAll('#reg-obj button').forEach((b) => b.classList.toggle('activa', b.dataset.v === REG_OBJ));
+  document.querySelectorAll('#reg-vent button').forEach((b) => b.classList.toggle('activa', Number(b.dataset.v) === REG_VENT));
+
+  const ultimo = PRENDAS_TODAS.filter((p) => p.pais === pais).reduce((a, p) => (p.dia > a ? p.dia : a), PRIMER_DIA);
+  const d2 = ultimo, d1 = REG_VENT ? sumaDias(d2, -REG_VENT + 1) : PRIMER_DIA;
+  const clave = [pais, d1, d2, REG_OBJ, $('#f-canal').value, $('#f-comision').value, $('#f-iva').value, PRENDAS_TODAS.length, PUBLICO ? PUBLICO.directos.length : 0].join('|');
+  if (!REG_CACHE[clave]) {
+    const ahora = analizarReg(pais, d1, d2, REG_OBJ);
+    const antes = REG_VENT ? analizarReg(pais, sumaDias(d1, -REG_VENT), sumaDias(d1, -1), REG_OBJ) : null;
+    REG_CACHE[clave] = { ahora, antes };
+  }
+  const { ahora, antes } = REG_CACHE[clave];
+  const vacio = $('#reg-vacio'), cuerpo = $('#reg-cuerpo');
+  if (!ahora.m) {
+    cuerpo.classList.add('oculto'); vacio.classList.remove('oculto');
+    vacio.innerHTML = `<span class="muted">Con ${ent(ahora.filas.length)} prendas en este periodo no hay datos suficientes para sacar conclusiones (hacen falta unas 300 y 8 directos). Prueba con un periodo más largo.</span>`;
+    pintarPruebas(pais, d1, d2);
+    return;
+  }
+  cuerpo.classList.remove('oculto'); vacio.classList.add('oculto');
+  const O = OBJETIVOS[REG_OBJ], m = ahora.m;
+  const efectos = m.coef.filter((c) => c.n >= REG_MIN_N);
+  const claros = efectos.filter((c) => fiab(c) !== 'no se sabe');
+  const orden = (q) => q.slice().sort((a, b) => Math.abs(b.t) - Math.abs(a.t));
+  const mejor = orden(claros.filter((c) => buena(c, REG_OBJ)))[0], peor = orden(claros.filter((c) => !buena(c, REG_OBJ)))[0];
+
+  /* ---- cifras de arriba */
+  const etiqueta = (c) => (c.fam === 'cat' || c.fam === 'marca' || c.fam === 'tramo') ? c.lab : c.lab.replace(/^Con el doble de gente en sala$/, 'Más gente en sala');
+  $('#reg-cifras').innerHTML =
+    `<div class="kpi heroe"><div class="e">${O.mas} · ${O.t.toLowerCase()}</div><div class="n" style="font-size:30px">${mejor ? esc(etiqueta(mejor)) : '—'}</div>` +
+    `<div class="x">${mejor ? `${O.corto(mejor.b)} ${esc(FAMILIAS[mejor.fam].base(ahora.fam[mejor.fam]))} · ${fiab(mejor)}` : 'Nada destaca de forma clara en este periodo'}</div></div>` +
+    `<div class="kpi"><div class="e">${O.menos}</div><div class="n">${peor ? esc(etiqueta(peor)) : '—'}</div><div class="x">${peor ? `${O.corto(peor.b)} ${esc(FAMILIAS[peor.fam].base(ahora.fam[peor.fam]))} · ${fiab(peor)}` : 'Nada se separa de forma clara'}</div></div>` +
+    `<div class="kpi"><div class="e">Con qué datos</div><div class="n">${ent(m.n)} prendas</div><div class="x">${ent(ahora.ses)} directos de ${PAISES[pais]}, del ${diaCorto(ahora.d1)} al ${diaCorto(ahora.d2)}</div></div>`;
+
+  /* ---- recomendaciones */
+  const recs = orden(claros).slice(0, 8);
+  $('#reg-recos').innerHTML = recs.length ? recs.map((c) => { const p = pistaReg(c, REG_OBJ);
+    return `<li class="${buena(c, REG_OBJ) ? 'sube' : 'baja'}"><span class="icono-rec">${buena(c, REG_OBJ) ? '▲' : '▼'}</span><span class="txt">${esc(fraseReg(c, REG_OBJ, ahora.fam))}${p ? ` <b>${esc(p)}</b>` : ''}</span>${chipFiab(c)}</li>`; }).join('')
+    : '<li class="muted">En este periodo nada se separa de lo normal lo bastante como para descartar la casualidad. Prueba con 8 semanas.</li>';
+
+  /* ---- qué ha cambiado frente al periodo anterior */
+  const cambios = [];
+  if (antes && antes.m) {
+    for (const c of efectos) {
+      const a = antes.m.coef.find((x) => x.fam === c.fam && x.lab === c.lab && x.n >= REG_MIN_N);
+      if (!a) continue;
+      const z = (c.b - a.b) / Math.sqrt(c.se * c.se + a.se * a.se);
+      if (Math.abs(z) >= 1.96 && (fiab(c) !== 'no se sabe' || fiab(a) !== 'no se sabe')) cambios.push({ c, a, z });
+    }
+  }
+  cambios.sort((x, y) => Math.abs(y.z) - Math.abs(x.z));
+  const cajaCambios = $('#reg-cambios-caja');
+  cajaCambios.classList.toggle('oculto', !REG_VENT);
+  $('#reg-cambios').innerHTML = !antes || !antes.m
+    ? `<li class="muted">No hay datos suficientes de las ${REG_VENT / 7} semanas anteriores para comparar.</li>`
+    : (cambios.length ? cambios.slice(0, 6).map(({ c, a }) => `<li class="${(c.b > a.b) === OBJETIVOS[REG_OBJ].buenoSiSube ? 'sube' : 'baja'}"><span class="icono-rec">${(c.b > a.b) === OBJETIVOS[REG_OBJ].buenoSiSube ? '▲' : '▼'}</span><span class="txt"><b>${esc(etiqueta(c))}</b>: antes ${O.corto(a.b)}, ahora ${O.corto(c.b)}.</span></li>`).join('')
+      : '<li class="muted">Nada ha cambiado de forma clara frente a las semanas anteriores.</li>');
+
+  /* ---- todos los efectos, con su margen de error */
+  const familias = [...new Set(efectos.map((c) => c.fam))];
+  const tope = Math.max(...efectos.map((c) => Math.abs(c.b) + 1.96 * c.se)) || 1;
+  const pos = (v) => 50 + 50 * Math.max(-1, Math.min(1, v / tope));
+  $('#reg-efectos').innerHTML = familias.map((f) => {
+    const q = efectos.filter((c) => c.fam === f).sort((a, b) => b.b - a.b);
+    const base = FAMILIAS[f].base(ahora.fam[f]);
+    return `<div class="fam-efectos"><h3>${FAMILIAS[f].t}${base ? ` <span class="muted">· frente ${esc(base.replace(/^que /, 'a '))}</span>` : ''}</h3>` +
+      q.map((c) => { const fi = fiab(c), color = fi === 'no se sabe' ? 'gris' : (buena(c, REG_OBJ) ? 'verde' : 'rojo');
+        return `<div class="efecto"><span class="lab">${esc(c.lab)} <span class="muted">${ent(c.n)}</span></span>` +
+          `<span class="eje"><i class="cero"></i><i class="int ${color}" style="left:${pos(c.b - 1.96 * c.se)}%;width:${Math.max(.5, pos(c.b + 1.96 * c.se) - pos(c.b - 1.96 * c.se))}%"></i><i class="pt ${color}" style="left:${pos(c.b)}%"></i></span>` +
+          `<span class="val ${color}">${O.corto(c.b)}</span>${chipFiab(c)}</div>`; }).join('') + '</div>';
+  }).join('');
+
+  pintarPruebas(pais, d1, d2);
+}
+
+/* PRUEBAS. Lo que la regresión no puede decir porque depende de cómo se
+ * organiza el día: uno o dos directos a la vez, y a qué hora se empieza.
+ * Se detecta solo: dos directos del mismo país que coinciden al menos 30
+ * minutos cuentan como "dos a la vez". */
+function pintarPruebas(pais, d1, d2) {
+  const canal = $('#f-canal').value;
+  const ps = PRENDAS_TODAS.filter((p) => p.pais === pais && p.dia >= d1 && p.dia <= d2 && (!canal || p.canal === canal));
+  const ses = Object.values(agrupar(ps, (p) => p.sesion)).filter((g) => g.length >= 20).map((g) => {
+    const a = sumar(g), ini = Math.min(...g.map((p) => p.h)), fin = Math.max(...g.map((p) => p.h));
+    return { g, a, ini, fin, h: Math.max(0.25, (fin - ini) / 3600000), dia: g[0].dia, horaIni: horaMadrid(ini) };
+  });
+  const porDia = agrupar(ses, (s) => s.dia);
+  const dias = Object.entries(porDia).map(([dia, q]) => {
+    let dos = false;
+    for (let i = 0; i < q.length; i++) for (let j = i + 1; j < q.length; j++) if (Math.min(q[i].fin, q[j].fin) - Math.max(q[i].ini, q[j].ini) >= 30 * 60000) dos = true;
+    const ben = q.reduce((s, x) => s + x.a.beneficio, 0), n = q.reduce((s, x) => s + x.a.n, 0), rem = q.reduce((s, x) => s + x.a.remate, 0);
+    const reloj = (Math.max(...q.map((x) => x.fin)) - Math.min(...q.map((x) => x.ini))) / 3600000;
+    return { dia, dos, ben, n, rem, reloj: Math.max(0.25, reloj), horas: q.reduce((s, x) => s + x.h, 0) };
+  });
+  const resumen = (q, t) => { if (!q.length) return null; const s = (k) => q.reduce((a, x) => a + x[k], 0);
+    return { _id: t, t, dias: q.length, porDia: s('ben') / q.length, porReloj: s('ben') / s('reloj'), porDirecto: s('ben') / s('horas'), precio: s('rem') / s('n') }; };
+  const filas = [resumen(dias.filter((d) => !d.dos), 'Un directo'), resumen(dias.filter((d) => d.dos), 'Dos a la vez')].filter(Boolean);
+  const nDos = dias.filter((d) => d.dos).length;
+  tabla('t-reg-dos', [
+    { k: 't', t: 'Días con', izq: true },
+    { k: 'dias', t: 'Días', f: ent },
+    { k: 'porDia', t: 'Beneficio por día', f: eur0 },
+    { k: 'porReloj', t: '€ por hora de reloj', f: eur0, ayuda: 'Beneficio del día entre las horas que hubo algún directo en marcha: lo que rinde la tarde entera' },
+    { k: 'porDirecto', t: '€ por hora de directo', f: eur0, ayuda: 'Beneficio entre la suma de horas de todos los directos: lo que rinde cada directo' },
+    { k: 'precio', t: 'Precio medio', f: (v) => eur(v) },
+  ], filas, { movil: ['t', 'dias', 'porReloj', 'porDirecto'] });
+  $('#reg-dos-nota').textContent = !nDos ? 'Aún no hay días con dos directos a la vez en este periodo. En cuanto los haya, salen aquí solos.'
+    : (nDos < 3 ? `Solo hay ${nDos} día${nDos > 1 ? 's' : ''} con dos a la vez: aún pocos para sacar conclusiones.`
+      : 'Si el beneficio por hora de reloj sube y el de cada directo apenas baja, el segundo directo suma. Si el de cada directo cae mucho, se están repartiendo el mismo público. Compara semanas con stock parecido.');
+
+  const temprano = (s) => s.horaIni < 17;
+  const resH = (q, t) => { if (!q.length) return null; const s = (f) => q.reduce((a, x) => a + f(x), 0);
+    return { _id: t, t, n: q.length, porHora: s((x) => x.a.beneficio) / s((x) => x.h), precio: s((x) => x.a.remate) / s((x) => x.a.n), prendasHora: s((x) => x.a.n) / s((x) => x.h) }; };
+  const tramo = (q, a, b, t) => { let ben = 0, n = 0, rem = 0, hrs = 0;
+    for (const x of q) { const ini = Math.max(horaMadrid(x.ini), a), fin = Math.min(horaMadrid(x.ini) + x.h, b); if (fin - ini < 0.25) continue; hrs += fin - ini;
+      for (const p of x.g) { const h = horaMadrid(p.h); if (h >= a && h < b) { ben += p.beneficio; n++; rem += p.remate; } } }
+    return hrs ? { _id: t, t, n: q.length, porHora: ben / hrs, precio: n ? rem / n : null, prendasHora: n / hrs } : null; };
+  const tem = ses.filter(temprano);
+  tabla('t-reg-hora', [
+    { k: 't', t: 'Directos', izq: true },
+    { k: 'n', t: 'Cuántos', f: ent },
+    { k: 'porHora', t: 'Beneficio por hora', f: eur0 },
+    { k: 'prendasHora', t: 'Prendas por hora', f: dec1 },
+    { k: 'precio', t: 'Precio medio', f: (v) => eur(v) },
+  ], [resH(ses.filter((s) => !temprano(s)), 'Empiezan a las 17 h o más tarde'), resH(tem, 'Empiezan antes de las 17 h'),
+    tramo(tem, 0, 18, 'Esos mismos, antes de las 18 h'), tramo(tem, 18, 99, 'Esos mismos, desde las 18 h')].filter(Boolean), { movil: ['t', 'porHora', 'precio'] });
+  $('#reg-hora-nota').textContent = tem.length ? 'Si antes de las 18 h se venden las mismas prendas por hora pero más baratas, el problema no es la hora: es que se saca lo barato al principio.' : 'En este periodo ningún directo empezó antes de las 17 h.';
+}
+
 /* ================================================================ graficos */
 function baseGrafico(horizontal) {
   Chart.defaults.font.family = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -1992,6 +2428,8 @@ $('#btn-quitar-directo').onclick = () => { DIRECTO = ''; pintar(); };
 $('#pub-sel').onchange = () => { PUB_SEL = $('#pub-sel').value; pintar(); };
 $('#pub-inicio').onchange = () => pintar();
 $('#diag-sel').onchange = () => { DIAG_SEL = $('#diag-sel').value; pintar(); };
+document.querySelectorAll('#reg-obj button').forEach((b) => b.onclick = () => { REG_OBJ = b.dataset.v; pintar(); });
+document.querySelectorAll('#reg-vent button').forEach((b) => b.onclick = () => { REG_VENT = Number(b.dataset.v); pintar(); });
 document.querySelectorAll('#diag-mix-de button').forEach((b) => b.onclick = () => { DIAG_MIX_DE = b.dataset.v; pintar(); });
 document.querySelectorAll('#diag-mix-por button').forEach((b) => b.onclick = () => { DIAG_MIX_POR = b.dataset.v; delete orden['t-diag-mix']; pintar(); });
 ['#f-pais', '#f-canal', '#f-cat', '#f-comision', '#f-iva'].forEach((s) => $(s).onchange = () => {
