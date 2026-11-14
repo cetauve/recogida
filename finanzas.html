@@ -513,7 +513,7 @@ details.grupo-cifras .cifras-tt { margin-top: 8px; }
       <div class="kpis" id="reg-cifras"></div>
       <div class="caja">
         <h2>Qué hacer, según los datos</h2>
-        <div class="nota">Cada frase compara dentro de los mismos directos, así que un día con más público o mejor stock no cuenta como "esto vende mejor". Fiable: la probabilidad de que sea casualidad es menor del 1 %. Probable: menor del 5 %. Lo que podría ser casualidad no sale aquí. Son datos del día a día, no experimentos: si una vendedora guarda lo mejor para el final, también se nota en el minuto del directo.</div>
+        <div class="nota">Cada frase compara dentro de los mismos directos, así que un día con más público o mejor stock no cuenta como "esto vende mejor". Fiable: la probabilidad de que sea casualidad es menor del 1 %. Probable: menor del 5 %. El margen de error se calcula quitando un directo cada vez, así que algo que solo pasó en un directo no sale como fiable. Lo que podría ser casualidad no sale aquí. Son datos del día a día, no experimentos: si una vendedora guarda lo mejor para el final, también se nota en el minuto del directo.</div>
         <ul class="recos" id="reg-recos"></ul>
       </div>
       <div class="caja" id="reg-cambios-caja">
@@ -1860,6 +1860,8 @@ function pintarRanking(validos, D) {
  * día con más público o mejor stock no se confunde con "esta categoría vende
  * mejor". Mínimos cuadrados, y el margen de error se calcula por directo
  * (las prendas de un mismo directo se parecen entre sí, no son independientes).
+ *   El margen de error sale de quitar un directo cada vez (jackknife), y la
+ *   probabilidad, de una t con (directos - 1) grados de libertad.
  *   fiable    = la probabilidad de que sea casualidad es menor del 1 %
  *   probable  = menor del 5 %
  *   no se sabe = más del 5 %: puede ser casualidad
@@ -1918,6 +1920,18 @@ function filasReg(pais, d1, d2) {
 }
 
 /* Mínimos cuadrados comparando dentro de cada directo, con el error por directo. */
+/* Distribución t: para decidir "fiable" con pocos directos (cada directo es
+ * un dato independiente, así que los grados de libertad son directos - 1). */
+const lgamR = (x) => { const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5]; let y = x, t = x + 5.5; t -= (x + 0.5) * Math.log(t); let s = 1.000000000190015; for (const k of c) s += k / ++y; return -t + Math.log(2.5066282746310005 * s / x); };
+function betacfR(a, b, x) { const T = 1e-300; let qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - qab * x / qap; if (Math.abs(d) < T) d = T; d = 1 / d; let h = d; for (let m = 1; m <= 300; m++) { const m2 = 2 * m; let aa = m * (b - m) * x / ((qam + m2) * (a + m2)); d = 1 + aa * d; if (Math.abs(d) < T) d = T; c = 1 + aa / c; if (Math.abs(c) < T) c = T; d = 1 / d; h *= d * c; aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2)); d = 1 + aa * d; if (Math.abs(d) < T) d = T; c = 1 + aa / c; if (Math.abs(c) < T) c = T; d = 1 / d; const del = d * c; h *= del; if (Math.abs(del - 1) < 1e-12) break; } return h; }
+function ibetaR(a, b, x) { if (x <= 0) return 0; if (x >= 1) return 1; const bt = Math.exp(lgamR(a + b) - lgamR(a) - lgamR(b) + a * Math.log(x) + b * Math.log(1 - x)); return x < (a + 1) / (a + b + 2) ? bt * betacfR(a, b, x) / a : 1 - bt * betacfR(b, a, 1 - x) / b; }
+const pT = (t, df) => ibetaR(df / 2, 0.5, df / (df + t * t));      /* probabilidad de un |t| así de grande por casualidad */
+const tCrit = (df, p = 0.05) => { let a = 0, b = 50; for (let i = 0; i < 60; i++) { const m = (a + b) / 2; if (pT(m, df) > p) a = m; else b = m; } return (a + b) / 2; };
+
+/* Mínimos cuadrados comparando dentro de cada directo. El margen de error se
+ * saca quitando un directo cada vez (jackknife por directo): con 20 o 30
+ * directos es más honesto que la fórmula robusta habitual, que con pocos
+ * directos se queda corta. */
 function ajustar(filas, y, cols) {
   const G = {};
   filas.forEach((r, i) => (G[r.g] = G[r.g] || []).push(i));
@@ -1938,12 +1952,25 @@ function ajustar(filas, y, cols) {
   const I = invertir(A); if (!I) return null;
   const beta = I.map((f) => f.reduce((s, v, j) => s + v * c[j], 0));
   const e = Y.map((v, i) => v - X[i].reduce((s, x, j) => s + x * beta[j], 0));
+  /* jackknife: el ajuste sin cada directo (restando su parte de X'X y X'y) */
+  const jk = [];
+  for (const ids of Object.values(G)) {
+    const Ag = A.map((f) => Float64Array.from(f)), cg = Float64Array.from(c);
+    for (const i of ids) { const x = X[i]; for (let a = 0; a < k; a++) { if (!x[a]) continue; cg[a] -= x[a] * Y[i]; for (let b = 0; b < k; b++) Ag[a][b] -= x[a] * x[b]; } }
+    const Ig = invertir(Ag); if (!Ig) { jk.length = 0; break; }
+    jk.push(Ig.map((f) => f.reduce((s, v, j) => s + v * cg[j], 0)));
+  }
   const M = Array.from({ length: k }, () => new Float64Array(k));
   for (const ids of Object.values(G)) { const s = new Float64Array(k); for (const i of ids) for (let j = 0; j < k; j++) s[j] += X[i][j] * e[i]; for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) M[a][b] += s[a] * s[b]; }
   const IM = I.map((f) => Array.from({ length: k }, (_, j) => f.reduce((s, v, l) => s + v * M[l][j], 0)));
-  const V = IM.map((f) => Array.from({ length: k }, (_, a) => f.reduce((s, v, l) => s + v * I[l][a], 0) * ng / (ng - 1)));
+  let V = IM.map((f) => Array.from({ length: k }, (_, a) => f.reduce((s, v, l) => s + v * I[l][a], 0) * ng / (ng - 1)));
+  if (jk.length === ng) {
+    const mb = beta.map((_, a) => jk.reduce((s, b) => s + b[a], 0) / ng);
+    V = Array.from({ length: k }, (_, a) => Array.from({ length: k }, (_, b) => jk.reduce((s, x) => s + (x[a] - mb[a]) * (x[b] - mb[b]), 0) * (ng - 1) / ng));
+  }
+  const df = ng - 1, tc = tCrit(df);
   const se = V.map((f, a) => Math.sqrt(Math.max(0, f[a])));
-  return { n, ng, V, coef: cols.map((col, j) => ({ ...col, b: beta[j], se: se[j], t: se[j] ? beta[j] / se[j] : 0 })) };
+  return { n, ng, df, tc, V, coef: cols.map((col, j) => { const t = se[j] ? beta[j] / se[j] : 0; return { ...col, b: beta[j], se: se[j], t, p: pT(t, df), tc }; }) };
 }
 function invertir(A) {
   const n = A.length, M = A.map((f, i) => [...f, ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))]);
@@ -2025,7 +2052,7 @@ function frenteALaMedia(m, filas, fam) {
     const w = J.map((c) => c.n / N);
     const media = J.reduce((a, c, j) => a + w[j] * c.b, 0);
     const varDe = (v) => { let s = 0; for (let a = 0; a < J.length; a++) for (let b = 0; b < J.length; b++) s += v[a] * v[b] * m.V[idx(J[a])][idx(J[b])]; return s; };
-    const fila = (lab, n, d, v) => { const se = Math.sqrt(Math.max(0, varDe(v))); coef.push({ fam: familia, lab, n, b: d, se, t: se ? d / se : 0 }); };
+    const fila = (lab, n, d, v) => { const se = Math.sqrt(Math.max(0, varDe(v))), t = se ? d / se : 0; coef.push({ fam: familia, lab, n, b: d, se, t, p: pT(t, m.df), tc: m.tc }); };
     J.forEach((c, j) => fila(c.lab, c.n, c.b - media, J.map((_, l) => (l === j ? 1 : 0) - w[l])));
     if (nBase >= REG_MIN_N) fila(fam[familia], nBase, -media, J.map((_, l) => -w[l]));
   }
@@ -2039,7 +2066,26 @@ function analizarReg(pais, d1, d2, obj) {
   if (obj === 'cancel') { const tope = sumaDias(d2, -2); filas = filas.filter((r) => r.dia <= tope); }
   if (filas.length < 300) return { filas, m: null };
   const { cols, fam } = columnasReg(filas, obj);
-  const m = frenteALaMedia(ajustar(filas, yReg(filas, obj), cols), filas, fam);
+  const yf = yReg(filas, obj);
+  const m = frenteALaMedia(ajustar(filas, yf, cols), filas, fam);
+  /* Marca dentro de cada categoría. La marca no pesa igual en todas las
+   * categorías (en España el punto de marca deja dinero y el sin marca no), y
+   * el modelo de arriba supone que sí. Aquí, con las mismas comparaciones
+   * dentro del directo pero sin la lista de marcas, cuánto más deja la versión
+   * de marca de cada categoría frente a la misma categoría sin marca. */
+  if (m) {
+    const conMarca = (r) => (r.marca !== 'Sin marca' ? 1 : 0);
+    const porCat = agrupar(filas, (r) => r.cat);
+    const porSes = Object.values(agrupar(filas, (r) => r.g));
+    const mezclada = (cat) => porSes.filter((g) => { const q = g.filter((r) => r.cat === cat); const k = q.filter(conMarca).length; return k > 0 && k < q.length; }).length >= 5;
+    const extra = Object.entries(porCat).filter(([cat, q]) => { const k = q.filter(conMarca).length; return k >= REG_MIN_N && q.length - k >= REG_MIN_N && mezclada(cat); })
+      .map(([cat, q]) => ({ fam: 'marcacat', lab: cat, n: q.filter(conMarca).length, f: (r) => (r.cat === cat ? conMarca(r) : 0) }));
+    if (extra.length) {
+      const m2 = ajustar(filas, yf, [...cols.filter((c) => c.fam !== 'marca'), ...extra]);
+      if (m2) m.coef.push(...m2.coef.filter((c) => c.fam === 'marcacat'));
+      fam.marcacat = '';
+    }
+  }
   return { filas, m, fam, ses: new Set(filas.map((r) => r.g)).size, d1: filas.reduce((a, r) => (r.dia < a ? r.dia : a), d2), d2: filas.reduce((a, r) => (r.dia > a ? r.dia : a), d1) };
 }
 
@@ -2050,14 +2096,15 @@ const FAMILIAS = {
   minuto: { t: 'En qué momento del directo', base: () => 'que la media del directo' },
   hora: { t: 'A qué hora del día', base: () => 'que la media del día' },
   gente: { t: 'Con cuánta gente', base: () => '' },
+  marcacat: { t: 'Marca dentro de cada categoría', base: () => 'que la misma categoría sin marca' },
 };
-const fiab = (c) => Math.abs(c.t) >= 2.58 ? 'fiable' : (Math.abs(c.t) >= 1.96 ? 'probable' : 'no se sabe');
+const fiab = (c) => (c.p < 0.01 ? 'fiable' : (c.p < 0.05 ? 'probable' : 'no se sabe'));
 const chipFiab = (c) => { const f = fiab(c); return `<span class="delta ${f === 'fiable' ? 'pos' : (f === 'probable' ? 'medio' : '')}">${f}</span>`; };
 const buena = (c, obj) => (OBJETIVOS[obj].buenoSiSube ? c.b > 0 : c.b < 0);
 function fraseReg(c, obj, fam) {
   const O = OBJETIVOS[obj];
   if (c.fam === 'gente') return `${c.lab}, cada prenda ${O.verbo} ${O.fmt(c.b)}.`;
-  const quien = c.fam === 'minuto' || c.fam === 'hora' ? `${c.lab}, cada prenda` : `«${c.lab}»`;
+  const quien = c.fam === 'minuto' || c.fam === 'hora' ? `${c.lab}, cada prenda` : (c.fam === 'marcacat' ? `«${c.lab}» de marca` : `«${c.lab}»`);
   return `${quien} ${O.verbo} ${O.fmt(c.b)} ${FAMILIAS[c.fam].base(fam[c.fam])}.`;
 }
 /* Una pista de qué hacer, solo para el beneficio por minuto y solo si es clara. */
@@ -2065,6 +2112,7 @@ function pistaReg(c, obj) {
   if (obj !== 'min' || fiab(c) === 'no se sabe') return '';
   const sube = c.b > 0;
   if (c.fam === 'cat' || c.fam === 'marca') return sube ? 'Compra más.' : 'Compra menos, o que no se remate barato.';
+  if (c.fam === 'marcacat') return sube ? 'Compra la de marca.' : 'Aquí la marca no se paga: no la compres más cara.';
   if (c.fam === 'tramo') return sube ? '' : 'Que lo que tiene coste alto no salga a este precio.';
   if (c.fam === 'minuto' && !sube) return 'No saques lo mejor en ese tramo.';
   if (c.fam === 'minuto' && sube) return 'Guarda lo mejor para ese tramo.';
@@ -2106,10 +2154,13 @@ function pRegresiones() {
   const efectos = m.coef.filter((c) => c.n >= REG_MIN_N);
   const claros = efectos.filter((c) => fiab(c) !== 'no se sabe');
   const orden = (q) => q.slice().sort((a, b) => Math.abs(b.t) - Math.abs(a.t));
-  const mejor = orden(claros.filter((c) => buena(c, REG_OBJ)))[0], peor = orden(claros.filter((c) => !buena(c, REG_OBJ)))[0];
+  /* Las tarjetas de arriba comparan grupos con la media; lo de marca dentro de
+   * la categoría es otra pregunta y va solo en la lista. */
+  const tarjeta = claros.filter((c) => c.fam !== 'marcacat');
+  const mejor = orden(tarjeta.filter((c) => buena(c, REG_OBJ)))[0], peor = orden(tarjeta.filter((c) => !buena(c, REG_OBJ)))[0];
 
   /* ---- cifras de arriba */
-  const etiqueta = (c) => (c.fam === 'cat' || c.fam === 'marca' || c.fam === 'tramo') ? c.lab : c.lab.replace(/^Con el doble de gente en sala$/, 'Más gente en sala');
+  const etiqueta = (c) => c.fam === 'marcacat' ? c.lab + ' de marca' : ((c.fam === 'cat' || c.fam === 'marca' || c.fam === 'tramo') ? c.lab : c.lab.replace(/^Con el doble de gente en sala$/, 'Más gente en sala'));
   $('#reg-cifras').innerHTML =
     `<div class="kpi heroe"><div class="e">${O.mas} · ${O.t.toLowerCase()}</div><div class="n" style="font-size:30px">${mejor ? esc(etiqueta(mejor)) : '—'}</div>` +
     `<div class="x">${mejor ? `${O.corto(mejor.b)} ${esc(FAMILIAS[mejor.fam].base(ahora.fam[mejor.fam]))} · ${fiab(mejor)}` : 'Nada destaca de forma clara en este periodo'}</div></div>` +
@@ -2129,7 +2180,7 @@ function pRegresiones() {
       const a = antes.m.coef.find((x) => x.fam === c.fam && x.lab === c.lab && x.n >= REG_MIN_N);
       if (!a) continue;
       const z = (c.b - a.b) / Math.sqrt(c.se * c.se + a.se * a.se);
-      if (Math.abs(z) >= 1.96 && (fiab(c) !== 'no se sabe' || fiab(a) !== 'no se sabe')) cambios.push({ c, a, z });
+      if (Math.abs(z) >= Math.max(c.tc, a.tc) && (fiab(c) !== 'no se sabe' || fiab(a) !== 'no se sabe')) cambios.push({ c, a, z });
     }
   }
   cambios.sort((x, y) => Math.abs(y.z) - Math.abs(x.z));
@@ -2142,7 +2193,7 @@ function pRegresiones() {
 
   /* ---- todos los efectos, con su margen de error */
   const familias = [...new Set(efectos.map((c) => c.fam))];
-  const tope = Math.max(...efectos.map((c) => Math.abs(c.b) + 1.96 * c.se)) || 1;
+  const tope = Math.max(...efectos.map((c) => Math.abs(c.b) + c.tc * c.se)) || 1;
   const pos = (v) => 50 + 50 * Math.max(-1, Math.min(1, v / tope));
   $('#reg-efectos').innerHTML = familias.map((f) => {
     const q = efectos.filter((c) => c.fam === f).sort((a, b) => b.b - a.b);
@@ -2150,7 +2201,7 @@ function pRegresiones() {
     return `<div class="fam-efectos"><h3>${FAMILIAS[f].t}${base ? ` <span class="muted">· frente ${esc(base.replace(/^que /, 'a '))}</span>` : ''}</h3>` +
       q.map((c) => { const fi = fiab(c), color = fi === 'no se sabe' ? 'gris' : (buena(c, REG_OBJ) ? 'verde' : 'rojo');
         return `<div class="efecto"><span class="lab">${esc(c.lab)} <span class="muted">${ent(c.n)}</span></span>` +
-          `<span class="eje"><i class="cero"></i><i class="int ${color}" style="left:${pos(c.b - 1.96 * c.se)}%;width:${Math.max(.5, pos(c.b + 1.96 * c.se) - pos(c.b - 1.96 * c.se))}%"></i><i class="pt ${color}" style="left:${pos(c.b)}%"></i></span>` +
+          `<span class="eje"><i class="cero"></i><i class="int ${color}" style="left:${pos(c.b - c.tc * c.se)}%;width:${Math.max(.5, pos(c.b + c.tc * c.se) - pos(c.b - c.tc * c.se))}%"></i><i class="pt ${color}" style="left:${pos(c.b)}%"></i></span>` +
           `<span class="val ${color}">${O.corto(c.b)}</span>${chipFiab(c)}</div>`; }).join('') + '</div>';
   }).join('');
 
