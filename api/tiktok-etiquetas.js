@@ -124,6 +124,15 @@ function leerCortes(texto) {
 /* Una prenda que no se va a enviar no cuenta para el tamaño del paquete: si
  * contara, un paquete de 6 con 4 canceladas caeria en la tanda que no es. */
 const parada = (estado) => /CANCEL|RETURN|REFUND/i.test(aTexto(estado));
+/* Balas al por mayor (9 nov 2026): sus etiquetas se imprimen a mano, fuera
+ * de las tandas. Mismo criterio que /api/tiktok-pedidos. */
+const esMayor = (nombre) => /\b\d+\s*(kg|kilos?)\b/i.test(aTexto(nombre));
+/* España (16 nov 2026): sin sufijo BV/BTo/BTa no es del directo, se etiqueta a
+ * mano. Mismo criterio que /api/tiktok-pedidos. */
+const CUENTAS_ES = new Set(['billysvlc', 'billystourvlc', 'billystacos']);
+const conSufijo = (nombre) => /(?:^|[\s\-|·(])(BV|BTo|BTa)\)?\s*$/i.test(aTexto(nombre).trim());
+const fueraDelAlmacen = (nombre, cuenta) =>
+  esMayor(nombre) || (CUENTAS_ES.has(cuenta) && !conSufijo(nombre));
 
 /* ===========================================================================
  * LA TANDA NO PUEDE CAMBIAR MIENTRAS SE IMPRIME
@@ -301,6 +310,8 @@ async function combinar(cuenta, grupo, pedidos) {
  * cancelaciones y el buscador de pedidos hacen lo mismo), asi que aqui se
  * espera y se reintenta en vez de dar por perdida la etiqueta. */
 const ESPERAS = [0, 3000, 5000, 8000];
+/* Para el bulto recien juntado: hasta cuatro intentos, unos 10 s en total. */
+const ESPERAS_JUNTAR = [0, 2000, 3000, 5000];
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* La etiqueta de un paquete, ya creada. Devuelve la direccion del PDF. */
@@ -506,9 +517,20 @@ module.exports = puerta(async (req, res) => {
            * falta uno, no se manda nada. Vale mas una tanda con fallos en rojo
            * -que se reintentan solos a la vuelta siguiente- que una tanda verde
            * que ha dejado prendas atras. */
-          const det = await T.comoCuenta(cuenta, { camino: DETALLE(id) });
-          const dentro = (((det && det.data) || {}).orders || []).map((o) => aTexto(o.id));
-          const faltan = it.pedidos.filter((p) => !dentro.includes(p));
+          /* TIKTOK JUNTA CON RETRASO - 5 nov 2026. El bulto nuevo existe al
+           * momento, pero tarda unos segundos en tener todos los pedidos dentro
+           * y en dejarse enviar. Mirarlo una sola vez dejo sin etiqueta a un
+           * comprador de 10 pedidos (Alemania, 4 nov) y a uno de 2 (España,
+           * 5 nov); pedida un rato despues, salio a la primera. Asi que se
+           * mira hasta cuatro veces, esperando un poco entre una y otra. */
+          let dentro = [], faltan = it.pedidos.slice();
+          for (const espera of ESPERAS_JUNTAR) {
+            if (espera) await dormir(espera);
+            const det = await T.comoCuenta(cuenta, { camino: DETALLE(id) });
+            dentro = (((det && det.data) || {}).orders || []).map((o) => aTexto(o.id));
+            faltan = it.pedidos.filter((p) => !dentro.includes(p));
+            if (!faltan.length) break;
+          }
           paso.dentroDelBulto = dentro.length;
           if (faltan.length) {
             paso.ok = false;
@@ -523,11 +545,22 @@ module.exports = puerta(async (req, res) => {
         /* 1. Enviar: esto es lo que crea la etiqueta y cierra el paquete. El
          *    cuerpo va tal cual lo mande quien llama (vacio por defecto), para
          *    no inventarse un metodo de entrega que nadie ha pedido. */
-        const r = await T.comoCuenta(cuenta, {
-          camino: ENVIAR(id), metodo: 'POST',
-          params: { idempotency_key: id },
-          cuerpo: b.envio || {}
-        });
+        /* Si el bulto se acaba de juntar y TikTok aun no lo deja enviar, se
+         * vuelve a pedir tras unos segundos. Con la misma clave, asi que
+         * repetirlo nunca crea dos etiquetas. */
+        let r = null;
+        const esperasEnvio = (it.grupo && it.pedidos.length > 1) ? ESPERAS_JUNTAR : [0];
+        for (const espera of esperasEnvio) {
+          if (espera) await dormir(espera);
+          r = await T.comoCuenta(cuenta, {
+            camino: ENVIAR(id), metodo: 'POST',
+            params: { idempotency_key: id },
+            cuerpo: b.envio || {}
+          });
+          if (r && r.code === 0) break;
+          if (/already|shipped|has been/i.test(aTexto(r && r.message))) break;
+          if (Date.now() - t0 > 40000) break;
+        }
         paso.enviado = !!(r && r.code === 0);
         paso.code = r && r.code;
         paso.mensaje = aTexto(r && r.message).slice(0, 200);
@@ -815,7 +848,8 @@ module.exports = puerta(async (req, res) => {
   const sueltos = [];
   for (const o of pedidos) {
     const lineas = o.line_items || [];
-    const vivas = lineas.filter((l) => !parada(l.display_status));
+    const vivas = lineas.filter((l) => !parada(l.display_status) && !fueraDelAlmacen(l.product_name, cuenta));
+    if (lineas.length && lineas.every((l) => fueraDelAlmacen(l.product_name, cuenta))) continue;
     const idPaquete = aTexto((lineas.find((l) => l.package_id) || {}).package_id) ||
                       aTexto(((o.packages || [])[0] || {}).id);
     const nombre = aTexto((o.recipient_address || {}).name);

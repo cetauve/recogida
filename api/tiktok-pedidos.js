@@ -42,8 +42,29 @@ function nombreDe(o) {
   return [aTexto(d.first_name), aTexto(d.last_name)].filter(Boolean).join(' ').trim();
 }
 
-function aPedido(o) {
-  const lineas = o.line_items || [];
+/* VENTA AL POR MAYOR, 9 nov 2026. Las balas ("25 kilos de Sudaderas") se
+ * venden en la misma tienda pero sus etiquetas se imprimen a mano y no pasan
+ * por el almacen. Si entraban en la lectura, salian como racks sin sufijo y el
+ * paso 2 volvia a preguntar de quien es cada rack, y ademas se colaban en las
+ * tandas. El pedido se sigue devolviendo (para que el total cuadre con TikTok)
+ * pero sin esas prendas: sin prendas no hay rack, ni tarjeta, ni etiqueta. */
+const esMayor = (nombre) => /\b\d+\s*(kg|kilos?)\b/i.test(aTexto(nombre));
+
+/* ESPAÑA: SIN SUFIJO NO ES DEL ALMACEN, 16 nov 2026. En la tienda de España
+ * todo lo que se vende en directo acaba en BV, BTo o BTa. Lo que no lo lleva
+ * es venta al por mayor o suelta ("Hoodies Extra" a 180 €, 15 nov) y se
+ * etiqueta a mano. Antes entraba en la lectura, salia como rack sin cuenta y
+ * el paso 2 volvia a preguntar por todos los racks. Alemania no usa sufijo,
+ * asi que alli solo se quitan las balas. */
+const CUENTAS_ES = new Set(['billysvlc', 'billystourvlc', 'billystacos']);
+const conSufijo = (nombre) => /(?:^|[\s\-|·(])(BV|BTo|BTa)\)?\s*$/i.test(aTexto(nombre).trim());
+const fueraDelAlmacen = (nombre, cuenta) =>
+  esMayor(nombre) || (CUENTAS_ES.has(cuenta) && !conSufijo(nombre));
+
+function aPedido(o, cuenta) {
+  const todas = o.line_items || [];
+  const lineas = todas.filter((l) => !fueraDelAlmacen(l.product_name, cuenta));
+  const mayor = todas.length - lineas.length;
 
   const bultos = new Map();
   for (const l of lineas) {
@@ -99,7 +120,8 @@ function aPedido(o) {
         tracking: aTexto(l.tracking_number)
       };
     }),
-    unidades: [...bultos.values()]
+    unidades: [...bultos.values()],
+    mayor
   };
 }
 
@@ -145,7 +167,7 @@ module.exports = puerta(async (req, res) => {
 
     const d = r.data || {};
     for (const o of (d.orders || [])) {
-      const p = aPedido(o);
+      const p = aPedido(o, cuenta);
       if (p.pedido) porId.set(p.pedido, p);
     }
     leidas++;
