@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Billy's · Comments (prueba)</title>
+<style>
+  /* Pagina de PRUEBA del chat. No es la tablet y no lanza nada: solo ensena
+   * los comentarios del canal del enlace. Mismos colores que app-directo. */
+  :root{--fondo:#eef1f4;--caja:#ffffff;--borde:#ccd4db;--texto:#141a1f;--suave:#5f6b76;--cian:#0e8c80;--malo:#c0392b;--ok:#2e9e4f}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--fondo);color:var(--texto);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  body{display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:16px;padding:12px 18px;background:var(--caja);border-bottom:1px solid var(--borde)}
+  header h1{margin:0;font-size:20px;font-weight:800}
+  header .canal{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--suave);font-weight:700}
+  header .estado{margin-left:auto;font-size:13px;color:var(--suave)}
+  header .estado.malo{color:var(--malo);font-weight:700}
+  #caja{flex:1;min-height:0;padding:12px 16px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Comments</h1><span class="canal" id="canal"></span>
+  <span class="estado" id="estado">…</span>
+</header>
+<div id="caja"></div>
+<script src="chat-config.js"></script>
+<script src="chat-realtime.js"></script>
+<script src="chat-tablet.js"></script>
+<script>
+  var P = new URLSearchParams(location.search);
+  document.getElementById('canal').textContent = (P.get('canal') || '').toUpperCase();
+  BillysChat.montar({
+    caja: document.getElementById('caja'),
+    estado: document.getElementById('estado'),
+    codigo: P.get('d') || '',
+    canal: P.get('canal') || '',
+    abierto: function () { return true; }
+  });
+</script>
+</body>
+</html>
