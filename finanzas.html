@@ -642,11 +642,11 @@ const CUENTAS = { bv: 'BV', bto: 'BTo', bta: 'BTa', de: 'DE', nl: 'NL' };
  * de la tabla anterior del mismo pais: asi una compra nueva solo lleva lo que
  * trae, y el resto sigue con el coste del stock anterior. */
 const CATEGORIAS = ['Sudadera', 'Camiseta', 'Polo', 'Punto', 'NBA', 'Fútbol', 'Camisa', 'Shorts', 'Track pant',
-  'Vaquero', 'Chaqueta', 'Chaleco', 'Track jacket', 'Anorak', 'Producto 1 €', 'Otra'];
+  'Vaquero', 'Chaqueta', 'Chaleco', 'Track jacket', 'Anorak', 'Gore-Tex', 'Producto 1 €', 'Otra'];
 /* Lista de España sin IVA: la anterior (con IVA y porte) dividida entre 1,21. */
 const LISTA_ESPANA = { 'Sudadera': 1.55, 'Camiseta': 0.27, 'Polo': 0.55, 'Punto': 4.67, 'NBA': 3.37, 'Fútbol': 5.04,
   'Camisa': 2.44, 'Shorts': 0.87, 'Track pant': 3.08, 'Vaquero': 1.11, 'Chaqueta': 5.02, 'Chaleco': 3.08,
-  'Track jacket': 2.08, 'Anorak': 9.21, 'Producto 1 €': 0, 'Otra': 0 };
+  'Track jacket': 2.08, 'Anorak': 9.21, 'Gore-Tex': 9.21, 'Producto 1 €': 0, 'Otra': 0 };
 const TABLAS_FABRICA = [
   { id: 'es-base', pais: 'es', desde: '2026-01-01', nombre: 'Lista España (sin IVA)', costes: { ...LISTA_ESPANA } },
   { id: 'de-base', pais: 'de', desde: '2026-01-01', nombre: 'Lista España (sin IVA)', costes: { ...LISTA_ESPANA } },
@@ -658,7 +658,25 @@ const TABLAS_FABRICA = [
    * estimacion sin pesar. Lo que no viene en esta compra hereda la lista de
    * España (stock anterior). Se vende en Alemania desde el jueves 15 oct. */
   { id: 'de-rerags-1610411518', pais: 'de', desde: '2026-10-15', nombre: 'ReRags 1610411518 (7 oct 2026)',
-    costes: { 'Sudadera': 3.12, 'Camiseta': 1.41, 'Punto': 4.36, 'Fútbol': 3.29, 'Track pant': 3.59, 'Vaquero': 4.31, 'Chaqueta': 5.49 } },
+    costes: { 'Sudadera': 3.12, 'Camiseta': 1.41, 'Punto': 4.36, 'Fútbol': 3.29, 'Track pant': 3.59, 'Vaquero': 4.31, 'Chaqueta': 5.49,
+      /* Gore-Tex Mix: 300 kg a 8 €/kg + 0,467 de envío, a 1,5 por kilo (sin
+       * pesar) = 5,64. En Alemania lo que se vende con el anuncio "Anorak" sale
+       * de aquí (Aaron, 18 nov): el coste de anorak de la lista de España venía
+       * de un pedido antiguo a Tardis. La chaqueta (5,49) se deja como está:
+       * ya mezclaba diseño, puffer y Gore-Tex, que también se venden con el
+       * anuncio de chaqueta. */
+      'Anorak': 5.64, 'Gore-Tex': 5.64 } },
+  /* ReRags INV2634676 (11 nov 2026): 780 kg, 5.450 € de ropa + 520 € de palé
+   * (0,667 €/kg). Solo sudaderas 500 kg a 6 €, camisetas 100 kg a 8 €, punto
+   * 80 kg a 10 € y track pants 100 kg a 8,50 €. Sin IVA (autoliquidado).
+   * Coste = (€/kg + 0,667) / prendas por kilo. Prendas por kilo de lo vendido
+   * de la compra de octubre (sudadera 1,8, camiseta 7,5, punto 2,5); track
+   * pant 2,5 supuesto. Cambiar por el recuento real cuando esté.
+   * Se vende en Alemania desde el lunes 16 nov. Chaquetas, anoraks, vaqueros,
+   * fútbol y track jackets NO vienen en esta compra: salen del stock anterior
+   * y siguen con la tabla de octubre (o la de España si no está en ella). */
+  { id: 'de-rerags-INV2634676', pais: 'de', desde: '2026-11-16', nombre: 'ReRags INV2634676 (11 nov 2026)',
+    costes: { 'Sudadera': 3.70, 'Camiseta': 1.16, 'Punto': 4.27, 'Track pant': 3.67 } },
 ];
 const IVA_FABRICA = { es: 21, de: 21, nl: 21 };
 const SUELDOS_FABRICA = { es: 9, de: 15, nl: 0, vendedoras: 1 };
@@ -669,6 +687,7 @@ const REGLAS = [
   ['Producto 1 €', [/\b1\s?€/, /1\s?eur/, /vintage1euro/]],
   ['NBA', [/\bnba\b/]],
   ['Fútbol', [/football shirt/, /fu(ss|ß)ball/, /trikot/, /camiseta de f[uú]tbol/, /f[uú]tbol/]],
+  ['Gore-Tex', [/gore[\s-]?tex/]],
   ['Track jacket', [/track jacket/, /chaqueta de ch[aá]ndal/, /trainingsjacke/]],
   ['Track pant', [/track pants?/, /pantal[oó]n de ch[aá]ndal/, /jogginghose/, /trainingshose/]],
   ['Shorts', [/pantal[oó]n corto/, /\bshorts?\b/, /kurze hose/]],
@@ -696,6 +715,8 @@ function leerAnuncio(nombre) {
    * sitio de la marca quiere decir que no tiene marca. */
   let resto = original.replace(RELLENO, ' ');
   if (quitar) resto = resto.replace(new RegExp(quitar.source, 'gi'), ' ');
+  /* "Gore-Tex Jacke The North Face": la marca es The North Face, sin "Jacke". */
+  if (cat === 'Gore-Tex') for (const [c, rs] of REGLAS) if (c === 'Chaqueta' || c === 'Anorak') for (const r of rs) resto = resto.replace(new RegExp(r.source, 'gi'), ' ');
   resto = resto.replace(ETIQUETAS, ' ').replace(/[#\-–·|,()]+/g, ' ').replace(/\s+/g, ' ').trim();
   const marca = cat === 'Producto 1 €' ? '—' : (resto || 'Sin marca');
   return { cat, marca };
@@ -2375,13 +2396,18 @@ async function sincronizar() {
     }
     const pub = await pedir({ accion: 'publico', desde: PRIMER_DIA, hasta: hoyMadrid() });
     if (pub.ok) {
+      /* Un directo que sigue en marcha (TikTok aún no le pone hora de fin) no
+       * tiene minuto a minuto todavía: TikTok responde que no existe la sala.
+       * Se deja para cuando acabe, sin contarlo como fallo. */
+      const enCurso = (f) => { const d = pub.directos.find((x) => x.id === f.id); return !d || !(d.fin > d.inicio); };
+      const pendientesPub = pub.faltan.filter((f) => !enCurso(f));
       let i = 0;
-      for (const f of pub.faltan) {
+      for (const f of pendientesPub) {
         i++; let t = '', v = 0;
         do {
-          est.textContent = `Público minuto a minuto: directo ${i} de ${pub.faltan.length}…`;
+          est.textContent = `Público minuto a minuto: directo ${i} de ${pendientesPub.length}…`;
           const r = await pedir({ accion: 'visionado_minuto', pais: f.pais, live: f.id, t });
-          if (!r.ok) { errores.push('Público: ' + (r.message || r.error)); break; }
+          if (!r.ok) { errores.push('Público: ' + (/room_id/.test(r.message || '') ? 'TikTok aún no tiene el minuto a minuto de un directo de ' + PAISES[f.pais] + ' (se vuelve a pedir en la próxima actualización)' : (r.message || r.error))); break; }
           t = r.sigue ? r.token : ''; v++;
         } while (t && v < 10);
       }
