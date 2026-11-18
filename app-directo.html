@@ -95,6 +95,27 @@
   .parada small{display:block;font-size:17px;font-weight:500;opacity:.8;margin-top:14px}
   body.ocupado #txtEstado{color:#c0392b;font-weight:700}
   .vacio{padding:30px 6px;color:var(--suave);font-size:17px;line-height:1.7}
+
+  /* ---- COMENTARIOS DEL DIRECTO, 18 nov 2026 ----
+   * Todo lo de abajo es NUEVO y solo se usa con la pestana "Comments". Si los
+   * ficheros del chat no cargan, la pestana no aparece y la pantalla queda
+   * exactamente como antes. Nada de esto toca los botones de prendas y marcas:
+   * al ver los comentarios se ESCONDE .cuerpo, no se repinta ni se borra, asi
+   * que al volver todo esta donde estaba, con la prenda elegida incluida. */
+  .pestanas{display:flex;gap:4px;background:var(--fondo);border:1px solid var(--borde);border-radius:11px;padding:3px;flex:0 0 auto}
+  .pestanas[hidden]{display:none}
+  .pestanas button{appearance:none;border:0;background:transparent;color:var(--suave);font:inherit;font-size:14px;font-weight:750;
+    padding:8px 14px;border-radius:8px;display:flex;align-items:center;gap:7px}
+  .pestanas button.on{background:var(--caja);color:var(--texto);box-shadow:0 1px 2px rgba(20,26,31,.12)}
+  .pestanas .cuenta{min-width:20px;height:20px;border-radius:10px;background:var(--cian);color:#fff;font-size:12px;
+    display:inline-flex;align-items:center;justify-content:center;padding:0 6px}
+  .pestanas .cuenta[hidden]{display:none}
+  .chatvista{flex:1;min-height:0;display:none;flex-direction:column;padding:12px 16px 16px}
+  .chatvista .chat-estado{font-size:12px;color:var(--suave);margin:0 0 6px 2px}
+  .chatvista .chat-estado.malo{color:var(--malo);font-weight:700}
+  .chatvista .chat-caja{flex:1;min-height:0}
+  body.ver-chat .cuerpo{display:none}
+  body.ver-chat .chatvista{display:flex}
 </style>
 </head>
 <body>
@@ -158,6 +179,10 @@
   <a class="puesto" id="puesto" hidden></a>
   <div class="ficha"><span class="et">Tag</span><span class="n" id="ficha">--</span></div>
   <div class="ultima" id="ultima"></div>
+  <div class="pestanas" id="pestanas" hidden>
+    <button id="pProd" class="on" type="button">Products</button>
+    <button id="pChat" type="button">Comments <span class="cuenta" id="pCuenta" hidden>0</span></button>
+  </div>
   <div class="estado"><span class="punto" id="punto"></span><span id="txtEstado">conectando</span></div>
 </header>
 
@@ -168,6 +193,8 @@
     <div class="marcas" id="marcas"></div>
   </div>
 </div>
+
+<div class="chatvista" id="chatvista"><div class="chat-estado" id="chatEstado"></div><div id="chatCaja"></div></div>
 
 <div class="tapa" id="tapa"></div>
 <div class="parada" id="parada"><div><span id="paradaTxt">Disconnected from the panel.</span><small>Tap anywhere to reconnect.</small></div></div>
@@ -553,6 +580,41 @@ if (PRUEBA) $('banda').style.display = '';
 if (!CODIGO || (!DIRECTO && !CANAL)) {
   $('prendas').innerHTML = '<div class="vacio">The link is missing the code or the LIVE session.</div>';
 } else { pintarPuesto(''); pintarMarcas(); mirar(); }
+</script>
+<!-- COMENTARIOS DEL DIRECTO, 18 nov 2026. Ficheros aparte y un bloque aparte:
+     no usan nada del codigo de arriba y el codigo de arriba no los usa. Si
+     fallan, la pestana no sale y lo demas funciona igual que antes. -->
+<script src="chat-config.js"></script>
+<script src="chat-realtime.js"></script>
+<script src="chat-tablet.js"></script>
+<script>
+(function () {
+  try {
+    if (typeof BillysChat !== 'object' || typeof BILLYS_CHAT_CONFIG !== 'object' || !BILLYS_CHAT_CONFIG.supabaseKey) return;
+    var Q = new URLSearchParams(location.search), canal = Q.get('canal') || '', codigo = Q.get('d') || '';
+    if (!canal || !codigo) return;
+    /* PILOTO: la pestana solo sale en los canales de chat-config.js. */
+    var lista = BILLYS_CHAT_CONFIG.canales;
+    if (Array.isArray(lista) && lista.length && lista.indexOf(BillysRealtime.limpiarCanal(canal)) < 0) return;
+    var el = function (id) { return document.getElementById(id); };
+    var abierto = false;
+    var chat = BillysChat.montar({
+      caja: el('chatCaja'), estado: el('chatEstado'), codigo: codigo, canal: canal,
+      abierto: function () { return abierto; },
+      alNuevos: function (n) { var c = el('pCuenta'); c.textContent = n > 99 ? '99+' : String(n); c.hidden = !n; }
+    });
+    var ver = function (enChat) {
+      abierto = enChat;
+      document.body.classList.toggle('ver-chat', enChat);
+      el('pChat').classList.toggle('on', enChat);
+      el('pProd').classList.toggle('on', !enChat);
+      if (enChat) chat.visto();
+    };
+    el('pProd').addEventListener('click', function () { ver(false); });
+    el('pChat').addEventListener('click', function () { ver(true); });
+    el('pestanas').hidden = false;
+  } catch (e) { /* el chat no es imprescindible: si falla, no sale */ }
+})();
 </script>
 </body>
 </html>
