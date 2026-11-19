@@ -172,6 +172,8 @@ button.ver-columnas { margin-top: 10px; font-size: 12.5px; padding: 6px 13px; co
 .recos { list-style: none; margin: 0; padding: 0; }
 .recos li { display: flex; align-items: start; gap: 10px; padding: 11px 4px; border-bottom: 1px solid var(--linea); font-size: 14px; line-height: 1.5; }
 .recos li:last-child { border-bottom: none; }
+.recos li.neutro .icono-rec { background: #F2F1EC; color: #8A94A3; }
+.recos li .txt .sec { display: block; color: var(--muted, #6B7280); font-size: 13px; margin-top: 2px; }
 .recos li .txt { flex: 1; min-width: 0; }
 .recos li .txt b { font-weight: 600; }
 .recos li .delta { flex: none; margin-top: 2px; }
@@ -330,6 +332,193 @@ details.grupo-cifras .cifras-tt { margin-top: 8px; }
   .explica dl { grid-template-columns: 1fr; gap: 2px; } .explica dd { margin-bottom: 8px; }
   details.plegable > summary .pista { display: none; }
 }
+
+/* ===== ASPECTO 20 nov 2026 (inspirado en Revolut, con la marca de Billy's).
+ * Banda azul marino arriba (menú, título, filtros y la cifra grande), tarjetas
+ * blancas que montan sobre el borde de la banda, todo en píldora, bordes finos
+ * en vez de sombras y el rojo reservado: lo que resta, los avisos y el brillo. */
+:root {
+  --panel: #FFFFFF;
+  --hundido: #F6F5F2;
+  --borde: #E4E1DA;
+  --linea: #EDEBE6;
+  --linea-2: #E4E1DA;
+  --t2: #5C6573;
+  --t3: #7A818C;
+  --bien: #1B2A3D; --bien-fondo: #E8ECF1;
+  --sel: #FDEDEA;
+  --ease: cubic-bezier(.22, .8, .24, 1);
+  --ease-salida: cubic-bezier(.4, 0, 1, 1);
+  --cristal: rgba(255, 255, 255, .08);
+  --cristal-borde: rgba(255, 255, 255, .18);
+}
+html, body { background: #fff; letter-spacing: -0.01em; }
+#app, #entrar { position: relative; z-index: 1; }
+#entrar { border: 1px solid var(--borde); border-radius: 22px; }
+#entrar .marca .logo { display: none; }
+#entrar .marca { font-size: 21px; letter-spacing: -0.03em; }
+.envoltura { max-width: 1320px; padding: 0 max(28px, env(safe-area-inset-right, 0px)) 0 max(28px, env(safe-area-inset-left, 0px)); }
+
+/* ---- avisos: al final de la página, discretos, con un triangulito */
+#avisos { max-width: 1320px; margin: 56px auto 0; padding: 0 max(28px, env(safe-area-inset-right, 0px)) 0 max(28px, env(safe-area-inset-left, 0px)); }
+#avisos .avisos, #avisos .aviso { background: transparent; color: var(--t2); border-radius: 0; margin: 0; border-top: 1px solid var(--borde); font-size: 13px; }
+#avisos .avisos summary { padding: 16px 0; gap: 10px; }
+#avisos .avisos summary::before, #avisos .aviso::before { content: ""; flex: none; width: 16px; height: 16px; display: inline-block; vertical-align: -3px; margin-right: 2px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23EF3B26' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 9v4M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat; }
+#avisos .avisos summary b { color: var(--azul); font-weight: 600; text-decoration: none; border-bottom: 1px solid currentColor; }
+#avisos .avisos[open] summary .txt { visibility: visible; color: var(--t3); }
+#avisos .avisos ul { padding: 0 0 16px 26px; max-width: 900px; line-height: 1.6; }
+#avisos .aviso { padding: 16px 0; display: flex; gap: 10px; }
+#avisos > * + * { border-top: 1px solid var(--linea); }
+#avisos + #pie { margin-top: 28px; }
+
+/* ---- la banda azul marino */
+#banda { position: absolute; left: 0; right: 0; top: 0; height: 420px; z-index: 0; overflow: hidden; pointer-events: none;
+  background: linear-gradient(165deg, #1B2A3D 0%, #16233A 55%, #1A1E2C 100%); transition: height .75s var(--ease); }
+#banda::after { content: ""; position: absolute; right: -140px; top: -160px; width: 620px; height: 620px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(239, 59, 38, .5), rgba(239, 59, 38, 0) 68%); animation: brillo 14s ease-in-out infinite alternate; }
+#banda::before { content: ""; position: absolute; left: -200px; bottom: -260px; width: 560px; height: 560px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(118, 127, 139, .22), rgba(118, 127, 139, 0) 70%); animation: brillo 18s ease-in-out infinite alternate-reverse; }
+@keyframes brillo { 0% { transform: translate(0, 0) scale(1); opacity: .85; } 33% { transform: translate(-160px, 70px) scale(1.18); opacity: 1; } 66% { transform: translate(-60px, 150px) scale(.92); opacity: .75; } 100% { transform: translate(-220px, 20px) scale(1.08); opacity: .95; } }
+
+/* ---- menú: banda pegada arriba */
+.barra { top: env(safe-area-inset-top, 0px); background: transparent; color: #fff; padding: 18px 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.barra .acciones { transition: opacity .4s var(--ease), transform .4s var(--ease); }
+.pestanas { transition: background-color .45s var(--ease), border-color .45s var(--ease); }
+/* al bajar por la página: se quedan solo las secciones, en una píldora azul de cristal */
+.barra.pegada .marca, .barra.pegada .acciones { opacity: 0; transform: translateY(-6px); pointer-events: none; }
+.barra.pegada .pestanas { background: rgba(27, 42, 61, .82); border-color: rgba(27, 42, 61, .2); backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5); }
+.barra .marca { color: #fff; font-size: 21px; letter-spacing: -0.03em; transition: color .4s var(--ease), opacity .4s var(--ease); }
+.barra .marca .logo, .barra .marca small { display: none; }
+.pestanas { background: var(--cristal); border: 1px solid var(--cristal-borde); padding: 4px; }
+@media (min-width: 761px) { .pestanas { position: relative; } }
+.pestanas button { position: relative; z-index: 1; color: rgba(255, 255, 255, .72); font-weight: 500; transition: color .35s var(--ease); }
+.pestanas button:hover { background: transparent; color: #fff; }
+.pestanas button.activa { background: transparent; color: #1B2A3D; font-weight: 600; }
+.barra .indicador { background: #fff; }
+#btn-ajustes { background: var(--cristal); border: 1px solid var(--cristal-borde); color: #fff; }
+#btn-sync { background: #fff; color: #1B2A3D; border-color: #fff; font-weight: 600; white-space: nowrap; }
+#btn-sync:hover { background: #F6F5F2; border-color: #F6F5F2; }
+
+/* ---- título grande dentro de la banda */
+.cabecera { margin: 34px 0 22px; color: #fff; }
+.cabecera h1 { font-size: 54px; line-height: 1.02; letter-spacing: -0.04em; font-weight: 600; color: #fff; }
+.cabecera .sub { color: rgba(255, 255, 255, .6); font-size: 14px; margin-top: 8px; }
+.estado-sync { color: #F9BAB3 !important; }
+
+/* píldoras dentro de la banda: cristal, la activa en blanco */
+.cabecera .grupo-botones, .filtros-barra .grupo-botones { background: var(--cristal); border: 1px solid var(--cristal-borde); }
+.cabecera .grupo-botones button, .filtros-barra .grupo-botones button { color: rgba(255, 255, 255, .75); }
+.cabecera .grupo-botones button.activa, .filtros-barra .grupo-botones button.activa { color: #1B2A3D; }
+.cabecera .indicador, .filtros-barra .indicador { background: #fff; }
+.chip-filtros { background: var(--cristal); border: 1px solid var(--cristal-borde); color: #fff; }
+.chip-filtros.con { background: #fff; color: #1B2A3D; }
+.filtros-barra { margin-bottom: 26px; }
+section[data-s] > .fila-sel:first-child, section[data-s] > .kpis:first-child { margin-top: 10px; }
+
+/* píldoras sobre blanco: hundidas, la activa en azul */
+.grupo-botones { position: relative; background: var(--hundido); border: 0; padding: 4px; }
+.caja .grupo-botones { background: var(--hundido); }
+.grupo-botones button { position: relative; z-index: 1; font-weight: 500; transition: color .35s var(--ease); }
+.grupo-botones button.activa { background: transparent; font-weight: 600; }
+.indicador { position: absolute; left: 0; top: 0; border-radius: 999px; background: #1B2A3D; z-index: 0; pointer-events: none;
+  transition: transform .55s var(--ease), width .55s var(--ease), height .55s var(--ease), opacity .3s; }
+
+/* ---- Resumen: la cifra grande en la banda y las tarjetas montadas sobre su borde */
+#kpis { grid-template-columns: 1fr !important; gap: 22px; margin-bottom: 34px; }
+.kpi.heroe { background: transparent; border: 0 !important; padding: 0 0 6px; overflow: visible; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 14px 40px; }
+.kpi.heroe::after { display: none; }
+.kpi.heroe .e { color: rgba(255, 255, 255, .6); grid-column: 1 / -1; }
+.kpi.heroe .e .chip { background: var(--cristal); color: #fff; }
+.kpi.heroe .n { font-size: 96px; line-height: .95; letter-spacing: -0.05em; font-weight: 600; margin: 4px 0 0; }
+.kpi.heroe .x { color: rgba(255, 255, 255, .62); font-size: 15px; grid-column: 1; }
+.kpi.heroe .pie { grid-column: 2; grid-row: 2 / span 2; display: flex; gap: 10px; padding: 0; margin: 0; align-self: end; }
+.kpi.heroe .pie div { background: var(--cristal); border: 1px solid var(--cristal-borde); border-radius: 999px; padding: 11px 20px; transition: background-color .3s; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.kpi.heroe .pie b { display: inline; }
+.kpi.heroe .pie div:hover { background: rgba(255, 255, 255, .14); }
+.kpi.heroe .pie b { font-size: 20px; }
+.kpis-fila { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+
+/* ---- tarjetas: blancas, borde fino, sin sombras */
+.kpi, .caja { background: #fff; border: 1px solid var(--borde); border-radius: 22px; transition: border-color .35s var(--ease), transform .35s var(--ease); }
+.kpi { padding: 18px 20px; }
+.caja { padding: 24px; margin-bottom: 18px; }
+.kpi:hover, .caja:hover { border-color: #CFCBC2; }
+.kpi .e { text-transform: uppercase; font-size: 11px; letter-spacing: .07em; font-weight: 600; color: var(--t3); }
+.kpi .e .chip { background: var(--hundido); }
+.kpi .n { font-size: 26px; letter-spacing: -0.035em; }
+.caja h2 { font-size: 19px; letter-spacing: -0.025em; font-weight: 600; }
+.dos, .dos-tercios { gap: 18px; }
+th { background: #fff; }
+tbody td:first-child, tfoot th:first-child { background: #fff; }
+tbody tr:hover, tbody tr:hover td:first-child { background: var(--hundido); }
+.filtros { background: var(--hundido); border-radius: 22px; }
+.veredicto .kpi.heroe, #reg-cifras .kpi.heroe { background: var(--heroe); border: 0 !important; padding: 22px 24px; display: flex; flex-direction: column; align-items: stretch; text-align: left; overflow: hidden; }
+.veredicto .kpi.heroe::after, #reg-cifras .kpi.heroe::after { display: block; }
+.veredicto .kpi.heroe .n, #reg-cifras .kpi.heroe .n { font-size: 40px; }
+#reg-cifras .kpi.heroe .e, .veredicto .kpi.heroe .e { text-transform: none; letter-spacing: 0; }
+
+/* un módulo en negativo, como los planes de precio: lo que más deja por hora */
+.caja:has(> .lista) { background: #1B2A3D; border: 0; color: #fff; }
+.caja:has(> .lista) h2 { color: #fff; }
+.caja:has(> .lista) button.info { border-color: rgba(255, 255, 255, .4); color: rgba(255, 255, 255, .8); }
+.caja:has(> .lista) .nota { color: rgba(255, 255, 255, .7); }
+.caja > .lista li { background: #fff; color: #1B2A3D; border: 0; border-radius: 16px; margin-bottom: 8px; padding: 12px 14px; }
+.caja > .lista li:hover { background: #fff; transform: translateX(4px); }
+.lista .num { background: var(--hundido); }
+
+/* botones secundarios: píldora blanca con borde azul */
+button.ver-columnas, #btn-quitar-directo { background: #fff; border: 1.5px solid #1B2A3D; color: #1B2A3D; font-weight: 600; }
+button { transition: transform .18s var(--ease), background-color .3s var(--ease), border-color .3s var(--ease), color .3s var(--ease); }
+button:active { transform: scale(.965); }
+details.plegable > summary::after { transition: transform .45s var(--ease); }
+
+/* ---- pie de página en banda */
+#pie { background: #1B2A3D; color: #fff; margin-top: 70px; padding: 44px max(16px, env(safe-area-inset-left, 0px)) calc(110px + env(safe-area-inset-bottom, 0px)); text-align: center; }
+#pie b { font: 600 22px Poppins, sans-serif; letter-spacing: -0.03em; }
+#pie span { display: block; margin-top: 6px; color: rgba(255, 255, 255, .55); font-size: 13px; }
+
+/* ---- transiciones */
+.sale { opacity: 0 !important; transform: translateY(-6px); transition: opacity .16s var(--ease-salida), transform .16s var(--ease-salida); }
+.revela { animation: entra .75s var(--ease) both; animation-delay: calc(var(--i, 0) * 60ms); }
+.revela-fila { animation: entraFila .55s var(--ease) both; animation-delay: calc(140ms + var(--j, 0) * 28ms); }
+@keyframes entra { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes entraFila { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.cabecera h1 { animation: titulo .9s var(--ease) backwards; }
+@keyframes titulo { from { opacity: 0; transform: translateY(22px); clip-path: inset(0 0 100% 0); } to { opacity: 1; transform: none; clip-path: inset(0 0 -20% 0); } }
+#progreso { position: fixed; left: 0; top: 0; height: 2px; width: 100%; z-index: 50; transform-origin: 0 50%; transform: scaleX(0); background: linear-gradient(90deg, #EF3B26, #F5897D); opacity: 0; transition: opacity .4s; }
+#progreso.va { opacity: 1; animation: progreso 2.4s var(--ease) forwards; }
+@keyframes progreso { from { transform: scaleX(0); } to { transform: scaleX(.92); } }
+
+/* ---- pantallas medianas y móvil */
+@media (max-width: 1200px) {
+  .kpis-fila { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .kpi.heroe { grid-template-columns: 1fr; }
+  .kpi.heroe .pie { grid-column: 1; grid-row: auto; }
+}
+@media (max-width: 760px) {
+  .envoltura { padding: 0 max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); }
+  .cabecera h1 { font-size: 38px; }
+  .barra { position: relative; top: 0; }
+  .cabecera { margin: 18px 0 16px; }
+  .kpi.heroe .n { font-size: 60px; }
+  .kpi.heroe .pie { gap: 8px; }
+  .kpi.heroe .pie { flex-wrap: wrap; }
+  .kpi.heroe .pie div { padding: 8px 13px; }
+  .kpi.heroe .pie b { font-size: 16px; }
+  .kpis-fila { display: flex; }
+  .caja { padding: 18px 16px; border-radius: 20px; }
+  .kpi { border-radius: 20px; }
+  /* el menú de abajo: píldora azul marino flotando */
+  .pestanas { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); border-radius: 26px; background: rgba(27, 42, 61, .96); border: 0; padding: 5px 6px; }
+  .pestanas button { color: rgba(255, 255, 255, .65); }
+  .pestanas button.activa { color: #fff; }
+  .barra .pestanas .indicador { background: rgba(255, 255, 255, .14); border-radius: 18px; }
+  }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
 </style>
 </head>
 <body>
@@ -512,7 +701,12 @@ details.grupo-cifras .cifras-tt { margin-top: 8px; }
     <div id="reg-cuerpo">
       <div class="kpis" id="reg-cifras"></div>
       <div class="caja">
-        <h2>Qué hacer, según los datos</h2>
+        <h2>Por categoría</h2>
+        <div class="nota">Lo que se compra: cada categoría frente a la media de todas, comparando dentro de los mismos directos. «La de marca» es cuánto más deja la versión de marca de esa categoría frente a la misma sin marca. Fiable: la probabilidad de que sea casualidad es menor del 1 %. Probable: menor del 5 %. No se sabe: puede ser casualidad.</div>
+        <ul class="recos" id="reg-cats"></ul>
+      </div>
+      <div class="caja">
+        <h2>Más pistas: marcas, momento y hora</h2>
         <div class="nota">Cada frase compara dentro de los mismos directos, así que un día con más público o mejor stock no cuenta como "esto vende mejor". Fiable: la probabilidad de que sea casualidad es menor del 1 %. Probable: menor del 5 %. El margen de error se calcula quitando un directo cada vez, así que algo que solo pasó en un directo no sale como fiable. Lo que podría ser casualidad no sale aquí. Son datos del día a día, no experimentos: si una vendedora guarda lo mejor para el final, también se nota en el minuto del directo.</div>
         <ul class="recos" id="reg-recos"></ul>
       </div>
@@ -2177,22 +2371,35 @@ function pRegresiones() {
   const orden = (q) => q.slice().sort((a, b) => Math.abs(b.t) - Math.abs(a.t));
   /* Las tarjetas de arriba comparan grupos con la media; lo de marca dentro de
    * la categoría es otra pregunta y va solo en la lista. */
-  const tarjeta = claros.filter((c) => c.fam !== 'marcacat');
+  /* Billy (stock) compra por categoría, no por marca: las tarjetas de arriba
+   * y el primer bloque son de categorías; marcas, momento y hora van después. */
+  const tarjeta = claros.filter((c) => c.fam === 'cat');
   const mejor = orden(tarjeta.filter((c) => buena(c, REG_OBJ)))[0], peor = orden(tarjeta.filter((c) => !buena(c, REG_OBJ)))[0];
 
   /* ---- cifras de arriba */
   const etiqueta = (c) => c.fam === 'marcacat' ? c.lab + ' de marca' : ((c.fam === 'cat' || c.fam === 'marca' || c.fam === 'tramo') ? c.lab : c.lab.replace(/^Con el doble de gente en sala$/, 'Más gente en sala'));
   $('#reg-cifras').innerHTML =
-    `<div class="kpi heroe"><div class="e">${O.mas} · ${O.t.toLowerCase()}</div><div class="n" style="font-size:30px">${mejor ? esc(etiqueta(mejor)) : '—'}</div>` +
-    `<div class="x">${mejor ? `${O.corto(mejor.b)} ${esc(FAMILIAS[mejor.fam].base(ahora.fam[mejor.fam]))} · ${fiab(mejor)}` : 'Nada destaca de forma clara en este periodo'}</div></div>` +
-    `<div class="kpi"><div class="e">${O.menos}</div><div class="n">${peor ? esc(etiqueta(peor)) : '—'}</div><div class="x">${peor ? `${O.corto(peor.b)} ${esc(FAMILIAS[peor.fam].base(ahora.fam[peor.fam]))} · ${fiab(peor)}` : 'Nada se separa de forma clara'}</div></div>` +
+    `<div class="kpi heroe"><div class="e">Categoría · ${O.mas.toLowerCase()} · ${O.t.toLowerCase()}</div><div class="n" style="font-size:30px">${mejor ? esc(etiqueta(mejor)) : '—'}</div>` +
+    `<div class="x">${mejor ? `${O.corto(mejor.b)} ${esc(FAMILIAS[mejor.fam].base(ahora.fam[mejor.fam]))} · ${fiab(mejor)}` : 'Ninguna categoría destaca de forma clara en este periodo'}</div></div>` +
+    `<div class="kpi"><div class="e">Categoría · ${O.menos.toLowerCase()}</div><div class="n">${peor ? esc(etiqueta(peor)) : '—'}</div><div class="x">${peor ? `${O.corto(peor.b)} ${esc(FAMILIAS[peor.fam].base(ahora.fam[peor.fam]))} · ${fiab(peor)}` : 'Ninguna categoría se separa de forma clara'}</div></div>` +
     `<div class="kpi"><div class="e">Con qué datos</div><div class="n">${ent(m.n)} prendas</div><div class="x">${ent(ahora.ses)} directos de ${PAISES[pais]}, del ${diaCorto(ahora.d1)} al ${diaCorto(ahora.d2)}</div></div>`;
 
-  /* ---- recomendaciones */
-  const recs = orden(claros).slice(0, 8);
+  /* ---- por categoría: todas, de la que más suma a la que menos */
+  const cats = efectos.filter((c) => c.fam === 'cat').sort((a, b) => (OBJETIVOS[REG_OBJ].buenoSiSube ? b.b - a.b : a.b - b.b));
+  $('#reg-cats').innerHTML = cats.length ? cats.map((c) => {
+    const fi = fiab(c), clara = fi !== 'no se sabe', p = clara ? pistaReg(c, REG_OBJ) : '';
+    const mc = efectos.find((x) => x.fam === 'marcacat' && x.lab === c.lab);
+    const marca = mc && fiab(mc) !== 'no se sabe' ? `<span class="sec">La de marca: ${esc(O.corto(mc.b))} frente a la sin marca · ${fiab(mc)}</span>` : '';
+    const cls = !clara ? 'neutro' : (buena(c, REG_OBJ) ? 'sube' : 'baja');
+    return `<li class="${cls}"><span class="icono-rec">${cls === 'neutro' ? '·' : (cls === 'sube' ? '▲' : '▼')}</span><span class="txt"><b>${esc(c.lab)}</b> · ${esc(O.corto(c.b))} frente a la media.` +
+      `${clara ? (p ? ` ${esc(p)}` : '') : ' No se separa de la media de forma clara.'}${marca}</span>${chipFiab(c)}</li>`;
+  }).join('') : '<li class="muted">No hay categorías con datos suficientes en este periodo.</li>';
+
+  /* ---- más pistas: marcas, momento del directo, hora y gente */
+  const recs = orden(claros.filter((c) => c.fam !== 'cat')).slice(0, 8);
   $('#reg-recos').innerHTML = recs.length ? recs.map((c) => { const p = pistaReg(c, REG_OBJ);
     return `<li class="${buena(c, REG_OBJ) ? 'sube' : 'baja'}"><span class="icono-rec">${buena(c, REG_OBJ) ? '▲' : '▼'}</span><span class="txt">${esc(fraseReg(c, REG_OBJ, ahora.fam))}${p ? ` <b>${esc(p)}</b>` : ''}</span>${chipFiab(c)}</li>`; }).join('')
-    : '<li class="muted">En este periodo nada se separa de lo normal lo bastante como para descartar la casualidad. Prueba con 8 semanas.</li>';
+    : '<li class="muted">Fuera de las categorías, en este periodo nada se separa de lo normal lo bastante como para descartar la casualidad. Prueba con 8 semanas.</li>';
 
   /* ---- qué ha cambiado frente al periodo anterior */
   const cambios = [];
@@ -2542,6 +2749,156 @@ document.querySelectorAll('.caja:not(#ajustes) h2').forEach((h) => {
 document.querySelectorAll('details.plegable').forEach((d) => d.addEventListener('toggle', () => { if (d.open) pintar(); }));
 window.matchMedia('(max-width: 760px)').addEventListener('change', () => pintar());
 if (CODIGO) arrancar(); else $('#entrar').classList.remove('oculto');
+</script>
+<script>
+/* ===== Transiciones (20 nov 2026). Envuelve la navegación y el pintado de la página. */
+(function () {
+  const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const raf = (f) => requestAnimationFrame(() => requestAnimationFrame(f));
+
+  /* --- indicador que se desliza en cada grupo de píldoras */
+  const ultimo = new WeakMap(), porId = new Map();
+  function colocar(g) {
+    let i = g.querySelector(':scope > .indicador');
+    const nuevo = !i;
+    if (nuevo) { i = document.createElement('span'); i.className = 'indicador'; g.prepend(i); }
+    const a = g.querySelector(':scope > button.activa');
+    if (!a || !a.offsetWidth) { i.style.opacity = '0'; return; }
+    const destino = { x: a.offsetLeft, y: a.offsetTop, w: a.offsetWidth, h: a.offsetHeight };
+    const antes = ultimo.get(g) || (g.id && porId.get(g.id));
+    const poner = (p) => { i.style.width = p.w + 'px'; i.style.height = p.h + 'px'; i.style.transform = `translate(${p.x}px, ${p.y}px)`; };
+    if (nuevo || i.style.opacity === '0') {
+      i.style.transition = 'none'; poner(antes || destino); i.style.opacity = '1'; void i.offsetWidth; i.style.transition = '';
+    }
+    poner(destino);
+    ultimo.set(g, destino); if (g.id) porId.set(g.id, destino);
+  }
+  let pendiente = false;
+  function indicadores() {
+    if (pendiente) return; pendiente = true;
+    requestAnimationFrame(() => { pendiente = false; document.querySelectorAll('.grupo-botones, .pestanas').forEach(colocar); });
+  }
+  new MutationObserver(indicadores).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true });
+  addEventListener('resize', indicadores);
+  document.fonts && document.fonts.ready.then(indicadores);
+
+  /* --- cifras que cuentan hasta su valor */
+  const NUM = /[-+−]?\d{1,3}(?:\.\d{3})+(?:,\d+)?|[-+−]?\d+(?:,\d+)?/;
+  const leer = (t) => { const m = t.match(NUM); if (!m) return null; const s = m[0];
+    return { s, i: m.index, v: Number(s.replace('−', '-').replace(/\./g, '').replace(',', '.')), dec: (s.split(',')[1] || '').length, miles: s.includes('.') || Math.abs(Number(s.replace(/\./g, '').replace(',', '.'))) >= 10000 }; };
+  const escribir = (v, p) => { let s = Math.abs(v).toFixed(p.dec).replace('.', ','); if (p.miles) { const [e, d] = s.split(','); s = e.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (d ? ',' + d : ''); }
+    const signo = v < 0 ? (p.s.includes('−') ? '−' : '-') : (p.s.startsWith('+') ? '+' : ''); return signo + s; };
+  const visto = new WeakMap();
+  function contar(el, desde) {
+    const texto = el.textContent, p = leer(texto); if (!p || quieto) { visto.set(el, texto); return; }
+    const ini = desde != null ? desde : 0; if (ini === p.v) { visto.set(el, texto); return; }
+    const antes = texto.slice(0, p.i), despues = texto.slice(p.i + p.s.length), t0 = performance.now(), dur = 950;
+    const paso = (t) => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 4);
+      el.textContent = antes + escribir(ini + (p.v - ini) * e, p) + despues;
+      if (k < 1) requestAnimationFrame(paso); else { el.textContent = texto; visto.set(el, texto); } };
+    requestAnimationFrame(paso);
+  }
+  const CIFRAS = '.kpi .n, .caja .grande, .cifra .n, .kpi.heroe .pie b, .lista .cuanto b';
+
+  /* --- entrada escalonada de lo que se ve */
+  function entrar(el, i) {
+    /* Las tablas enormes (miles de filas) entran sin animación: animarlas atasca el navegador. */
+    if (el.getElementsByTagName('tr').length > 400) { el.classList.remove('por-ver', 'revela'); return; }
+    el.classList.remove('por-ver', 'revela'); void el.offsetWidth; el.style.setProperty('--i', i); el.classList.add('revela');
+    el.querySelectorAll('.lista li, .recos li, .efecto, tbody tr').forEach((f, j) => { if (j > 16) return; f.classList.remove('revela-fila'); void f.offsetWidth; f.style.setProperty('--j', j); f.classList.add('revela-fila'); });
+    el.querySelectorAll(CIFRAS).forEach((c) => contar(c, 0)); if (el.matches(CIFRAS)) contar(el, 0);
+  }
+  function revelar() {
+    if (quieto) return;
+    const cosas = [...document.querySelectorAll('#app .kpi, #app .caja, #app details.caja')].filter((e) => e.offsetParent && !e.closest('.kpi .kpi') && !(e.classList.contains('caja') && e.parentElement.closest('.caja')));
+    /* Todo entra al cambiar de sección; lo de abajo termina antes de que se llegue a ello.
+     * Nada se queda escondido esperando a que se haga scroll. */
+    cosas.forEach((e, n) => entrar(e, Math.min(n, 10)));
+  }
+
+  /* --- navegar: sale lo de ahora, entra lo nuevo escalonado */
+  const irA0 = irA;
+  irA = window.irA = function (g, p) {
+    const ahora = [...document.querySelectorAll('#app section[data-s]:not(.oculto), #kpis:not(.oculto), #reg-cifras')];
+    if (quieto) { irA0(g, p); return; }
+    ahora.forEach((s) => s.classList.add('sale'));
+    setTimeout(() => { ahora.forEach((s) => s.classList.remove('sale')); irA0(g, p); window.scrollTo({ top: 0 }); revelar(); }, 170);
+  };
+
+  /* --- repintar al cambiar filtros: las cifras ruedan desde su valor anterior */
+  const pintar0 = pintar; let primera = true;
+  pintar = window.pintar = function () {
+    const previos = new Map(); document.querySelectorAll(CIFRAS).forEach((c) => { const p = leer(c.textContent); if (p) previos.set(c, p.v); });
+    pintar0.apply(this, arguments);
+    indicadores();
+    if (!CRUDO) return;
+    if (primera) { primera = false; raf(revelar); return; }
+    document.querySelectorAll(CIFRAS).forEach((c) => { if (previos.has(c) && c.offsetParent) contar(c, previos.get(c)); });
+  };
+
+  /* --- secciones plegadas que se abren y cierran con suavidad */
+  document.addEventListener('click', (e) => {
+    const s = e.target.closest('details.plegable > summary, details.avisos > summary'); if (!s || quieto || e.target.closest('button.info')) return;
+    const d = s.parentElement; e.preventDefault();
+    const cerrado = s.offsetHeight + parseFloat(getComputedStyle(d).paddingTop) + parseFloat(getComputedStyle(d).paddingBottom);
+    if (!d.open) {
+      const alto0 = d.offsetHeight; d.open = true; const alto1 = d.offsetHeight; d.style.overflow = 'hidden';
+      const a = d.animate([{ height: alto0 + 'px' }, { height: alto1 + 'px' }], { duration: 520, easing: 'cubic-bezier(.22,.8,.24,1)' });
+      a.onfinish = () => { d.style.overflow = ''; };
+      [...d.children].slice(1).forEach((c, i) => c.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 480, delay: 80 + i * 40, easing: 'cubic-bezier(.22,.8,.24,1)', fill: 'backwards' }));
+    } else {
+      const alto0 = d.offsetHeight; d.style.overflow = 'hidden';
+      const a = d.animate([{ height: alto0 + 'px' }, { height: cerrado + 'px' }], { duration: 380, easing: 'cubic-bezier(.4,0,.2,1)' });
+      a.onfinish = () => { d.open = false; d.style.overflow = ''; };
+    }
+  }, true);
+
+  /* --- barra de progreso mientras se actualiza */
+  const barra = document.createElement('div'); barra.id = 'progreso'; document.body.appendChild(barra);
+  const bs = document.getElementById('btn-sync');
+  if (bs) new MutationObserver(() => { if (bs.classList.contains('girando')) { barra.classList.remove('va'); void barra.offsetWidth; barra.classList.add('va'); } else { barra.style.transform = 'scaleX(1)'; barra.classList.remove('va'); setTimeout(() => { barra.style.transform = ''; }, 450); } }).observe(bs, { attributes: true, attributeFilter: ['class'] });
+
+  /* --- gráficos: entrada más lenta y suave */
+  if (window.Chart) { Chart.defaults.animation = { duration: 1100, easing: 'easeOutQuart' }; Chart.defaults.font.family = 'Inter, sans-serif'; }
+  indicadores();
+})();
+
+/* ===== la banda azul marino crece o encoge según la sección. */
+(function () {
+  const banda = document.createElement('div'); banda.id = 'banda'; document.body.prepend(banda);
+  const pie = document.createElement('footer'); pie.id = 'pie'; pie.innerHTML = "<b>billy's</b><span>vintage loves culture</span>";
+  document.getElementById('app').after(pie);
+  /* los avisos van al final, justo antes del pie */
+  const av = document.getElementById('avisos'); if (av) pie.before(av);
+  /* posición en la página sin contar las animaciones (que mueven las cosas unos píxeles) */
+  const arriba = (el) => { let y = 0; while (el) { y += el.offsetTop; el = el.offsetParent; } return y; };
+  function medir() {
+    const app = document.getElementById('app'); const dentro = app && !app.classList.contains('oculto');
+    /* En la pantalla de entrar no hay banda ni pie: solo la caja del código. */
+    banda.hidden = !dentro; pie.hidden = !dentro; if (!dentro) return;
+    let fin = null;
+    const k = document.getElementById('kpis');
+    const f = k && !k.classList.contains('oculto') && k.querySelector('.kpis-fila .kpi');
+    if (f && f.offsetParent) fin = arriba(f) + f.offsetHeight * 0.5;
+    if (fin == null) {
+      const fb = document.querySelector('.filtros-barra');
+      const ref = fb && fb.offsetHeight ? fb : document.querySelector('.cabecera');
+      fin = arriba(ref) + ref.offsetHeight + 34;
+    }
+    banda.style.height = Math.round(fin) + 'px';
+  }
+  const pintar1 = pintar;
+  pintar = window.pintar = function () { pintar1.apply(this, arguments); medir(); };
+  new ResizeObserver(medir).observe(document.body);
+  /* al pasar la banda, el menú se queda en una píldora azul sola */
+  const barra = document.querySelector('.barra');
+  const pegar = () => { const h = parseFloat(banda.style.height) || 400; barra.classList.toggle('pegada', scrollY > h - barra.offsetHeight - 8); };
+  addEventListener('scroll', pegar, { passive: true });
+  addEventListener('resize', medir);
+  document.fonts && document.fonts.ready.then(medir);
+  medir();
+})();
+
 </script>
 </body>
 </html>
