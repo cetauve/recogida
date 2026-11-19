@@ -1,0 +1,164 @@
+// preise-de.txt · billy's · tablet DE · ladenpreis neu, für "talk about" rechts in rot
+// format: Tipo | Marca | rango
+// "*" = cualquier marca sin fila propia, y también No brand
+// precios regulares (sin rebaja), Alemania, comprobados el 19 nov 2026 en tiendas oficiales y Zalando
+// redondeados y tirando hacia la parte alta del rango
+
+// ---- por defecto, por tipo ----
+Hoodie | * | 80-150 €
+T Shirt | * | 40-90 €
+Shirt | * | 100-165 €
+Jersey | * | 110-200 €
+Football Shirt | * | 100-150 €
+Jacket | * | 150-350 €
+Track Jacket | * | 80-150 €
+Gore-Tex Jacket | * | 300-480 €
+Track Pant | * | 60-80 €
+Jeans | * | 90-130 €
+
+// ---- por marca ----
+Hoodie | Adidas | 60-80 €
+T Shirt | Adidas | 25-40 €
+Track Jacket | Adidas | 75-120 €
+Track Pant | Adidas | 60-70 €
+Football Shirt | Adidas | 100-150 €
+
+Hoodie | Nike | 70-150 €
+T Shirt | Nike | 25-40 €
+Jacket | Nike | 90-150 €
+Track Jacket | Nike | 90-120 €
+Football Shirt | Nike | 100-150 €
+
+Hoodie | Tommy Hilfiger | 80-120 €
+T Shirt | Tommy Hilfiger | 40-80 €
+Shirt | Tommy Hilfiger | 100-130 €
+Jersey | Tommy Hilfiger | 130-150 €
+Jacket | Tommy Hilfiger | 230-350 €
+
+Hoodie | The North Face | 70-100 €
+T Shirt | The North Face | 35-40 €
+Jacket | The North Face | 200-350 €
+Gore-Tex Jacket | The North Face | 360-480 €
+
+Hoodie | Lacoste | 130-160 €
+T Shirt | Lacoste | 65-110 €
+Track Jacket | Lacoste | 150-190 €
+Jacket | Lacoste | 370-470 €
+
+Hoodie | Ralph Lauren | 185-215 €
+T Shirt | Ralph Lauren | 85-150 €
+Shirt | Ralph Lauren | 155-165 €
+Jersey | Ralph Lauren | 200-215 €
+Jacket | Ralph Lauren | 245-545 €
+
+Hoodie | Columbia | 75-90 €
+T Shirt | Columbia | 25-40 €
+Jacket | Columbia | 150-230 €
+
+Hoodie | Levi's | 70-80 €
+T Shirt | Levi's | 25-40 €
+Jacket | Levi's | 130-150 €
+Jeans | Levi's | 110-160 €
+
+Hoodie | Puma | 50-65 €
+T Shirt | Puma | 25-35 €
+Track Jacket | Puma | 75-110 €
+Football Shirt | Puma | 100-150 €
+
+Hoodie | Champion | 60-110 €
+T Shirt | Champion | 40-50 €
+Jacket | Champion | 85-130 €
+
+Hoodie | Hugo Boss | 120-150 €
+T Shirt | Hugo Boss | 50-100 €
+Jacket | Hugo Boss | 250-380 €
+
+Hoodie | Carhartt | 90-100 €
+T Shirt | Carhartt | 35-40 €
+Jacket | Carhartt | 200-250 €
+
+Hoodie | Carhartt Rework | 90-100 €
+Jacket | Carhartt Rework | 200-250 €
+// rework: precio de la prenda carhartt nueva equivalente
+
+Hoodie | Benetton | 70-110 €
+Jersey | Benetton | 80-110 €
+
+Jacket | Berghaus | 140-470 €
+Gore-Tex Jacket | Berghaus | 300-470 €
+
+T Shirt | Burberry | 390-550 €
+Shirt | Burberry | 450-700 €
+Jersey | Burberry | 650-1.100 €
+Jacket | Burberry | 1.200-2.200 €
+Hoodie | Burberry | -
+// burberry: trench 2.150 € y punto 655-755 € en euros; camisetas, camisas y chaquetas acolchadas
+// sacadas de la tienda internacional en dólares (precios parecidos en euros). hoodie sin confirmar.
+// "-" = no enseñar precio para esa combinación
+
+// marcas caras sin fila para un tipo: mejor "-" que el rango por defecto, que se queda corto
+Track Jacket | Ralph Lauren | -
+
+Hoodie | Calvin Klein | 90-100 €
+Jacket | Calvin Klein | 190-270 €
+
+Hoodie | Fila | 60-85 €
+Track Jacket | Fila | 100-110 €
+
+Hoodie | Fred Perry | 120-130 €
+T Shirt | Fred Perry | 90-120 €
+
+Hoodie | Gant | 110-140 €
+Shirt | Gant | 110-130 €
+Jersey | Gant | 140-150 €
+
+Hoodie | Harley-Davidson | 100-110 €
+Jacket | Harley-Davidson | 750-800 €
+// harley jacket: solo confirmada una chaqueta de cuero
+
+Hoodie | Helly Hansen | 90-100 €
+Jacket | Helly Hansen | 155-320 €
+
+Jacket | Jack Wolfskin | 160-340 €
+
+Hoodie | Kappa | 80-120 €
+Track Jacket | Kappa | 160-190 €
+
+Hoodie | Le Coq Sportif | 90-115 €
+Track Jacket | Le Coq Sportif | 120-150 €
+
+Hoodie | Lee | 80-85 €
+Jeans | Lee | 90-110 €
+
+Jacket | Mammut | 160-350 €
+Gore-Tex Jacket | Mammut | 280-350 €
+
+Hoodie | Napapijri | 100-110 €
+Jacket | Napapijri | 230-500 €
+
+Hoodie | Nautica | 40-60 €
+Jacket | Nautica | 75-95 €
+
+Hoodie | Patagonia | 120-130 €
+Jacket | Patagonia | 130-250 €
+
+Hoodie | Reebok | 60-75 €
+Jacket | Reebok | 75-90 €
+
+Hoodie | Russell Athletic | 70-80 €
+
+Hoodie | Sergio Tacchini | 90-100 €
+Track Jacket | Sergio Tacchini | 100-150 €
+
+Hoodie | Timberland | 95-120 €
+Jacket | Timberland | 210-350 €
+
+Hoodie | Umbro | 70-100 €
+Track Jacket | Umbro | 90-110 €
+Football Shirt | Umbro | 100-150 €
+
+Jacket | Vaude | 100-360 €
+
+Hoodie | Wrangler | 65-80 €
+Jacket | Wrangler | 110-130 €
+Jeans | Wrangler | 80-95 €

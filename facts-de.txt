@@ -1,0 +1,369 @@
+// facts-de.txt · billy's · tablet DE · deutsch · 19 nov 2026
+// pro teil zeigt die tablet EINE zeile:
+//   mit marke: abwechselnd marke / prenda / nudge
+//   ohne marke (No brand): abwechselnd prenda / nudge
+// der ladenpreis steht nicht hier, sondern in preise-de.txt
+
+# Nudges
+// gilt für jedes teil, mit oder ohne marke
+sag den namen vom höchstbietenden laut: wer gesehen wird, bietet mehr
+bieten zwei? sag beide namen und mach ein duell draus
+lies den ladenpreis rechts vor und frag nach der hälfte
+zähl die letzten 5 sekunden laut runter
+unikat: wenn's weg ist, ist es weg
+begrüß neue leute mit namen: "hey anna, willkommen!"
+erstes gebot von jemand neuem? feier es kurz
+zieh das teil kurz an: getragen verkauft es sich besser
+sag die größe zweimal, beim ersten mal hören es viele nicht
+beschreib den schnitt einfach: oversized, boxy, cropped, slim
+sag, wozu du es tragen würdest: jeans, trackpants, rock
+lass den chat das teil von 1 bis 10 bewerten
+frag den chat, was als nächstes kommen soll
+erinnere ans folgen, damit keiner den nächsten drop verpasst
+bitte den chat, den live an eine freundin zu schicken
+nie 3 sekunden stille: red weiter über das teil
+"letzte chance" nur in den letzten sekunden sagen
+preis steigt? feier es: "es geht los!"
+red in die kamera wie mit einer freundin
+zeig das etikett: was man sieht, dem vertraut man
+zeig auf den ladenpreis: gleicher style, hier entscheidet der chat
+online gibt's das nicht in deiner größe: es existiert nur einmal
+zeig auf den timer: "15 sekunden, wer will's?"
+gib dem teil einen vibe: "sehr 90s", "sehr skater", "sehr old money"
+chat ruhig? stell eine frage, die man mit einem wort beantwortet
+nach dem zuschlag: name vom gewinner und "gute wahl!"
+erklär neuen leuten: im chat bieten, höchstes gebot gewinnt
+
+# Hoodie
+hoodies kamen in den 1930ern als arbeitskleidung: gebaut gegen kälte
+skater und hip hop machten den hoodie zum streetwear-klassiker
+ein schwerer baumwoll-hoodie hält jahrelang die form
+heb ihn hoch: schwerer stoff hält länger
+ausgewaschene farben alter hoodies kopieren neue marken heute
+die kapuze ist gratis wärme: keine mütze nötig
+über ein shirt, unter eine jacke: der einfachste layer
+passt zu allem, was schon in deinem schrank hängt
+das teil, das du diesen winter am meisten trägst
+zeig die bündchen: dicker rippstrick heißt gute qualität
+
+# T Shirt
+eine naht am ärmelsaum heißt: shirt aus den 90ern oder älter
+risse im alten print sind genau der vintage-look
+ein weiches, getragenes shirt gibt's neu nicht zu kaufen
+dieser print wurde einmal gemacht. keiner druckt ihn nach
+die us navy gab ab 1913 t-shirts als unterwäsche aus. heute: statement
+brando und james dean machten das t-shirt in den 50ern cool
+ein vintage-shirt ist der einfachste weg zu einem unikat im outfit
+zeig den print von nahem: da sieht man das alter
+
+# Shirt
+der button-down-kragen kommt von polospielern: damit nichts flattert
+die schlaufe hinten heißt locker loop: ein klassisches detail
+ein oxford-hemd wird mit jeder wäsche weicher
+flanell war arbeitskleidung, bis grunge es in den 90ern zur mode machte
+zugeknöpft schick, offen eine jacke: zwei looks in einem
+ein gutes hemd passt zum date, zum essen und zur party
+alte hemden sind so weich, wie neue erst nach jahren werden
+
+# Jersey
+wolle wärmt sogar, wenn sie nass wird: ein pulli für den ganzen winter
+merino ist so weich, weil die fasern so fein sind
+lambswool kommt von der ersten schur junger schafe: extra weich
+zopfmuster kommt von fischerpullis der aran-inseln: gemacht für sturm
+tipp für den chat: strick falten, nicht aufhängen, dann hält er ewig
+gut gepflegt hält ein strickpulli jahrzehnte
+pulli über hemdkragen: der einfachste schicke look
+dehn das bündchen kurz: gute wolle springt zurück
+
+# Football Shirt
+die meisten trikots gibt's nur ein, zwei saisons. dann sind sie weg
+alte sponsoren machen das trikot zur zeitkapsel
+braunschweig hatte 1973 als erster bundesligist einen trikotsponsor
+blokecore hat retro-trikots zum fashion-piece gemacht
+trikot zu baggy jeans: das ist der blokecore-look
+diese saison kommt nie wieder, dieses trikot auch nicht
+ein trikot ist das einfachste geschenk für jeden fan
+
+# Jacket
+die bomberjacke wurde in den 50ern für us-piloten gebaut: für kälte gemacht
+die harrington-jacke ist nach einer serienfigur aus den 60ern benannt
+im winter ist die jacke das erste, was man von dir sieht
+eine gute jacke macht aus basics ein outfit
+die trägst du jeden tag bis zum frühling
+lieber eine richtig gute jacke als drei billige
+zieh sie an: jacken verkaufen sich am körper, nicht am bügel
+
+# Track Jacket
+trainingsjacken hielten athleten vor dem start warm
+in den 80ern brachte hip hop den trainingsanzug auf die straße
+britische fußball-casuals machten track tops in den 80ern zum style
+adidas hat eine trainingsjacke nach franz beckenbauer benannt
+knallige 80er- und 90er-farben suchen retro-fans heute
+zu ist sie sportlich, offen ist sie streetwear
+
+# Gore-Tex Jacket
+gore-tex lässt regen draußen und schweiß raus: deshalb ist es so gefragt
+die gore-tex-membran hat milliarden poren: zu klein für regentropfen
+gore-tex wurde 1969 erfunden und ist bei bergsteigern erprobt
+bei gore-tex sind die nähte innen getapt: so bleibt regen draußen
+eine jacke für regen, wind und schnee: dafür zahlt man gore-tex
+eine gore-tex-jacke ist für jahre gebaut, nicht für eine saison
+neu ist gore-tex teuer, vintage-gore-tex ist der smarte move
+// nie sagen, dass genau dieses teil wasserdicht ist
+
+# Track Pant
+trainingshosen waren zum aufwärmen da: gemacht für bewegung
+nylon-trainingsanzüge waren in den 90ern überall. jetzt sind sie zurück
+die bequemste art, gut angezogen auszusehen
+mit einer cleanen jacke ist es streetstyle, nicht gym
+mit passender jacke: ein ganzer look in zwei teilen
+
+# Jeans
+levi strauss und jacob davis patentierten 1873 die nieten-jeans
+jeans waren arbeitskleidung für bergarbeiter: gebaut zum halten
+die kleine tasche vorne war für taschenuhren
+echte fades kopieren neue marken heute mit maschinen
+denim passt sich mit jedem tragen mehr deinem körper an
+eine gute jeans hält locker zehn jahre
+eine saubere farbige kante innen am saum heißt selvedge denim
+alte jeans fallen oft kleiner aus: bundweite messen
+
+# Adidas
+adidas kommt aus herzogenaurach, bayern: sportgeschichte von hier
+der name adidas kommt von adi dassler: adi plus das
+die drei streifen hielten ursprünglich den fuß im schuh
+das adidas-trefoil steht für originals: das suchen vintage-fans
+1954 wurde deutschland in adidas-schuhen weltmeister
+adidas macht seit 1970 den offiziellen wm-ball
+der adidas superstar kam 1969 als basketballschuh
+1986 sang run-dmc "my adidas" und adidas nahm sie unter vertrag
+die drei streifen erkennt man weltweit, ohne ein wort
+
+# Nike
+nike ist nach der griechischen siegesgöttin benannt: gemacht zum gewinnen
+der nike-swoosh kostete 1971 nur 35 dollar. heute kennt ihn jeder
+nike startete 1964 als blue ribbon sports
+nike-gründer bowerman machte erste sohlen im waffeleisen seiner frau
+"just do it" lief 1988 zum ersten mal
+der nike air max 1 kam 1987 mit der ersten sichtbaren air-sohle
+nike ist die größte sportmarke der welt
+nike acg heißt all conditions gear: die outdoor-linie seit 1989
+ein großer swoosh in der mitte ist der 90er-look, den viele suchen
+diese alten nike-designs macht nike heute nicht mehr
+
+# Tommy Hilfiger
+tommy hilfiger startete 1985 in new york
+das rot-weiß-blaue flag-logo ist tommys markenzeichen
+in den 90ern machte hip hop tommy hilfiger riesig
+snoop dogg trug 1994 tommy hilfiger bei saturday night live
+aaliyah war in den 90ern das gesicht von tommy jeans
+90er-tommy ist hip-hop-geschichte zum anziehen
+diese 90er-tommy-teile werden nicht mehr gemacht: weg ist weg
+große 90er-tommy-logos sind das, was vintage-fans suchen
+
+# The North Face
+the north face ist nach der kältesten seite eines bergs benannt
+für die kälteste bergseite gemacht: münchner winter ist easy
+das the north face-logo zeigt den half dome im yosemite
+the north face war bei himalaya-expeditionen dabei
+die nuptse kam 1992, benannt nach einem berg neben dem everest
+in den 90ern machte new york die tnf-puffer zur street-ikone
+expeditions-gear von the north face, das du zur uni trägst
+90er-farben von the north face sind wieder überall gefragt
+the north face gehört bei uns zu den marken mit den höchsten geboten
+
+# Lacoste
+tennis-champion rené lacoste gründete lacoste 1933
+die presse nannte rené lacoste "das krokodil": daher das logo
+lacoste hatte eines der ersten logos außen auf kleidung
+rené lacoste gewann 7 grand-slam-titel
+rené lacoste erfand das polo zum tennisspielen: kurze ärmel, luftig
+lacoste-piqué hat eine waffelstruktur, die luft durchlässt
+alte etiketten sagen "chemise lacoste": das ist das vintage-teil
+seit über 90 jahren steht das lacoste-krokodil für stil
+lacoste ist old-money-style, ganz ohne anstrengung
+
+# Ralph Lauren
+ralph lauren startete 1967 mit krawatten
+benannt nach polo, dem sport der oberschicht: der old-money-look
+der ralph lauren polo bear kam 1990
+ralph lauren kleidet seit 2008 das us-olympiateam
+seit 2006 kleidet ralph lauren die offiziellen in wimbledon
+die lo-lifes aus brooklyn machten polo ende der 80er zur hip-hop-ikone
+das ralph lauren pony gehört zu den bekanntesten logos der mode
+
+# Columbia
+columbia macht seit 1938 kleidung gegen kälte: gebaut, um warm zu halten
+der name columbia kommt vom columbia river in oregon
+die columbia bugaboo-jacke von 1986 wurde ein bestseller
+columbia interchange heißt zwei jacken in einer: shell und fleece
+die silbernen punkte innen heißen omni-heat: sie werfen wärme zurück
+columbia ist für regen in oregon gemacht: münchner winter ist easy
+90er-colourblocks von columbia sind wieder im trend
+
+# Levi's
+levi's hat 1873 die jeans erfunden, wie wir sie kennen
+die levi's 501 trägt diese nummer seit 1890
+das rote levi's-fähnchen an der gesäßtasche kam 1936
+das levi's-patch zeigt zwei pferde, die die jeans nicht zerreißen
+vor 1971 stand levi's mit großem e: das big e suchen sammler
+die levi's trucker jacket kam 1962
+alte levi's verblassen so, wie es neue nicht können
+
+# Puma
+rudolf dassler gründete puma 1948 in herzogenaurach
+zwei brüder, zwei marken, eine stadt: adidas und puma
+pelé trug puma bei der wm 1970
+usain bolt lief für puma
+retro-puma ist der cleane sportlook, den viele wieder wollen
+
+# Champion
+champion machte in den 1930ern einige der ersten kapuzenpullis
+champion reverse weave läuft in der länge nicht ein: hält jahre
+reverse weave hat seitenteile: viel bewegungsfreiheit
+champion machte in den 90ern offizielle nba-trikots
+champion reverse weave ist das, was vintage-fans suchen
+
+# Hugo Boss
+hugo boss kommt seit 1924 aus metzingen in baden-württemberg
+boss steht für scharfe schnitte: sieht sofort erwachsen aus
+boss war über 30 jahre partner von mclaren in der formel 1
+
+# Carhartt
+carhartt baut seit 1889 kleidung für arbeiter: gemacht zum halten
+carhartt startete mit latzhosen für eisenbahnarbeiter
+carhartt duck canvas ist schwere baumwolle: wird mit jedem tragen besser
+die carhartt detroit jacket kam 1954 und ist bis heute die ikone
+carhartt wip brachte 1989 workwear in europa auf die straße
+
+# Carhartt Rework
+ein rework baut echten carhartt-stoff zu einem neuen teil um
+gleicher carhartt-stoff, neues design: kein neuer stoff nötig
+jedes carhartt rework ist handgemacht: keine zwei sind gleich
+carhartt-qualität in einem teil, das sonst keiner hat
+
+# Racing
+racingjacken kommen aus dem motorsport: fahrer und boxencrew
+die patches auf racingjacken zeigen die sponsoren des teams
+seit 1968 fahren f1-autos in sponsorfarben, die jacken folgten
+racingjacken sind gerade einer der größten vintage-trends
+jeder patch auf einer racingjacke ist rennsport-geschichte
+du musst keine autos mögen, um diese racingjacke zu lieben
+
+# Benetton
+benetton startete 1965 in italien mit bunten strickpullis
+benetton hatte ein f1-team: schumacher holte damit seine ersten titel
+benetton: italienische farben, die nach jahrzehnten frisch aussehen
+
+# Berghaus
+berghaus wurde 1966 in newcastle, england, gegründet
+der name berghaus ist deutsch: echtes berg-gear, keine city-mode
+90er-jacken von berghaus suchen outdoor-fans
+
+# Burberry
+burberry gibt's seit 1856 aus england
+thomas burberry erfand gabardine: stoff, der regen abhält
+der burberry trenchcoat ist nach den schützengräben benannt
+das burberry-karo kam in den 1920ern als mantelfutter
+burberry ist britisches erbe, das man von weitem erkennt
+
+# Calvin Klein
+calvin klein wurde 1968 in new york gegründet
+calvin klein machte den 90er-minimalismus berühmt
+calvin klein: cleaner 90er-style, der nie aus der mode geht
+
+# Fila
+fila gibt's seit 1911, aus biella in italien
+björn borg trug fila, als er wimbledon gewann
+fila: italienischer tennis-style direkt aus den 70ern und 80ern
+
+# Fred Perry
+fred perry gewann wimbledon dreimal in folge, 1934 bis 1936
+der lorbeerkranz im fred perry-logo kommt aus wimbledon
+das fred perry polo mit den kragenstreifen ist die ikone
+fred perry: eine tennislegende auf der brust
+
+# Gant
+gant wurde 1949 in new haven, usa, gegründet
+gant wurde mit button-down-hemden berühmt
+gant: der amerikanische preppy-look, richtig gemacht
+
+# Harley-Davidson
+harley-davidson gibt's seit 1903 aus milwaukee
+das harley bar-and-shield-logo kennt man weltweit
+für harley-attitude brauchst du kein motorrad
+
+# Helly Hansen
+helly hansen startete 1877 in norwegen mit wetterkleidung für seeleute
+helly hansen kleidet segler und skipatrouillen: für das schlimmste wetter
+
+# Jack Wolfskin
+jack wolfskin wurde 1981 in frankfurt gegründet
+jack wolfskin: deutsches outdoor-gear für deutsches wetter
+
+# Kappa
+das kappa-logo zeigt einen mann und eine frau rücken an rücken
+kappa hat jahrelang juventus ausgestattet
+das kappa-logo ist purer 90er-fußball-style
+
+# Le Coq Sportif
+le coq sportif gibt's seit 1882 aus frankreich
+der hahn von le coq sportif ist das symbol frankreichs
+
+# Lee
+lee gibt's seit 1889 aus kansas, usa
+lee machte 1926 eine der ersten jeans mit reißverschluss
+
+# Mammut
+mammut startete 1862 in der schweiz als seilmacher: gebaut für die alpen
+
+# Napapijri
+napapijri heißt auf finnisch polarkreis: gemacht für arktische kälte
+im napapijri-logo steckt eine norwegische flagge
+der skidoo-anorak ist die ikone von napapijri
+
+# Nautica
+nautica wurde 1983 in new york gegründet, mit sechs jacken
+das nautica-logo ist ein segelboot
+nautica: amerikanischer segel-style für die stadt
+
+# Patagonia
+patagonia gründete 1973 der kletterer yvon chouinard
+das patagonia-logo zeigt den fitz roy in patagonien
+der patagonia synchilla-fleece kam 1985
+patagonia gibt 1 % vom umsatz an umweltgruppen
+vintage patagonia passt perfekt zur marke: weniger neu kaufen
+
+# Reebok
+reebok startete 1895 in bolton, england
+der name reebok kommt von einer afrikanischen antilope
+der reebok freestyle machte in den 80ern aerobic berühmt
+reebok: 80er- und 90er-gym-style direkt von der quelle
+
+# Russell Athletic
+russell athletic gibt's seit 1902 aus alabama, usa
+russell athletic gilt als erfinder des sweatshirts in den 1920ern
+russell athletic: amerikanischer college-style von den originalen
+
+# Sergio Tacchini
+tennisprofi sergio tacchini gründete seine marke 1966
+john mcenroe trug in den 80ern sergio tacchini
+britische fußball-casuals liebten tacchini-trainingsjacken
+
+# Timberland
+der gelbe timberland-stiefel kam 1973
+timberland: workwear, die zur hip-hop-ikone wurde
+
+# Umbro
+umbro gibt's seit 1924 aus england
+der name umbro kommt von humphreys brothers
+england wurde 1966 in umbro-trikots weltmeister
+
+# Vaude
+vaude wurde 1974 in tettnang gegründet: deutsches familien-outdoor
+der name vaude kommt von den initialen v.d., gesprochen "fau-de"
+
+# Wrangler
+wrangler machte 1947 seine ersten cowboy-jeans
+das w auf den gesäßtaschen ist das wrangler-markenzeichen
+wrangler: echter amerikanischer western-style
